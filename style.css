@@ -129,6 +129,7 @@ label {
     display: flex;
     gap: 10px;
     align-items: center;
+    justify-content: center;
     width: 100%;
     max-width: var(--form-max);
 }
@@ -188,6 +189,7 @@ label {
     text-align: center;
     cursor: pointer;
     font-size: 14px;
+    color: white;
 }
 
 .core-toggle .knob {
@@ -207,7 +209,7 @@ label {
 }
 
 .core-toggle[data-core="xray"] .knob {
-    transform: translateX(calc(100% + 2px));
+    transform: translateX(calc(100% + 6px));
 }
 
 .hidden {

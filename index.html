@@ -1,8 +1,11 @@
 <!DOCTYPE html>
 <html lang="ru">
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
 <link rel="stylesheet" href="style.css">
+<link rel="icon" type="image/png" href="https://img.icons8.com/fluency/240/security-configuration.png">
+<link rel="shortcut icon" href="https://img.icons8.com/fluency/240/security-configuration.png">
+<link rel="apple-touch-icon" href="https://img.icons8.com/fluency/240/security-configuration.png">
 <title>web4core</title>
 <body>
 <header id="asciiHeader">
@@ -51,6 +54,10 @@
         <input type="submit" id="gen" value="Сгенерировать"/>
     </div>
 
+    <div id="errorBlock" class="hidden" role="alert" aria-live="polite" style="margin-top:8px;">
+        <div id="errorText"></div>
+    </div>
+
     <div id="outBlock" class="hidden">
         <textarea id="out" class="input" placeholder="Здесь появится сгенерированный конфиг" readonly
                   style="scrollbar-width:none; -ms-overflow-style:none;"></textarea>
@@ -75,6 +82,8 @@
     const lblSing = document.getElementById('lblSing');
     const lblXray = document.getElementById('lblXray');
     const outBlock = document.getElementById('outBlock');
+    const errorBlock = document.getElementById('errorBlock');
+    const errorText = document.getElementById('errorText');
 
     function setCore(core) {
         currentCore = core;
@@ -162,10 +171,13 @@
                 }
             }
             outEl.value = JSON.stringify(finalConfig, null, 2);
+            errorText.textContent = '';
+            errorBlock.classList.add('hidden');
             outBlock.classList.remove('hidden');
         } catch (e) {
-            outEl.value = 'Ошибка: ' + (e && e.message ? e.message : String(e));
-            outBlock.classList.remove('hidden');
+            errorText.textContent = 'Ошибка: ' + (e && e.message ? e.message : String(e));
+            outBlock.classList.add('hidden');
+            errorBlock.classList.remove('hidden');
         }
     });
 

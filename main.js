@@ -205,16 +205,13 @@ function parseHysteria2(urlStr) {
     return {
         proto: 'hy2',
         host: u.hostname,
-        port: asInt(u.port, 0),
+        port: asInt(u.port, 443),
         name: decodeURIComponent(u.hash.replace('#', '')),
-        quic: {
-            type: 'hysteria2',
-            password: pwd,
-            upMbps: 0,
-            downMbps: 0,
-            hopPort: q.get('mport') || '',
-            hopInterval: asInt(q.get('hop_interval') || '0', 0),
+        auth: {password: pwd},
+        hysteria2: {
             obfsPassword: q.get('obfs-password') || '',
+            hopPort: q.get('mport') || '',
+            hopInterval: asInt(q.get('hop_interval') || '10', 10),
             alpn: q.get('alpn') || 'h3',
             sni: q.get('sni') || '',
             allowInsecure: ['1', 'true'].includes((q.get('insecure') || '').toLowerCase())
@@ -230,19 +227,20 @@ function parseTUIC(urlStr) {
         host: u.hostname,
         port: asInt(u.port, 443),
         name: decodeURIComponent(u.hash.replace('#', '')),
-        quic: {
-            type: 'tuic',
+        auth: {
             uuid: decodeURIComponent(u.username || ''),
-            password: decodeURIComponent(u.password || ''),
-            congestionControl: q.get('congestion_control') || '',
+            password: decodeURIComponent(u.password || '')
+        },
+        tuic: {
+            congestion_control: q.get('congestion_control') || 'bbr',
+            udp_relay_mode: q.get('udp_relay_mode') || 'native',
+            zero_rtt_handshake: q.get('zero_rtt') === '1',
+            udp_over_stream: q.get('udp_over_stream') === '1',
+            heartbeat: q.get('heartbeat') || '',
             alpn: q.get('alpn') || '',
             sni: q.get('sni') || '',
-            udpRelayMode: q.get('udp_relay_mode') || '',
-            allowInsecure: (q.get('allow_insecure') || '') === '1',
-            disableSni: (q.get('disable_sni') || '') === '1',
-            zeroRtt: (q.get('zero_rtt') || '') === '1',
-            uos: (q.get('udp_over_stream') || '') === '1',
-            heartbeat: q.get('heartbeat') || ''
+            allowInsecure: q.get('allow_insecure') === '1',
+            disableSni: q.get('disable_sni') === '1'
         }
     };
 }
@@ -292,19 +290,20 @@ function buildStreamFromQuery(q, isTrojan) {
 
 function buildSingBoxOutbound(bean) {
     const commonTLS = () => {
-        const isReality = !!(bean.stream.reality && bean.stream.reality.pbk);
-        const hasTlsHints = !!(bean.stream.sni || (bean.stream.alpn && bean.stream.alpn.length) || bean.stream.fp);
-        const needTls = bean.stream.security === 'tls' || isReality || (['vless', 'vmess'].includes(bean.proto) && hasTlsHints);
+        const s = bean.stream || {};
+        const isReality = !!(s.reality && s.reality.pbk);
+        const hasTlsHints = !!(s.sni || (s.alpn && s.alpn.length) || s.fp);
+        const needTls = s.security === 'tls' || isReality || (['vless', 'vmess'].includes(bean.proto) && hasTlsHints);
         if (!needTls) return undefined;
         const tls = {enabled: true};
-        if (bean.stream.allowInsecure) tls.insecure = true;
-        if (bean.stream.sni) tls.server_name = bean.stream.sni;
-        if (bean.stream.alpn && bean.stream.alpn.length) tls.alpn = bean.stream.alpn;
+        if (s.allowInsecure) tls.insecure = true;
+        if (s.sni) tls.server_name = s.sni;
+        if (s.alpn && s.alpn.length) tls.alpn = s.alpn;
         if (isReality) {
-            tls.reality = {enabled: true, public_key: bean.stream.reality.pbk, short_id: bean.stream.reality.sid || ''};
-            if (!bean.stream.fp) tls.utls = {enabled: true, fingerprint: 'random'};
+            tls.reality = {enabled: true, public_key: s.reality.pbk, short_id: s.reality.sid || ''};
+            if (!s.fp) tls.utls = {enabled: true, fingerprint: 'random'};
         }
-        if (bean.stream.fp) tls.utls = {enabled: true, fingerprint: bean.stream.fp};
+        if (s.fp) tls.utls = {enabled: true, fingerprint: s.fp};
         return tls;
     };
 
@@ -370,16 +369,22 @@ function buildSingBoxOutbound(bean) {
     } else if (bean.proto === 'hy2') {
         const tls = commonTLS() || {enabled: true, alpn: 'h3'};
         outbound = {type: 'hysteria2', server: bean.host, server_port: bean.port || 443, tls};
-        outbound.password = bean.quic.password;
+        outbound.password = bean.auth.password;
+        if (bean.hysteria2?.obfsPassword) {
+            outbound.obfs = {type: 'salamander', password: bean.hysteria2.obfsPassword};
+        }
+        if (bean.hysteria2?.hopPort) outbound.hop_ports = bean.hysteria2.hopPort;
+        if (Number.isFinite(bean.hysteria2?.hopInterval)) outbound.hop_interval = bean.hysteria2.hopInterval;
     } else if (bean.proto === 'tuic') {
         const tls = commonTLS() || {enabled: true};
         outbound = {type: 'tuic', server: bean.host, server_port: bean.port || 443, tls};
-        if (bean.quic.uuid) outbound.uuid = bean.quic.uuid;
-        if (bean.quic.password) outbound.password = bean.quic.password;
-        if (bean.quic.congestionControl) outbound.congestion_control = bean.quic.congestionControl;
-        if (bean.quic.uos) outbound.udp_over_stream = true; else if (bean.quic.udpRelayMode) outbound.udp_relay_mode = bean.quic.udpRelayMode;
-        if (bean.quic.zeroRtt) outbound.zero_rtt_handshake = true;
-        if (bean.quic.heartbeat) outbound.heartbeat = bean.quic.heartbeat;
+        if (bean.auth.uuid) outbound.uuid = bean.auth.uuid;
+        if (bean.auth.password) outbound.password = bean.auth.password;
+        if (bean.tuic.congestion_control) outbound.congestion_control = bean.tuic.congestion_control;
+        if (bean.tuic.udp_over_stream) outbound.udp_over_stream = true;
+        else if (bean.tuic.udp_relay_mode) outbound.udp_relay_mode = bean.tuic.udp_relay_mode;
+        if (bean.tuic.zero_rtt_handshake) outbound.zero_rtt_handshake = true;
+        if (bean.tuic.heartbeat) outbound.heartbeat = bean.tuic.heartbeat;
     } else throw new Error('Пока не поддерживается для sing-box: ' + bean.proto);
     const tls = commonTLS();
     if (tls) outbound.tls = tls;
@@ -419,20 +424,6 @@ function buildSingBoxFullConfig(outbound, opts) {
         route: {
             rules: [],
             final: 'proxy'
-        },
-        dns: {
-            independent_cache: true,
-            servers: [
-                {
-                    tag: 'dns-direct',
-                    address: 'https://doh.pub/dns-query',
-                    address_resolver: 'dns-local',
-                    strategy: '',
-                    detour: 'direct'
-                },
-                {tag: 'dns-local', address: 'local', detour: 'direct'}
-            ],
-            rules: [{outbound: 'any', server: 'dns-direct'}]
         }
     };
 }
@@ -460,56 +451,43 @@ function buildSingBoxFullConfigMulti(outboundsWithTags, opts) {
         log: {level: 'info'},
         inbounds: buildSingBoxInbounds(opts),
         outbounds,
-        route: {rules: [], final: 'select'},
-        dns: {
-            independent_cache: true,
-            servers: [
-                {
-                    tag: 'dns-direct',
-                    address: 'https://doh.pub/dns-query',
-                    address_resolver: 'dns-local',
-                    strategy: '',
-                    detour: 'direct'
-                },
-                {tag: 'dns-local', address: 'local', detour: 'direct'}
-            ],
-            rules: [{outbound: 'any', server: 'dns-direct'}]
-        }
+        route: {rules: [], final: 'select'}
     };
 }
 
 function buildXrayOutbound(bean) {
-    const streamSettings = {network: (bean.stream.network || 'tcp')};
-    const hasReality = !!(bean.stream.reality && bean.stream.reality.pbk);
-    const sec = hasReality ? 'reality' : (bean.stream.security === 'tls' ? 'tls' : '');
+    const s = bean.stream || {};
+    const streamSettings = {network: (s.network || 'tcp')};
+    const hasReality = !!(s.reality && s.reality.pbk);
+    const sec = hasReality ? 'reality' : (s.security === 'tls' ? 'tls' : '');
     if (sec === 'tls') {
         streamSettings.security = 'tls';
         streamSettings.tlsSettings = {};
-        if (bean.stream.sni) streamSettings.tlsSettings.serverName = bean.stream.sni;
-        if (bean.stream.alpn && bean.stream.alpn.length) streamSettings.tlsSettings.alpn = bean.stream.alpn;
-        if (bean.stream.fp) streamSettings.tlsSettings.fingerprint = bean.stream.fp;
-        if (bean.stream.allowInsecure) streamSettings.tlsSettings.allowInsecure = true;
+        if (s.sni) streamSettings.tlsSettings.serverName = s.sni;
+        if (s.alpn && s.alpn.length) streamSettings.tlsSettings.alpn = s.alpn;
+        if (s.fp) streamSettings.tlsSettings.fingerprint = s.fp;
+        if (s.allowInsecure) streamSettings.tlsSettings.allowInsecure = true;
     } else if (sec === 'reality') {
         streamSettings.security = 'reality';
-        streamSettings.realitySettings = {show: false, publicKey: bean.stream.reality.pbk};
-        if (bean.stream.reality.sid) streamSettings.realitySettings.shortId = bean.stream.reality.sid;
-        if (bean.stream.sni) streamSettings.realitySettings.serverName = bean.stream.sni;
-        if (bean.stream.fp) streamSettings.realitySettings.fingerprint = bean.stream.fp;
+        streamSettings.realitySettings = {show: false, publicKey: s.reality.pbk};
+        if (s.reality.sid) streamSettings.realitySettings.shortId = s.reality.sid;
+        if (s.sni) streamSettings.realitySettings.serverName = s.sni;
+        if (s.fp) streamSettings.realitySettings.fingerprint = s.fp;
     }
     if (streamSettings.network === 'ws') {
         streamSettings.wsSettings = {};
-        if (bean.stream.path) streamSettings.wsSettings.path = bean.stream.path;
-        if (bean.stream.host) streamSettings.wsSettings.headers = {Host: bean.stream.host};
+        if (s.path) streamSettings.wsSettings.path = s.path;
+        if (s.host) streamSettings.wsSettings.headers = {Host: s.host};
     } else if (streamSettings.network === 'http') {
         streamSettings.httpSettings = {};
-        if (bean.stream.host) streamSettings.httpSettings.host = splitCSV(bean.stream.host);
-        if (bean.stream.path) streamSettings.httpSettings.path = bean.stream.path;
+        if (s.host) streamSettings.httpSettings.host = splitCSV(s.host);
+        if (s.path) streamSettings.httpSettings.path = s.path;
     } else if (streamSettings.network === 'grpc') {
         streamSettings.grpcSettings = {};
-        if (bean.stream.path) streamSettings.grpcSettings.serviceName = bean.stream.path;
-    } else if (streamSettings.network === 'tcp' && bean.stream.headerType === 'http') {
-        streamSettings.tcpSettings = {header: {type: 'http', request: {headers: {Host: splitCSV(bean.stream.host)}}}};
-        if (bean.stream.path) streamSettings.tcpSettings.header.request.path = [bean.stream.path];
+        if (s.path) streamSettings.grpcSettings.serviceName = s.path;
+    } else if (streamSettings.network === 'tcp' && s.headerType === 'http') {
+        streamSettings.tcpSettings = {header: {type: 'http', request: {headers: {Host: splitCSV(s.host)}}}};
+        if (s.path) streamSettings.tcpSettings.header.request.path = [s.path];
     }
     let outbound = null;
     if (bean.proto === 'vmess') outbound = {
@@ -544,7 +522,11 @@ function buildXrayOutbound(bean) {
             s.users = [{user: bean.socks.username, pass: bean.socks.password}];
         }
         outbound = {protocol: bean.proto, tag: 'proxy', settings: {servers: [s]}};
-    } else if (bean.proto === 'hy2' || bean.proto === 'tuic') throw new Error('Xray: ' + bean.proto + ' не поддерживается'); else throw new Error('Xray: Ошибка ' + bean.proto);
+    } else if (bean.proto === 'hy2' || bean.proto === 'tuic') {
+        throw new Error('Xray: ' + bean.proto + ' не поддерживается в Xray. Используйте sing-box.');
+    } else {
+        throw new Error('Xray: Неизвестный протокол ' + bean.proto);
+    }
     outbound.streamSettings = streamSettings;
     return outbound;
 }
@@ -553,8 +535,7 @@ function buildXrayFullConfig(outbound) {
     return {
         log: {loglevel: 'warning'},
         inbounds: [{tag: 'socks-in', port: 1080, listen: '127.0.0.1', protocol: 'socks', settings: {udp: true}}],
-        outbounds: [outbound, {tag: 'direct', protocol: 'freedom'}, {tag: 'block', protocol: 'blackhole'}],
-        routing: {rules: []}
+        outbounds: [outbound, {tag: 'direct', protocol: 'freedom'}, {tag: 'block', protocol: 'blackhole'}]
     };
 }
 
@@ -562,7 +543,6 @@ function buildXrayFullConfigMulti(outbounds) {
     return {
         log: {loglevel: 'warning'},
         inbounds: [{tag: 'socks-in', port: 1080, listen: '127.0.0.1', protocol: 'socks', settings: {udp: true}}],
-        outbounds: [...outbounds, {tag: 'direct', protocol: 'freedom'}, {tag: 'block', protocol: 'blackhole'}],
-        routing: {rules: []}
+        outbounds: [...outbounds, {tag: 'direct', protocol: 'freedom'}, {tag: 'block', protocol: 'blackhole'}]
     };
 }
