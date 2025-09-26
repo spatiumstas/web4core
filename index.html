@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="ru">
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+<link rel="stylesheet" href="style.css">
+<title>web4core</title>
+<body>
+<header id="asciiHeader">
+    <pre>
+                __    __ __                     
+ _      _____  / /_  / // / _________  ________ 
+| | /| / / _ \/ __ \/ // /_/ ___/ __ \/ ___/ _ \
+| |/ |/ /  __/ /_/ /__  __/ /__/ /_/ / /  /  __/
+|__/|__/\___/_.___/  /_/  \___/\____/_/   \___/ 
+    </pre>
+</header>
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none">
+    <symbol id="copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+            stroke-linejoin="round">
+        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+    </symbol>
+    <symbol id="download-file" viewBox="0 0 16 16" fill="none">
+        <path d="M11.727 9.2a.8.8 0 0 0-1.054-1.204L8.8 9.635V1.798a.8.8 0 0 0-1.6 0v7.837l-1.873-1.64A.8.8 0 0 0 4.273 9.2l3.2 2.8a.8.8 0 0 0 1.054 0l3.2-2.8ZM1.6 11.398a.8.8 0 0 0-1.6 0v2.4a1.6 1.6 0 0 0 1.6 1.6h12.8a1.6 1.6 0 0 0 1.6-1.6v-2.4a.8.8 0 0 0-1.6 0v2.4H1.6v-2.4Z"
+              fill="currentColor"/>
+    </symbol>
+    <symbol id="check-mark-small" viewBox="0 0 16 16" fill="currentColor">
+        <path d="M6.173 12.414l-3.89-3.89 1.414-1.414 2.476 2.475 6.364-6.364 1.414 1.414-7.778 7.778z"/>
+    </symbol>
+</svg>
+<main class="container" style="align-items:stretch;">
+    <div class="row" style="justify-content:flex-start; gap:12px;">
+        <div id="coreToggle" class="core-toggle" data-core="singbox" aria-label="Core selector" role="switch"
+             aria-checked="true" tabindex="0">
+            <div class="knob"></div>
+            <div class="labels">
+                <span id="lblSing">sing-box</span>
+                <span id="lblXray">Xray</span>
+            </div>
+        </div>
+        <input class="input" type="text" id="tunName" placeholder="Имя интерфейса" style="min-width:180px;"/>
+    </div>
+
+    <div>
+        <textarea id="links" class="input"
+                  placeholder="vless://...&#10;vmess://...&#10;trojan://...&#10;ss://...&#10;socks://...&#10;http://user:pass@host:port&#10;hy2://...&#10;tuic://..."
+                  style="scrollbar-width:none; -ms-overflow-style:none;"></textarea>
+    </div>
+
+    <div class="button-row">
+        <input type="submit" id="gen" value="Сгенерировать"/>
+    </div>
+
+    <div id="outBlock" class="hidden">
+        <textarea id="out" class="input" placeholder="Здесь появится сгенерированный конфиг" readonly
+                  style="scrollbar-width:none; -ms-overflow-style:none;"></textarea>
+        <div class="button-row" style="margin-top:8px;">
+            <button id="btnCopy" class="circle-btn" title="Копировать" aria-label="Копировать">
+                <svg width="22" height="22" aria-hidden="true">
+                    <use href="#copy"></use>
+                </svg>
+            </button>
+            <button id="btnDownload" class="circle-btn" title="Скачать" aria-label="Скачать">
+                <svg width="22" height="22" aria-hidden="true">
+                    <use href="#download-file"></use>
+                </svg>
+            </button>
+        </div>
+    </div>
+</main>
+<script src="main.js"></script>
+<script>
+    let currentCore = 'singbox';
+    const coreToggle = document.getElementById('coreToggle');
+    const lblSing = document.getElementById('lblSing');
+    const lblXray = document.getElementById('lblXray');
+    const outBlock = document.getElementById('outBlock');
+
+    function setCore(core) {
+        currentCore = core;
+        coreToggle.setAttribute('data-core', core);
+        coreToggle.setAttribute('aria-checked', core === 'singbox');
+    }
+
+    lblSing.addEventListener('click', (e) => {
+        e.stopPropagation();
+        setCore('singbox');
+    });
+    lblXray.addEventListener('click', (e) => {
+        e.stopPropagation();
+        setCore('xray');
+    });
+
+    let dragging = false;
+    let startX = 0;
+    let moved = false;
+    let suppressClick = false;
+    coreToggle.addEventListener('mousedown', (e) => {
+        dragging = true;
+        moved = false;
+        startX = e.clientX;
+    });
+    window.addEventListener('mouseup', () => {
+        if (dragging && moved) {
+            suppressClick = true;
+            setTimeout(() => suppressClick = false, 0);
+        }
+        dragging = false;
+    });
+    window.addEventListener('mousemove', (e) => {
+        if (!dragging) return;
+        const dx = e.clientX - startX;
+        if (dx > 10) {
+            setCore('xray');
+            moved = true;
+        }
+        if (dx < -10) {
+            setCore('singbox');
+            moved = true;
+        }
+    });
+    coreToggle.addEventListener('click', () => {
+        if (suppressClick) return;
+        setCore(currentCore === 'singbox' ? 'xray' : 'singbox');
+    });
+
+    const outEl = document.getElementById('out');
+    document.getElementById('gen').addEventListener('click', () => {
+        const raw = document.getElementById('links').value;
+        const tunName = document.getElementById('tunName').value.trim();
+        try {
+            const lines = raw.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+            if (lines.length === 0) throw new Error('Не указана ссылка');
+            const beans = lines.map(parseLink);
+            let finalConfig;
+            if (currentCore === 'singbox') {
+                const opts = {addTun: true, tunName};
+                if (beans.length === 1) {
+                    const ob = buildSingBoxOutbound(beans[0]);
+                    finalConfig = buildSingBoxFullConfig(ob, opts);
+                } else {
+                    const used = new Set();
+                    const outbounds = beans.map(b => {
+                        const ob = buildSingBoxOutbound(b);
+                        const tag = computeTag(b, used);
+                        return Object.assign({tag, domain_strategy: ''}, ob);
+                    });
+                    finalConfig = buildSingBoxFullConfigMulti(outbounds, opts);
+                }
+            } else {
+                if (beans.length === 1) {
+                    const ob = buildXrayOutbound(beans[0]);
+                    finalConfig = buildXrayFullConfig(ob);
+                } else {
+                    const used = new Set();
+                    const outbounds = beans.map(b => {
+                        const ob = buildXrayOutbound(b);
+                        ob.tag = computeTag(b, used);
+                        return ob;
+                    });
+                    finalConfig = buildXrayFullConfigMulti(outbounds);
+                }
+            }
+            outEl.value = JSON.stringify(finalConfig, null, 2);
+            outBlock.classList.remove('hidden');
+        } catch (e) {
+            outEl.value = 'Ошибка: ' + (e && e.message ? e.message : String(e));
+            outBlock.classList.remove('hidden');
+        }
+    });
+
+    const btnCopy = document.getElementById('btnCopy');
+    const btnDownload = document.getElementById('btnDownload');
+    btnCopy.addEventListener('click', async () => {
+        try {
+            await navigator.clipboard.writeText(outEl.value || '');
+            const useEl = btnCopy.querySelector('use');
+            useEl.setAttribute('href', '#check-mark-small');
+            setTimeout(() => {
+                useEl.setAttribute('href', '#copy');
+            }, 3000);
+        } catch {
+        }
+    });
+    btnDownload.addEventListener('click', () => {
+        const blob = new Blob([outEl.value || ''], {type: 'application/json'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'config.json';
+        a.click();
+        URL.revokeObjectURL(url);
+    });
+</script>
+</body>
+</html>
