@@ -1,0 +1,304 @@
+name: Validate & Deploy
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  validate-singbox:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v4
+        with:
+          cache: false
+          go-version: '1.21'
+
+      - name: Download sing-box
+        run: |
+          # Get latest release info
+          LATEST_RELEASE=$(curl -s https://api.github.com/repos/SagerNet/sing-box/releases/latest)
+          DOWNLOAD_URL=$(echo $LATEST_RELEASE | jq -r '.assets[] | select(.name | contains("linux-amd64.tar.gz")) | .browser_download_url')
+          VERSION=$(echo $LATEST_RELEASE | jq -r '.tag_name')
+          
+          echo "Downloading sing-box $VERSION from $DOWNLOAD_URL"
+          wget -O sing-box.tar.gz "$DOWNLOAD_URL"
+          tar -xzf sing-box.tar.gz
+          sudo mv sing-box-*/sing-box /usr/local/bin/
+          chmod +x /usr/local/bin/sing-box
+
+      - name: Generate and validate sing-box configs
+        run: |
+          # Create test script
+          cat > test_singbox.js << 'EOF'
+          // Load main.js functions
+          const fs = require('fs');
+          const vm = require('vm');
+          
+          // Read main.js content
+          const mainJs = fs.readFileSync('src/main.js', 'utf8');
+          
+          // Create sandbox with required globals
+          const sandbox = {
+            console: console,
+            require: require,
+            module: { exports: {} },
+            exports: {},
+            global: global,
+            process: process,
+            Buffer: Buffer,
+            setTimeout: setTimeout,
+            setInterval: setInterval,
+            clearTimeout: clearTimeout,
+            clearInterval: clearInterval,
+            // Browser APIs for Node.js
+            URL: require('url').URL,
+            atob: (str) => Buffer.from(str, 'base64').toString('binary'),
+            btoa: (str) => Buffer.from(str, 'binary').toString('base64')
+          };
+          
+          // Execute main.js in sandbox
+          vm.createContext(sandbox);
+          vm.runInContext(mainJs, sandbox);
+          
+          // Read test config from file
+          const testLinksContent = fs.readFileSync('src/configs.txt', 'utf8');
+          const testLinks = testLinksContent
+            .split('\n')
+            .map(line => line.trim())
+            .filter(line => line && !line.startsWith('//') && !line.startsWith('#'))
+            .filter(line => line.includes('://'));
+          
+          console.log(`Found ${testLinks.length} test links`);
+          
+          let failedTests = 0;
+          let validTests = 0;
+          
+          for (let i = 0; i < testLinks.length; i++) {
+            const link = testLinks[i];
+            const linkName = link.split('#')[1] || `Link-${i + 1}`;
+            console.log(`Testing sing-box config ${i + 1}/${testLinks.length}: ${linkName}`);
+          
+            try {
+              // Parse link
+              const bean = sandbox.parseLink(link);
+          
+              // Generate sing-box config
+              const outbound = sandbox.buildSingBoxOutbound(bean);
+              const config = sandbox.buildSingBoxFullConfig(outbound, {addTun: true, addSocks: true, tunName: 'test-tun'});
+          
+              // Write config to file
+              const configFile = `test_singbox_${i}.json`;
+              fs.writeFileSync(configFile, JSON.stringify(config, null, 2));
+          
+              // Validate with sing-box
+              const { execSync } = require('child_process');
+              try {
+                const result = execSync(`sing-box check -c ${configFile}`, { 
+                  stdio: 'pipe',
+                  encoding: 'utf8'
+                });
+                console.log(`✅ Config ${i + 1} is valid`);
+                validTests++;
+              } catch (error) {
+                console.log(`❌ Config ${i + 1} failed validation:`);
+                console.log(`   Error: ${error.message}`);
+                if (error.stdout) console.log(`   Stdout: ${error.stdout}`);
+                if (error.stderr) console.log(`   Stderr: ${error.stderr}`);
+                failedTests++;
+              }
+          
+              // Clean up
+              fs.unlinkSync(configFile);
+          
+            } catch (error) {
+              console.log(`❌ Config ${i + 1} generation failed:`, error.message);
+              failedTests++;
+            }
+          }
+          
+          console.log(`\n📊 Results: ${validTests} valid, ${failedTests} failed`);
+          
+          if (failedTests > 0) {
+            console.log(`\n❌ ${failedTests} configs failed validation`);
+            process.exit(1);
+          } else {
+            console.log(`\n✅ All ${testLinks.length} sing-box configs are valid`);
+          }
+          EOF
+          
+          # Run the test
+          node test_singbox.js
+
+  validate-xray:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v4
+        with:
+          cache: false
+          go-version: '1.21'
+
+      - name: Download Xray
+        run: |
+          # Get latest release info
+          LATEST_RELEASE=$(curl -s https://api.github.com/repos/XTLS/Xray-core/releases/latest)
+          DOWNLOAD_URL=$(echo $LATEST_RELEASE | jq -r '.assets[] | select(.name == "Xray-linux-64.zip") | .browser_download_url')
+          VERSION=$(echo $LATEST_RELEASE | jq -r '.tag_name')
+          
+          echo "Downloading Xray $VERSION from $DOWNLOAD_URL"
+          wget -O xray.zip "$DOWNLOAD_URL"
+          unzip xray.zip
+          sudo mv xray /usr/local/bin/
+          chmod +x /usr/local/bin/xray
+
+      - name: Generate and validate Xray configs
+        run: |
+          # Create test script
+          cat > test_xray.js << 'EOF'
+          // Load main.js functions
+          const fs = require('fs');
+          const vm = require('vm');
+          
+          // Read main.js content
+          const mainJs = fs.readFileSync('src/main.js', 'utf8');
+          
+          // Create sandbox with required globals
+          const sandbox = {
+            console: console,
+            require: require,
+            module: { exports: {} },
+            exports: {},
+            global: global,
+            process: process,
+            Buffer: Buffer,
+            setTimeout: setTimeout,
+            setInterval: setInterval,
+            clearTimeout: clearTimeout,
+            clearInterval: clearInterval,
+            // Browser APIs for Node.js
+            URL: require('url').URL,
+            atob: (str) => Buffer.from(str, 'base64').toString('binary'),
+            btoa: (str) => Buffer.from(str, 'binary').toString('base64')
+          };
+          
+          // Execute main.js in sandbox
+          vm.createContext(sandbox);
+          vm.runInContext(mainJs, sandbox);
+          
+          // Read test links from file
+          const testLinksContent = fs.readFileSync('src/configs.txt', 'utf8');
+          const allTestLinks = testLinksContent
+            .split('\n')
+            .map(line => line.trim())
+            .filter(line => line && !line.startsWith('//') && !line.startsWith('#'))
+            .filter(line => line.includes('://'));
+          
+          // Filter out protocols not supported by Xray (hy2, tuic)
+          const testLinks = allTestLinks.filter(link => 
+            !link.startsWith('hy2://') && !link.startsWith('tuic://')
+          );
+          
+          console.log(`Found ${testLinks.length} test links (excluding hy2/tuic for Xray)`);
+          
+          let failedTests = 0;
+          let validTests = 0;
+          
+          for (let i = 0; i < testLinks.length; i++) {
+            const link = testLinks[i];
+            const linkName = link.split('#')[1] || `Link-${i + 1}`;
+            console.log(`Testing Xray config ${i + 1}/${testLinks.length}: ${linkName}`);
+          
+            try {
+              // Parse link
+              const bean = sandbox.parseLink(link);
+          
+              // Generate Xray config
+              const outbound = sandbox.buildXrayOutbound(bean);
+              const config = sandbox.buildXrayFullConfig(outbound);
+          
+              // Write config to file
+              const configFile = `test_xray_${i}.json`;
+              fs.writeFileSync(configFile, JSON.stringify(config, null, 2));
+          
+              // Validate with Xray
+              const { execSync } = require('child_process');
+              try {
+                const result = execSync(`xray -test -config ${configFile}`, { 
+                  stdio: 'pipe',
+                  encoding: 'utf8'
+                });
+                console.log(`✅ Config ${i + 1} is valid`);
+                validTests++;
+              } catch (error) {
+                console.log(`❌ Config ${i + 1} failed validation:`);
+                console.log(`   Error: ${error.message}`);
+                if (error.stdout) console.log(`   Stdout: ${error.stdout}`);
+                if (error.stderr) console.log(`   Stderr: ${error.stderr}`);
+                failedTests++;
+              }
+          
+              // Clean up
+              fs.unlinkSync(configFile);
+          
+            } catch (error) {
+              console.log(`❌ Config ${i + 1} generation failed:`, error.message);
+              failedTests++;
+            }
+          }
+          
+          console.log(`\n📊 Results: ${validTests} valid, ${failedTests} failed`);
+          
+          if (failedTests > 0) {
+            console.log(`\n❌ ${failedTests} configs failed validation`);
+            process.exit(1);
+          } else {
+            console.log(`\n✅ All ${testLinks.length} Xray configs are valid`);
+          }
+          EOF
+          
+          # Run the test
+          node test_xray.js
+
+  build:
+    runs-on: ubuntu-latest
+    needs: [validate-singbox, validate-xray]
+    if: github.ref == 'refs/heads/main'
+
+    concurrency:
+      group: "pages"
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+      - name: Build static site
+        run: |
+          mkdir -p _site
+          cp -r src/* _site/
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

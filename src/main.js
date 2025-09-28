@@ -1,3 +1,12 @@
+if (typeof document !== 'undefined') {
+    document.addEventListener('keydown', function (e) {
+        if ((e.ctrlKey || e.metaKey) && e.code === 'KeyS') {
+            e.preventDefault();
+            document.querySelector('input[type="submit"]').click();
+        }
+    });
+}
+
 function decodeBase64Url(input) {
     try {
         const s = input.replace(/-/g, '+').replace(/_/g, '/');
@@ -45,10 +54,10 @@ function computeTag(bean, used) {
 }
 
 function generateIfaceName() {
-    const alphabet = 'abcdefghijklmnopqrstuvwxyz0123456789';
+    const numeric = '0123456789';
     let suffix = '';
-    for (let i = 0; i < 3; i++) suffix += alphabet[Math.floor(Math.random() * alphabet.length)];
-    return `tun-${suffix}`;
+    for (let i = 0; i < 2; i++) suffix += numeric[Math.floor(Math.random() * numeric.length)];
+    return `sing${suffix}`;
 }
 
 function parseLink(input) {
@@ -156,7 +165,7 @@ function parseVMess(urlStr) {
         };
         return {
             proto: 'vmess',
-            host: obj.add,
+            host: obj.add || 'localhost',
             port: asInt(obj.port, 443),
             name: obj.ps || '',
             auth: {uuid: obj.id, aid: asInt(obj.aid, 0), security: obj.scy || 'auto'},
@@ -374,7 +383,7 @@ function buildSingBoxOutbound(bean) {
             outbound.obfs = {type: 'salamander', password: bean.hysteria2.obfsPassword};
         }
         if (bean.hysteria2?.hopPort) outbound.hop_ports = bean.hysteria2.hopPort;
-        if (Number.isFinite(bean.hysteria2?.hopInterval)) outbound.hop_interval = bean.hysteria2.hopInterval;
+        if (Number.isFinite(bean.hysteria2?.hopInterval)) outbound.hop_interval = bean.hysteria2.hopInterval + 's';
     } else if (bean.proto === 'tuic') {
         const tls = commonTLS() || {enabled: true};
         outbound = {type: 'tuic', server: bean.host, server_port: bean.port || 443, tls};
@@ -385,7 +394,7 @@ function buildSingBoxOutbound(bean) {
         else if (bean.tuic.udp_relay_mode) outbound.udp_relay_mode = bean.tuic.udp_relay_mode;
         if (bean.tuic.zero_rtt_handshake) outbound.zero_rtt_handshake = true;
         if (bean.tuic.heartbeat) outbound.heartbeat = bean.tuic.heartbeat;
-    } else throw new Error('Пока не поддерживается для sing-box: ' + bean.proto);
+    } else throw new Error('Не поддерживается sing-box: ' + bean.proto);
     const tls = commonTLS();
     if (tls) outbound.tls = tls;
     if (bean.stream) applyTransport(outbound, bean.stream);
@@ -397,17 +406,17 @@ function buildSingBoxInbounds(opts) {
     if (opts.addTun) {
         const iface = (opts.tunName || generateIfaceName()).trim() || generateIfaceName();
         inbounds.push({type: 'tun', tag: 'tun-in', interface_name: iface, address: ['172.19.0.1/32'], stack: 'gvisor'});
-        return inbounds;
     }
-    inbounds.push({
-        tag: 'mixed-in',
-        type: 'mixed',
-        listen: '127.0.0.1',
-        listen_port: 2080,
-        sniff: true,
-        sniff_override_destination: false,
-        domain_strategy: ''
-    });
+    if (opts.addSocks) {
+        inbounds.push({
+            tag: 'mixed-in',
+            type: 'mixed',
+            listen: '127.0.0.1',
+            listen_port: 2080,
+            sniff: true,
+            sniff_override_destination: false
+        });
+    }
     return inbounds;
 }
 
@@ -416,7 +425,7 @@ function buildSingBoxFullConfig(outbound, opts) {
         log: {level: 'info'},
         inbounds: buildSingBoxInbounds(opts),
         outbounds: [
-            Object.assign({tag: 'proxy', domain_strategy: ''}, outbound),
+            Object.assign({tag: 'proxy'}, outbound),
             {tag: 'direct', type: 'direct'},
             {tag: 'bypass', type: 'direct'},
             {tag: 'block', type: 'block'}
@@ -457,7 +466,8 @@ function buildSingBoxFullConfigMulti(outboundsWithTags, opts) {
 
 function buildXrayOutbound(bean) {
     const s = bean.stream || {};
-    const streamSettings = {network: (s.network || 'tcp')};
+    const network = s.network || 'tcp';
+    const streamSettings = {network: network === 'http' ? 'xhttp' : network};
     const hasReality = !!(s.reality && s.reality.pbk);
     const sec = hasReality ? 'reality' : (s.security === 'tls' ? 'tls' : '');
     if (sec === 'tls') {
@@ -478,29 +488,34 @@ function buildXrayOutbound(bean) {
         streamSettings.wsSettings = {};
         if (s.path) streamSettings.wsSettings.path = s.path;
         if (s.host) streamSettings.wsSettings.headers = {Host: s.host};
-    } else if (streamSettings.network === 'http') {
-        streamSettings.httpSettings = {};
-        if (s.host) streamSettings.httpSettings.host = splitCSV(s.host);
-        if (s.path) streamSettings.httpSettings.path = s.path;
+    } else if (streamSettings.network === 'xhttp') {
+        streamSettings.xhttpSettings = {};
+        if (s.host) streamSettings.xhttpSettings.host = s.host;
+        if (s.path) streamSettings.xhttpSettings.path = s.path;
     } else if (streamSettings.network === 'grpc') {
         streamSettings.grpcSettings = {};
         if (s.path) streamSettings.grpcSettings.serviceName = s.path;
     } else if (streamSettings.network === 'tcp' && s.headerType === 'http') {
-        streamSettings.tcpSettings = {header: {type: 'http', request: {headers: {Host: splitCSV(s.host)}}}};
+        streamSettings.tcpSettings = {header: {type: 'http', request: {headers: {Host: s.host}}}};
         if (s.path) streamSettings.tcpSettings.header.request.path = [s.path];
     }
     let outbound = null;
-    if (bean.proto === 'vmess') outbound = {
-        protocol: 'vmess',
-        tag: 'proxy',
-        settings: {
-            vnext: [{
-                address: bean.host,
-                port: bean.port,
-                users: [{id: bean.auth.uuid, alterId: bean.auth.aid || 0, security: bean.auth.security || 'auto'}]
-            }]
-        }
-    }; else if (bean.proto === 'vless') {
+    if (bean.proto === 'vmess') {
+        outbound = {
+            protocol: 'vmess',
+            tag: 'proxy',
+            settings: {
+                vnext: [{
+                    address: bean.host,
+                    port: bean.port,
+                    users: [{
+                        id: bean.auth.uuid,
+                        security: bean.auth.security || 'auto'
+                    }]
+                }]
+            }
+        };
+    } else if (bean.proto === 'vless') {
         const user = {id: bean.auth.uuid, encryption: 'none'};
         if (bean.auth.flow) user.flow = bean.auth.flow;
         outbound = {
@@ -523,7 +538,7 @@ function buildXrayOutbound(bean) {
         }
         outbound = {protocol: bean.proto, tag: 'proxy', settings: {servers: [s]}};
     } else if (bean.proto === 'hy2' || bean.proto === 'tuic') {
-        throw new Error('Xray: ' + bean.proto + ' не поддерживается в Xray. Используйте sing-box.');
+        throw new Error(bean.proto + ' не поддерживается в Xray. Используйте sing-box.');
     } else {
         throw new Error('Xray: Неизвестный протокол ' + bean.proto);
     }

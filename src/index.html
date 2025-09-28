@@ -41,6 +41,16 @@
                 <span id="lblXray">Xray</span>
             </div>
         </div>
+        <label class="custom-checkbox">
+            <input type="checkbox" id="cbTun" checked/>
+            <div class="checkmark"></div>
+            <span>TUN</span>
+        </label>
+        <label class="custom-checkbox">
+            <input type="checkbox" id="cbSocks"/>
+            <div class="checkmark"></div>
+            <span>SOCKS5</span>
+        </label>
         <input class="input" type="text" id="tunName" placeholder="Имя интерфейса" style="min-width:180px;"/>
     </div>
 
@@ -59,7 +69,7 @@
     </div>
 
     <div id="outBlock" class="hidden">
-        <textarea id="out" class="input" placeholder="Здесь появится сгенерированный конфиг" readonly
+        <textarea id="out" class="input" readonly
                   style="scrollbar-width:none; -ms-overflow-style:none;"></textarea>
         <div class="button-row" style="margin-top:8px;">
             <button id="btnCopy" class="circle-btn" title="Копировать" aria-label="Копировать">
@@ -89,6 +99,14 @@
         currentCore = core;
         coreToggle.setAttribute('data-core', core);
         coreToggle.setAttribute('aria-checked', core === 'singbox');
+        const cbTunLabel = document.getElementById('cbTun')?.parentElement;
+        const cbSocksLabel = document.getElementById('cbSocks')?.parentElement;
+        const tunNameInput = document.getElementById('tunName');
+        const show = core === 'singbox' ? '' : 'none';
+        if (cbTunLabel) cbTunLabel.style.display = show;
+        if (cbSocksLabel) cbSocksLabel.style.display = show;
+        if (tunNameInput) tunNameInput.style.display = show;
+
     }
 
     lblSing.addEventListener('click', (e) => {
@@ -134,16 +152,37 @@
     });
 
     const outEl = document.getElementById('out');
+
+    function setupCheckboxValidation() {
+        const cbTun = document.getElementById('cbTun');
+        const cbSocks = document.getElementById('cbSocks');
+        if (!cbTun || !cbSocks) return;
+
+        cbTun.addEventListener('change', () => {
+            if (!cbTun.checked && !cbSocks.checked) {
+                cbSocks.checked = true;
+            }
+        });
+
+        cbSocks.addEventListener('change', () => {
+            if (!cbTun.checked && !cbSocks.checked) {
+                cbTun.checked = true;
+            }
+        });
+    }
+
     document.getElementById('gen').addEventListener('click', () => {
         const raw = document.getElementById('links').value;
         const tunName = document.getElementById('tunName').value.trim();
+        const addTun = !!document.getElementById('cbTun')?.checked;
+        const addSocks = !!document.getElementById('cbSocks')?.checked;
         try {
             const lines = raw.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
             if (lines.length === 0) throw new Error('Не указана ссылка');
             const beans = lines.map(parseLink);
             let finalConfig;
             if (currentCore === 'singbox') {
-                const opts = {addTun: true, tunName};
+                const opts = {addTun: addTun, addSocks: addSocks, tunName};
                 if (beans.length === 1) {
                     const ob = buildSingBoxOutbound(beans[0]);
                     finalConfig = buildSingBoxFullConfig(ob, opts);
@@ -152,7 +191,7 @@
                     const outbounds = beans.map(b => {
                         const ob = buildSingBoxOutbound(b);
                         const tag = computeTag(b, used);
-                        return Object.assign({tag, domain_strategy: ''}, ob);
+                        return Object.assign({tag}, ob);
                     });
                     finalConfig = buildSingBoxFullConfigMulti(outbounds, opts);
                 }
@@ -199,10 +238,12 @@
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = 'config.json';
+        a.download = (currentCore === 'singbox' ? 'singbox_config.json' : 'xray_config.json');
         a.click();
         URL.revokeObjectURL(url);
     });
+
+    setupCheckboxValidation();
 </script>
 </body>
 </html>
