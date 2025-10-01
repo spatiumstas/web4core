@@ -221,7 +221,7 @@ label {
     user-select: none;
     padding: 8px 12px;
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: var(--radius);
     background: var(--bg-dark);
     transition: all 0.2s ease;
     min-width: fit-content;

@@ -39,7 +39,16 @@ function asInt(n, def = 0) {
 }
 
 function sanitizeTag(s) {
-    return s.replace(/[^A-Za-z0-9_\-\.]/g, '-').slice(0, 64) || 'proxy';
+    const cleaned = (s || '').replace(/[\u0000-\u001f]/g, '').trim();
+    return cleaned || 'proxy';
+}
+
+function generateSecretHex32() {
+    const bytes = [];
+    for (let i = 0; i < 16; i++) {
+        bytes.push(Math.floor(Math.random() * 256));
+    }
+    return bytes.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
 function computeTag(bean, used) {
@@ -58,6 +67,65 @@ function generateIfaceName() {
     let suffix = '';
     for (let i = 0; i < 2; i++) suffix += numeric[Math.floor(Math.random() * numeric.length)];
     return `sing${suffix}`;
+}
+
+function isValidUuid(str) {
+    const s = (str || '').trim();
+    return /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(s);
+}
+
+function validateBean(bean) {
+    if (!bean || typeof bean !== 'object') throw new Error('Некорректная ссылка');
+    const p = bean.proto;
+    const requireHost = () => { if (!bean.host) throw new Error(p + ': отсутствует host'); };
+    const requirePort = () => { if (!Number.isFinite(bean.port) || bean.port <= 0) throw new Error(p + ': некорректный port'); };
+    switch (p) {
+        case 'vless':
+        case 'vmess':
+            requireHost(); requirePort();
+            if (!bean.auth?.uuid) throw new Error(p + ': отсутствует UUID');
+            if (!isValidUuid(bean.auth.uuid)) throw new Error(p + ': некорректный UUID');
+            break;
+        case 'trojan':
+            requireHost(); requirePort();
+            if (!bean.auth?.password) throw new Error('trojan: отсутствует пароль');
+            break;
+        case 'ss':
+            requireHost(); requirePort();
+            if (!bean.ss?.method || !bean.ss?.password) throw new Error('shadowsocks: отсутствует method/password');
+            break;
+        case 'socks':
+        case 'http':
+            requireHost(); requirePort();
+            break;
+        case 'hy2':
+            requireHost(); requirePort();
+            if (!bean.auth?.password) throw new Error('hysteria2: отсутствует пароль');
+            break;
+        case 'tuic':
+            requireHost(); requirePort();
+            if (!bean.auth?.uuid || !isValidUuid(bean.auth.uuid)) throw new Error('tuic: некорректный UUID');
+            if (!bean.auth?.password) throw new Error('tuic: отсутствует пароль');
+            break;
+        default:
+            throw new Error('Неизвестный протокол: ' + p);
+    }
+}
+
+function parseTunSpec(tunSpec) {
+    const items = (tunSpec || '')
+        .split(',')
+        .map(s => s.trim())
+        .filter(Boolean)
+        .map(raw => {
+            const [namePart, modePart] = raw.split(':');
+            const name = (namePart || '').trim();
+            const m = (modePart || '').trim().toLowerCase();
+            const mode = (m === 'auto' || m === 'select') ? m : 'select';
+            return { name, mode };
+        })
+        .filter(x => x.name);
+    return items;
 }
 
 function parseLink(input) {
@@ -168,7 +236,7 @@ function parseVMess(urlStr) {
             host: obj.add || 'localhost',
             port: asInt(obj.port, 443),
             name: obj.ps || '',
-            auth: {uuid: obj.id, aid: asInt(obj.aid, 0), security: obj.scy || 'auto'},
+            auth: {uuid: obj.id, security: obj.scy || 'auto'},
             stream
         };
     }
@@ -179,7 +247,7 @@ function parseVMess(urlStr) {
         host: u.hostname,
         port: asInt(u.port, 443),
         name: decodeURIComponent(u.hash.replace('#', '')),
-        auth: {uuid: decodeURIComponent(u.username || ''), aid: 0, security: q.get('encryption') || 'auto'},
+        auth: {uuid: decodeURIComponent(u.username || ''), security: q.get('encryption') || 'auto'},
         stream: buildStreamFromQuery(q, false)
     };
 }
@@ -319,8 +387,9 @@ function buildSingBoxOutbound(bean) {
     function applyTransport(outbound, stream) {
         if (stream.network !== 'tcp') {
             const t = {type: stream.network};
-            if (stream.network === 'ws') {
-                if (stream.host) t.headers = {Host: stream.host};
+        if (stream.network === 'ws') {
+                const hostHeader = stream.host || stream.sni || '';
+                if (hostHeader) t.headers = {Host: hostHeader};
                 const pathWithoutEd = (stream.path || '').split('?ed=')[0];
                 if (pathWithoutEd) t.path = pathWithoutEd;
             } else if (stream.network === 'http') {
@@ -352,7 +421,6 @@ function buildSingBoxOutbound(bean) {
         server: bean.host,
         server_port: bean.port,
         uuid: bean.auth.uuid,
-        alter_id: bean.auth.aid || 0,
         security: bean.auth.security || 'auto'
     }; else if (bean.proto === 'vless') {
         outbound = {type: 'vless', server: bean.host, server_port: bean.port, uuid: bean.auth.uuid};
@@ -404,8 +472,15 @@ function buildSingBoxOutbound(bean) {
 function buildSingBoxInbounds(opts) {
     const inbounds = [];
     if (opts.addTun) {
-        const iface = (opts.tunName || generateIfaceName()).trim() || generateIfaceName();
-        inbounds.push({type: 'tun', tag: 'tun-in', interface_name: iface, address: ['172.19.0.1/32'], stack: 'gvisor'});
+        const specs = parseTunSpec(opts.tunName || '');
+        const ifaces = specs.length ? specs.map(x => x.name) : [generateIfaceName()];
+        for (let i = 0; i < ifaces.length; i++) {
+            const name = ifaces[i];
+            const tag = ifaces.length > 1 ? `tun-in-${name}` : 'tun-in';
+            const octet = ifaces.length > 1 ? (i === 0 ? 1 : i * 10) : 1;
+            const cidr = ifaces.length > 1 ? `${`172.19.0.${octet}`}/30` : '172.19.0.1/32';
+            inbounds.push({type: 'tun', tag, interface_name: name, address: [cidr], stack: 'gvisor'});
+        }
     }
     if (opts.addSocks) {
         inbounds.push({
@@ -433,24 +508,64 @@ function buildSingBoxFullConfig(outbound, opts) {
         route: {
             rules: [],
             final: 'proxy'
+        },
+        experimental: {
+            cache_file: {enabled: true},
+            clash_api: {
+                external_controller: '[::]:9090',
+                external_ui: 'ui',
+                external_ui_download_detour: 'direct',
+                access_control_allow_private_network: true,
+                secret: opts?.genClashSecret ? generateSecretHex32() : ''
+            }
         }
     };
 }
 
 function buildSingBoxFullConfigMulti(outboundsWithTags, opts) {
     const tags = outboundsWithTags.map(ob => ob.tag);
+    const inbounds = buildSingBoxInbounds(opts);
+    const managementOutbounds = [];
+    const routeRules = [];
+    const suffixFromInbound = (tag) => {
+        const m = (tag || '').match(/^(.*?)-in(?:-(.*))?$/);
+        if (!m) return tag;
+        return m[2] || m[1];
+    };
+    let firstDetourTag = '';
+    const tunModes = new Map();
+    if (opts && opts.addTun) {
+        const specs = parseTunSpec(opts.tunName || '');
+        for (const s of specs) tunModes.set(s.name, s.mode);
+    }
+    for (const inbound of inbounds) {
+        const suffix = suffixFromInbound(inbound.tag);
+        const mode = inbound.tag.startsWith('tun-in') ? (tunModes.get(suffix) || 'select') : 'select';
+        const selectTag = `select-${suffix}`;
+        const autoTag = `auto-${suffix}`;
+        if (mode === 'auto') {
+            managementOutbounds.push({
+                type: 'urltest',
+                tag: autoTag,
+                outbounds: tags,
+                url: 'https://www.gstatic.com/generate_204',
+                interval: '3m',
+                tolerance: 50,
+                idle_timeout: '30m',
+                interrupt_exist_connections: false
+            });
+            routeRules.push({ inbound: inbound.tag, outbound: autoTag });
+            if (!firstDetourTag) firstDetourTag = autoTag;
+        } else {
+            const selectorOutbounds = [...tags];
+            const defaultTag = selectorOutbounds[0] || 'direct';
+            managementOutbounds.push({type: 'selector', tag: selectTag, outbounds: selectorOutbounds, default: defaultTag, interrupt_exist_connections: false});
+            routeRules.push({ inbound: inbound.tag, outbound: selectTag });
+            if (!firstDetourTag) firstDetourTag = selectTag;
+        }
+    }
     const outbounds = [
-        {type: 'selector', tag: 'select', outbounds: tags, default: 'auto', interrupt_exist_connections: false},
-        {
-            type: 'urltest',
-            tag: 'auto',
-            outbounds: tags,
-            url: 'https://www.gstatic.com/generate_204',
-            interval: '3m',
-            tolerance: 50,
-            idle_timeout: '30m',
-            interrupt_exist_connections: false
-        },
+        ...managementOutbounds,
         ...outboundsWithTags,
         {tag: 'direct', type: 'direct'},
         {tag: 'bypass', type: 'direct'},
@@ -458,9 +573,19 @@ function buildSingBoxFullConfigMulti(outboundsWithTags, opts) {
     ];
     return {
         log: {level: 'info'},
-        inbounds: buildSingBoxInbounds(opts),
+        inbounds,
         outbounds,
-        route: {rules: [], final: 'select'}
+        route: {rules: routeRules, final: firstDetourTag || 'direct'},
+        experimental: {
+            cache_file: {enabled: true},
+            clash_api: {
+                external_controller: '[::]:9090',
+                external_ui: 'ui',
+                external_ui_download_detour: 'direct',
+                access_control_allow_private_network: true,
+                secret: opts?.genClashSecret ? generateSecretHex32() : ''
+            }
+        }
     };
 }
 

@@ -51,7 +51,12 @@
             <div class="checkmark"></div>
             <span>SOCKS5</span>
         </label>
-        <input class="input" type="text" id="tunName" placeholder="Имя интерфейса" style="min-width:180px;"/>
+        <label class="custom-checkbox">
+            <input type="checkbox" id="cbClashSecret"/>
+            <div class="checkmark"></div>
+            <span title="Clash API Secret">Clash Secret</span>
+        </label>
+        <input class="input" type="text" id="tunName" placeholder="Интерфейс(ы): (tun0,tun1 или tun0:select,tun1:auto)" style="min-width:180px;"/>
     </div>
 
     <div>
@@ -101,10 +106,12 @@
         coreToggle.setAttribute('aria-checked', core === 'singbox');
         const cbTunLabel = document.getElementById('cbTun')?.parentElement;
         const cbSocksLabel = document.getElementById('cbSocks')?.parentElement;
+            const cbClashSecretLabel = document.getElementById('cbClashSecret')?.parentElement;
         const tunNameInput = document.getElementById('tunName');
         const show = core === 'singbox' ? '' : 'none';
         if (cbTunLabel) cbTunLabel.style.display = show;
         if (cbSocksLabel) cbSocksLabel.style.display = show;
+            if (cbClashSecretLabel) cbClashSecretLabel.style.display = show;
         if (tunNameInput) tunNameInput.style.display = show;
 
     }
@@ -176,13 +183,15 @@
         const tunName = document.getElementById('tunName').value.trim();
         const addTun = !!document.getElementById('cbTun')?.checked;
         const addSocks = !!document.getElementById('cbSocks')?.checked;
+        const genClashSecret = !!document.getElementById('cbClashSecret')?.checked;
         try {
             const lines = raw.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
             if (lines.length === 0) throw new Error('Не указана ссылка');
             const beans = lines.map(parseLink);
+            beans.forEach(validateBean);
             let finalConfig;
             if (currentCore === 'singbox') {
-                const opts = {addTun: addTun, addSocks: addSocks, tunName};
+                const opts = {addTun: addTun, addSocks: addSocks, tunName, genClashSecret};
                 if (beans.length === 1) {
                     const ob = buildSingBoxOutbound(beans[0]);
                     finalConfig = buildSingBoxFullConfig(ob, opts);

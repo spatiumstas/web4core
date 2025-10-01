@@ -85,7 +85,9 @@ jobs:
           
           for (let i = 0; i < testLinks.length; i++) {
             const link = testLinks[i];
-            const linkName = link.split('#')[1] || `Link-${i + 1}`;
+            const rawName = link.split('#')[1] || `Link-${i + 1}`;
+            let linkName = rawName;
+            try { linkName = decodeURIComponent(rawName); } catch {}
             console.log(`Testing sing-box config ${i + 1}/${testLinks.length}: ${linkName}`);
           
             try {
@@ -94,13 +96,23 @@ jobs:
           
               // Generate sing-box config
               const outbound = sandbox.buildSingBoxOutbound(bean);
-              const config = sandbox.buildSingBoxFullConfig(outbound, {addTun: true, addSocks: true, tunName: 'test-tun'});
+              // Multi-link path builds per-inbound selectors; for single link emulate multi by duplicating
+              let config;
+              if (i === 0) {
+                // Single-link config (kept for coverage), also exercise named TUN
+                config = sandbox.buildSingBoxFullConfig(outbound, {addTun: true, addSocks: true, tunName: 'tun0'});
+              } else {
+                // Multi-config: use the same outbound twice to simulate multiple choices and multiple TUNs
+                const ob1 = Object.assign({tag: 'p1'}, outbound);
+                const ob2 = Object.assign({tag: 'p2'}, outbound);
+                config = sandbox.buildSingBoxFullConfigMulti([ob1, ob2], {addTun: true, addSocks: true, tunName: 'tun0,tun_ru,tun_auto'});
+              }
           
               // Write config to file
               const configFile = `test_singbox_${i}.json`;
               fs.writeFileSync(configFile, JSON.stringify(config, null, 2));
           
-              // Validate with sing-box
+              // Validate with sing-box (syntax)
               const { execSync } = require('child_process');
               try {
                 const result = execSync(`sing-box check -c ${configFile}`, { 
@@ -116,6 +128,29 @@ jobs:
                 if (error.stderr) console.log(`   Stderr: ${error.stderr}`);
                 failedTests++;
               }
+
+              // Optional run smoke test for SOCKS-only inbound (avoid TUN in CI) — FAILS build on error
+              try {
+                const cfgObj = JSON.parse(fs.readFileSync(configFile, 'utf8'));
+                cfgObj.inbounds = [{ tag: 'mixed-in', type: 'mixed', listen: '127.0.0.1', listen_port: 2080 }];
+                // route final to the first selector if exists
+                if (cfgObj.outbounds && cfgObj.outbounds.length) {
+                  const firstSelector = cfgObj.outbounds.find(o => o.type === 'selector')?.tag || 'direct';
+                  cfgObj.route = cfgObj.route || {}; cfgObj.route.final = firstSelector;
+                }
+                const runFile = `run_singbox_${i}.json`;
+                fs.writeFileSync(runFile, JSON.stringify(cfgObj, null, 2));
+                const cmd = `bash -lc 'tmp=$(mktemp); sing-box run -c ${runFile} >$tmp 2>&1 & pid=$!; sleep 2; kill $pid || true; cat $tmp; rm -f $tmp'`;
+                const out = execSync(cmd, { stdio: 'pipe', encoding: 'utf8' });
+                if (!/sing-box started/.test(out)) {
+                  throw new Error('sing-box did not report start');
+                }
+                console.log(`🚀 Run smoke test passed for ${i + 1}`);
+                fs.unlinkSync(runFile);
+              } catch (error) {
+                console.log(`❌ Run smoke test failed: ${error.message}`);
+                failedTests++;
+              }
           
               // Clean up
               fs.unlinkSync(configFile);
@@ -126,6 +161,43 @@ jobs:
             }
           }
           
+          // Multi-config test: combine ALL links into one config and validate
+          try {
+            const selected = testLinks.map(l => sandbox.parseLink(l));
+            const used = new Set();
+            const multiOutbounds = selected.map((b, idx) => {
+              const ob = sandbox.buildSingBoxOutbound(b);
+              const tag = sandbox.computeTag ? sandbox.computeTag(b, used) : `p${idx + 1}`;
+              return Object.assign({ tag }, ob);
+            });
+            // Mixed modes test: tun0:select,tun1:auto
+            const multiConfig = sandbox.buildSingBoxFullConfigMulti(multiOutbounds, { addTun: true, addSocks: true, tunName: 'tun0:select,tun1:auto' });
+            const multiFile = `test_singbox_multi_all.json`;
+            fs.writeFileSync(multiFile, JSON.stringify(multiConfig, null, 2));
+
+            const { execSync } = require('child_process');
+            // Syntax check
+            execSync(`sing-box check -c ${multiFile}`, { stdio: 'pipe', encoding: 'utf8' });
+            // Smoke run (SOCKS-only)
+            const cfgObj = JSON.parse(fs.readFileSync(multiFile, 'utf8'));
+            cfgObj.inbounds = [{ tag: 'mixed-in', type: 'mixed', listen: '127.0.0.1', listen_port: 2080 }];
+            if (cfgObj.outbounds && cfgObj.outbounds.length) {
+              const firstSelector = cfgObj.outbounds.find(o => o.type === 'selector')?.tag || 'direct';
+              cfgObj.route = cfgObj.route || {}; cfgObj.route.final = firstSelector;
+            }
+            const runFile = `run_singbox_multi_all.json`;
+            fs.writeFileSync(runFile, JSON.stringify(cfgObj, null, 2));
+            const cmd = `bash -lc 'tmp=$(mktemp); sing-box run -c ${runFile} >$tmp 2>&1 & pid=$!; sleep 2; kill $pid || true; cat $tmp; rm -f $tmp'`;
+            const out = execSync(cmd, { stdio: 'pipe', encoding: 'utf8' });
+            if (!/sing-box started/.test(out)) throw new Error('sing-box did not report start (multi-all)');
+            console.log('✅ Multi-config (ALL links) valid and started');
+            fs.unlinkSync(multiFile);
+            fs.unlinkSync(runFile);
+          } catch (error) {
+            console.log(`❌ Multi-config test failed: ${error.message}`);
+            process.exit(1);
+          }
+
           console.log(`\n📊 Results: ${validTests} valid, ${failedTests} failed`);
           
           if (failedTests > 0) {
