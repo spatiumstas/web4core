@@ -62,53 +62,116 @@ function computeTag(bean, used) {
     return tag;
 }
 
-function generateIfaceName() {
-    const numeric = '0123456789';
-    let suffix = '';
-    for (let i = 0; i < 2; i++) suffix += numeric[Math.floor(Math.random() * numeric.length)];
-    return `sing${suffix}`;
-}
-
 function isValidUuid(str) {
     const s = (str || '').trim();
     return /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(s);
 }
 
+function findUuidToken(str) {
+    const s = (str || '').trim();
+    if (!s) return '';
+    const tokens = s.split(/[:@]/).map(x => x.trim()).filter(Boolean);
+    for (const t of tokens) {
+        if (isValidUuid(t)) return t;
+    }
+    if (isValidUuid(s)) return s;
+    return '';
+}
+
+function parseAddrHostPort(addr, defaultPort) {
+    let host = '';
+    let port = defaultPort;
+    const a = (addr || '').trim();
+    if (!a) return {host, port};
+    if (a.startsWith('[')) {
+        const ix = a.indexOf(']');
+        if (ix !== -1) {
+            host = a.slice(0, ix + 1);
+            const rest = a.slice(ix + 1);
+            if (rest.startsWith(':')) port = asInt(rest.slice(1), defaultPort);
+        } else {
+            host = a;
+        }
+    } else {
+        const lastColon = a.lastIndexOf(':');
+        if (lastColon > 0) {
+            host = a.slice(0, lastColon);
+            port = asInt(a.slice(lastColon + 1), defaultPort);
+        } else {
+            host = a;
+        }
+    }
+    return {host, port};
+}
+
+function decodeAuthorityAndExtract(authority, defaultPort) {
+    const dec = decodeBase64Url(authority || '');
+    if (!dec || !dec.includes('@')) return null;
+    const i = dec.lastIndexOf('@');
+    const cred = dec.slice(0, i);
+    const addr = dec.slice(i + 1);
+    const uuid = findUuidToken(cred);
+    const {host, port} = parseAddrHostPort(addr, defaultPort);
+    return {uuid, host, port};
+}
+
 function validateBean(bean) {
-    if (!bean || typeof bean !== 'object') throw new Error('Некорректная ссылка');
+    if (!bean || typeof bean !== 'object') throw new Error('Incorrect link');
     const p = bean.proto;
-    const requireHost = () => { if (!bean.host) throw new Error(p + ': отсутствует host'); };
-    const requirePort = () => { if (!Number.isFinite(bean.port) || bean.port <= 0) throw new Error(p + ': некорректный port'); };
+    const requireHost = () => {
+        if (!bean.host) throw new Error(p + ': missing host');
+    };
+    const requirePort = () => {
+        if (!Number.isFinite(bean.port) || bean.port <= 0) throw new Error(p + ': invalid port');
+    };
     switch (p) {
+        case 'mieru':
+            requireHost();
+            requirePort();
+            if (!bean.mieru?.username || !bean.mieru?.password) throw new Error('mieru: missing username/password');
+            break;
         case 'vless':
+            requireHost();
+            requirePort();
+            if (!bean.auth?.uuid) throw new Error('vless missing UUID');
+            break;
         case 'vmess':
-            requireHost(); requirePort();
-            if (!bean.auth?.uuid) throw new Error(p + ': отсутствует UUID');
-            if (!isValidUuid(bean.auth.uuid)) throw new Error(p + ': некорректный UUID');
+            requireHost();
+            requirePort();
+            if (!bean.auth?.uuid) throw new Error('vmess missing UUID');
+            if (!isValidUuid(bean.auth.uuid)) throw new Error('vmess invalid UUID');
             break;
         case 'trojan':
-            requireHost(); requirePort();
-            if (!bean.auth?.password) throw new Error('trojan: отсутствует пароль');
+            requireHost();
+            requirePort();
+            if (!bean.auth?.password) throw new Error('trojan: missing password');
             break;
         case 'ss':
-            requireHost(); requirePort();
-            if (!bean.ss?.method || !bean.ss?.password) throw new Error('shadowsocks: отсутствует method/password');
+            requireHost();
+            requirePort();
+            if (!bean.ss?.method || !bean.ss?.password) throw new Error('shadowsocks: missing method/password');
             break;
         case 'socks':
         case 'http':
-            requireHost(); requirePort();
+            requireHost();
+            requirePort();
             break;
         case 'hy2':
-            requireHost(); requirePort();
-            if (!bean.auth?.password) throw new Error('hysteria2: отсутствует пароль');
+            requireHost();
+            requirePort();
+            if (!bean.auth?.password) throw new Error('hysteria2: missing password');
             break;
         case 'tuic':
-            requireHost(); requirePort();
-            if (!bean.auth?.uuid || !isValidUuid(bean.auth.uuid)) throw new Error('tuic: некорректный UUID');
-            if (!bean.auth?.password) throw new Error('tuic: отсутствует пароль');
+            requireHost();
+            requirePort();
+            if (!bean.auth?.uuid || !isValidUuid(bean.auth.uuid)) throw new Error('tuic: invalid UUID');
+            if (!bean.auth?.password) throw new Error('tuic: missing password');
+            break;
+        case 'sdns':
+            if (!bean.sdns?.stamp) throw new Error('sdns: missing stamp');
             break;
         default:
-            throw new Error('Неизвестный протокол: ' + p);
+            throw new Error('Unknown protocol: ' + p);
     }
 }
 
@@ -122,7 +185,7 @@ function parseTunSpec(tunSpec) {
             const name = (namePart || '').trim();
             const m = (modePart || '').trim().toLowerCase();
             const mode = (m === 'auto' || m === 'select') ? m : 'select';
-            return { name, mode };
+            return {name, mode};
         })
         .filter(x => x.name);
     return items;
@@ -131,6 +194,7 @@ function parseTunSpec(tunSpec) {
 function parseLink(input) {
     const trimmed = input.trim();
     const scheme = trimmed.split(':', 1)[0].toLowerCase();
+    if (scheme === 'mieru') return parseMieru(trimmed);
     if (scheme === 'vmess') return parseVMess(trimmed);
     if (scheme === 'vless') return parseVLESS(trimmed);
     if (scheme === 'trojan') return parseTrojan(trimmed);
@@ -139,7 +203,8 @@ function parseLink(input) {
     if (scheme === 'http' || scheme === 'https') return parseSocksHttp(trimmed);
     if (scheme === 'hy2' || scheme === 'hysteria2') return parseHysteria2(trimmed);
     if (scheme === 'tuic') return parseTUIC(trimmed);
-    throw new Error('Неизвестная ссылка: ' + scheme);
+    if (scheme === 'sdns') return parseSDNS(trimmed);
+    throw new Error('Unknown link: ' + scheme);
 }
 
 function parseSocksHttp(urlStr) {
@@ -196,15 +261,64 @@ function parseTrojan(urlStr) {
 
 function parseVLESS(urlStr) {
     const u = new URL(urlStr);
-    if (u.protocol !== 'vless:') throw new Error('Требуется ссылка вида vless://');
+    if (u.protocol !== 'vless:') throw new Error('A vless:// link is required');
     const q = getQuery(u);
+    const rawAfterScheme = urlStr.slice('vless://'.length);
+    const rawAuthority = rawAfterScheme.split(/[?#]/)[0];
+    let host = u.hostname;
+    let port = asInt(u.port, 443);
+    const rawUser = decodeURIComponent(u.username || '').trim();
+    let uuid = rawUser;
+    if (!isValidUuid(uuid) && rawUser) {
+        const dec = decodeBase64Url(rawUser);
+        if (dec) {
+            const at = dec.lastIndexOf('@');
+            if (at !== -1) {
+                const cred = dec.slice(0, at);
+                const addr = dec.slice(at + 1);
+                const token = findUuidToken(cred);
+                if (token) uuid = token;
+                const ap = parseAddrHostPort(addr, port);
+                if (ap.host) host = ap.host;
+                if (ap.port) port = ap.port;
+            } else {
+                const token2 = findUuidToken(dec);
+                if (token2) uuid = token2;
+            }
+        }
+    }
+    if (!uuid) {
+        const pwd = decodeURIComponent(u.password || '').trim();
+        if (isValidUuid(pwd)) uuid = pwd;
+    }
+    if (!uuid) {
+        const qp = (q.get('id') || q.get('uuid') || q.get('u') || '').trim();
+        if (isValidUuid(qp)) uuid = qp;
+    }
+    if (!uuid && rawAuthority && !rawAuthority.includes('@')) {
+        const r = decodeAuthorityAndExtract(rawAuthority, port);
+        if (r) {
+            if (r.uuid) uuid = r.uuid;
+            if (r.host) host = r.host;
+            if (r.port) port = r.port;
+        }
+    }
+    if (!uuid) {
+        const r2 = decodeAuthorityAndExtract(host, port);
+        if (r2) {
+            if (r2.uuid) uuid = r2.uuid;
+            if (r2.host) host = r2.host;
+            if (r2.port) port = r2.port;
+        }
+    }
+
     return {
         proto: 'vless',
-        host: u.hostname,
-        port: asInt(u.port, 443),
+        host,
+        port,
         name: decodeURIComponent(u.hash.replace('#', '')),
         auth: {
-            uuid: decodeURIComponent(u.username || '').trim(),
+            uuid,
             flow: (q.get('flow') || '').replace(/-udp443$/, '').replace(/^none$/, '')
         },
         stream: buildStreamFromQuery(q, false)
@@ -322,9 +436,111 @@ function parseTUIC(urlStr) {
     };
 }
 
+function parseMieru(urlStr) {
+    const u = new URL(urlStr);
+    if (u.protocol !== 'mieru:') throw new Error('A mieru:// link is required');
+    const q = getQuery(u);
+    const username = decodeURIComponent(u.username || '');
+    const password = decodeURIComponent(u.password || '');
+    const name = decodeURIComponent(u.hash.replace('#', ''));
+    const serverPorts = q.get('server_ports') || q.get('ports') || '';
+    const transport = (q.get('transport') || 'TCP').toUpperCase();
+    const multiplexing = (q.get('multiplexing') || '').toUpperCase();
+    return {
+        proto: 'mieru',
+        host: u.hostname,
+        port: asInt(u.port, 27017),
+        name,
+        mieru: {
+            username,
+            password,
+            server_ports: serverPorts,
+            transport,
+            multiplexing
+        }
+    };
+}
+
+function parseMieruProfilesJson(jsonObj) {
+    if (!jsonObj || typeof jsonObj !== 'object') return [];
+    const profiles = Array.isArray(jsonObj.profiles) ? jsonObj.profiles : [];
+    if (!profiles.length) return [];
+    const beans = [];
+    for (const p of profiles) {
+        const username = p?.user?.name || '';
+        const password = p?.user?.password || '';
+        const profileName = (p?.profileName || '').trim();
+        const servers = Array.isArray(p?.servers) ? p.servers : [];
+        const multiplexing = (p?.multiplexing || '').toString().toUpperCase();
+        for (const s of servers) {
+            const host = s?.ipAddress || s?.host || s?.hostname || '';
+            const bindings = Array.isArray(s?.portBindings) ? s.portBindings : [];
+            if (!host || !bindings.length) continue;
+            for (const b of bindings) {
+                const protocol = (b?.protocol || 'TCP').toString().toUpperCase();
+                const portRange = (b?.portRange || '').toString();
+                let serverPort = 27017;
+                if (portRange) {
+                    const m = portRange.match(/^(\d+)(?:-(\d+))?$/);
+                    if (m) {
+                        serverPort = asInt(m[1], serverPort);
+                    }
+                }
+                const bean = {
+                    proto: 'mieru',
+                    host,
+                    port: serverPort,
+                    name: profileName || `mieru-${host}:${serverPort}`,
+                    mieru: {
+                        username,
+                        password,
+                        server_ports: portRange,
+                        transport: protocol,
+                        multiplexing
+                    }
+                };
+                beans.push(bean);
+            }
+        }
+    }
+    return beans;
+}
+
+function parseSDNS(urlStr) {
+    const u = new URL(urlStr);
+    if (u.protocol !== 'sdns:') throw new Error('A sdns:// link is required');
+    const stamp = urlStr;
+    const name = decodeURIComponent(u.hash.replace('#', ''));
+    return {
+        proto: 'sdns',
+        host: u.hostname,
+        port: asInt(u.port, 443),
+        name: name || 'sdns-server',
+        sdns: {
+            stamp: stamp
+        }
+    };
+}
+
+function buildBeansFromInput(raw) {
+    const text = (raw || '').trim();
+    if (!text) return [];
+
+    if ((text.startsWith('{') || text.startsWith('['))) {
+        const obj = tryJSON(text);
+        if (obj && obj.profiles) {
+            const fromProfiles = parseMieruProfilesJson(obj);
+            if (fromProfiles.length) return fromProfiles;
+        }
+    }
+    const lines = text.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+    return lines.map(parseLink);
+}
+
 function buildStreamFromQuery(q, isTrojan) {
     let type = (q.get('type') || 'tcp').toLowerCase();
     if (type === 'h2') type = 'http';
+    if (type !== 'xhttp' && (q.get('xhttp') === '1' || q.get('xhttp') === 'true')) type = 'xhttp';
     const security = (q.get('security') || (isTrojan ? 'tls' : '')).toLowerCase().replace('reality', 'tls').replace('none', '');
     const sni = q.get('sni') || q.get('peer') || '';
     const alpn = splitCSV(q.get('alpn') || '');
@@ -342,7 +558,10 @@ function buildStreamFromQuery(q, isTrojan) {
         headerType: '',
         host: '',
         path: '',
-        packet_encoding: ''
+        packet_encoding: '',
+        xhttpMode: '',
+        xhttpXmux: {},
+        xhttpDownload: {}
     };
     if (type === 'ws') {
         stream.path = q.get('path') || '';
@@ -350,6 +569,30 @@ function buildStreamFromQuery(q, isTrojan) {
     } else if (type === 'http') {
         stream.path = q.get('path') || '';
         stream.host = (q.get('host') || '').replace(/\|/g, ',');
+    } else if (type === 'xhttp') {
+        stream.path = q.get('path') || '';
+        stream.host = q.get('host') || '';
+        stream.xhttpMode = q.get('xmode') || q.get('mode') || '';
+        stream.xhttpXmux = {
+            max_concurrency: q.get('xmux_max_concurrency') || '',
+            max_connections: q.get('xmux_max_connections') || '',
+            c_max_reuse_times: q.get('xmux_c_max_reuse_times') || '',
+            h_max_request_times: q.get('xmux_h_max_request_times') || '',
+            h_max_reusable_secs: q.get('xmux_h_max_reusable_secs') || '',
+            h_keep_alive_period: asInt(q.get('xmux_h_keep_alive_period'), 0)
+        };
+        stream.xhttpDownload = {
+            mode: q.get('download_mode') || '',
+            host: q.get('download_host') || '',
+            path: q.get('download_path') || '',
+            x_padding_bytes: q.get('download_x_padding_bytes') || '',
+            sc_max_each_post_bytes: q.get('download_sc_max_each_post_bytes') || '',
+            sc_min_posts_interval_ms: q.get('download_sc_min_posts_interval_ms') || '',
+            sc_stream_up_server_secs: q.get('download_sc_stream_up_server_secs') || '',
+            server: q.get('download_server') || '',
+            server_port: asInt(q.get('download_server_port'), 0),
+            detour: q.get('download_detour') || ''
+        };
     } else if (type === 'httpupgrade') {
         stream.path = q.get('path') || '';
         stream.host = q.get('host') || '';
@@ -387,7 +630,7 @@ function buildSingBoxOutbound(bean) {
     function applyTransport(outbound, stream) {
         if (stream.network !== 'tcp') {
             const t = {type: stream.network};
-        if (stream.network === 'ws') {
+            if (stream.network === 'ws') {
                 const hostHeader = stream.host || stream.sni || '';
                 if (hostHeader) t.headers = {Host: hostHeader};
                 const pathWithoutEd = (stream.path || '').split('?ed=')[0];
@@ -395,6 +638,43 @@ function buildSingBoxOutbound(bean) {
             } else if (stream.network === 'http') {
                 if (stream.path) t.path = stream.path;
                 if (stream.host) t.host = splitCSV(stream.host).map(s => s);
+            } else if (stream.network === 'xhttp') {
+                if (!bean._useExtended) return;
+                if (stream.path) t.path = stream.path;
+                if (stream.host) t.host = stream.host;
+                if (stream.xhttpMode) t.mode = stream.xhttpMode;
+
+                const xmux = stream.xhttpXmux || {};
+                const hasXmux = Object.values(xmux).some(v => v !== '' && v !== 0);
+                if (hasXmux) {
+                    t.xmux = {};
+                    if (xmux.max_concurrency) t.xmux.max_concurrency = xmux.max_concurrency;
+                    if (xmux.max_connections) t.xmux.max_connections = xmux.max_connections;
+                    if (xmux.c_max_reuse_times) t.xmux.c_max_reuse_times = xmux.c_max_reuse_times;
+                    if (xmux.h_max_request_times) t.xmux.h_max_request_times = xmux.h_max_request_times;
+                    if (xmux.h_max_reusable_secs) t.xmux.h_max_reusable_secs = xmux.h_max_reusable_secs;
+                    if (xmux.h_keep_alive_period) t.xmux.h_keep_alive_period = xmux.h_keep_alive_period;
+                }
+
+                const download = stream.xhttpDownload || {};
+                const hasDownload = Object.values(download).some(v => v !== '' && v !== 0);
+                if (hasDownload) {
+                    t.download = {};
+                    if (download.mode) t.download.mode = download.mode;
+                    if (download.host) t.download.host = download.host;
+                    if (download.path) t.download.path = download.path;
+                    if (download.x_padding_bytes) t.download.x_padding_bytes = download.x_padding_bytes;
+                    if (download.sc_max_each_post_bytes) t.download.sc_max_each_post_bytes = download.sc_max_each_post_bytes;
+                    if (download.sc_min_posts_interval_ms) t.download.sc_min_posts_interval_ms = download.sc_min_posts_interval_ms;
+                    if (download.sc_stream_up_server_secs) t.download.sc_stream_up_server_secs = download.sc_stream_up_server_secs;
+                    if (download.server) t.download.server = download.server;
+                    if (download.server_port) t.download.server_port = download.server_port;
+                    if (download.detour) t.download.detour = download.detour;
+
+                    if (hasXmux) {
+                        t.download.xmux = t.xmux;
+                    }
+                }
             } else if (stream.network === 'grpc') {
                 if (stream.path) t.service_name = stream.path;
             } else if (stream.network === 'httpupgrade') {
@@ -462,10 +742,28 @@ function buildSingBoxOutbound(bean) {
         else if (bean.tuic.udp_relay_mode) outbound.udp_relay_mode = bean.tuic.udp_relay_mode;
         if (bean.tuic.zero_rtt_handshake) outbound.zero_rtt_handshake = true;
         if (bean.tuic.heartbeat) outbound.heartbeat = bean.tuic.heartbeat;
-    } else throw new Error('Не поддерживается sing-box: ' + bean.proto);
+    } else if (bean.proto === 'mieru') {
+        outbound = {
+            type: 'mieru',
+            server: bean.host,
+            server_port: bean.port
+        };
+        if (bean.mieru?.server_ports) outbound.server_ports = bean.mieru.server_ports;
+        if (bean.mieru?.transport) outbound.transport = bean.mieru.transport;
+        if (bean.mieru?.username) outbound.username = bean.mieru.username;
+        if (bean.mieru?.password) outbound.password = bean.mieru.password;
+        if (bean.mieru?.multiplexing) outbound.multiplexing = bean.mieru.multiplexing;
+    } else throw new Error('Not supported by sing-box: ' + bean.proto);
     const tls = commonTLS();
     if (tls) outbound.tls = tls;
-    if (bean.stream) applyTransport(outbound, bean.stream);
+    if (bean.stream) {
+        if ((outbound.type === 'vless' || outbound.type === 'vmess') && !bean.stream.packet_encoding) {
+            if (outbound.type === 'vless') {
+                if (bean._useExtended) bean.stream.packet_encoding = 'xudp';
+            }
+        }
+        applyTransport(outbound, bean.stream);
+    }
     return outbound;
 }
 
@@ -473,13 +771,29 @@ function buildSingBoxInbounds(opts) {
     const inbounds = [];
     if (opts.addTun) {
         const specs = parseTunSpec(opts.tunName || '');
-        const ifaces = specs.length ? specs.map(x => x.name) : [generateIfaceName()];
+        const ifaces = specs.length ? specs.map(x => x.name) : ['tun0'];
         for (let i = 0; i < ifaces.length; i++) {
             const name = ifaces[i];
             const tag = ifaces.length > 1 ? `tun-in-${name}` : 'tun-in';
             const octet = ifaces.length > 1 ? (i === 0 ? 1 : i * 10) : 1;
             const cidr = ifaces.length > 1 ? `${`172.19.0.${octet}`}/30` : '172.19.0.1/32';
-            inbounds.push({type: 'tun', tag, interface_name: name, address: [cidr], stack: 'gvisor'});
+            const tun = {
+                type: 'tun',
+                tag,
+                interface_name: name,
+                address: [cidr],
+                stack: 'gvisor',
+                sniff: false,
+                sniff_override_destination: false,
+                auto_route: false
+            };
+            if (opts && opts.tunSniff) {
+                tun.sniff = true;
+            }
+            if (opts.useExtended) {
+                tun.strict_route = false;
+            }
+            inbounds.push(tun);
         }
     }
     if (opts.addSocks) {
@@ -488,21 +802,33 @@ function buildSingBoxInbounds(opts) {
             type: 'mixed',
             listen: '127.0.0.1',
             listen_port: 2080,
-            sniff: true,
+            sniff: false,
             sniff_override_destination: false
         });
     }
     return inbounds;
 }
 
+function buildDNSServers(dnsBeans) {
+    const servers = [];
+    for (const bean of dnsBeans) {
+        if (bean.proto === 'sdns') {
+            servers.push({
+                type: 'sdns',
+                stamp: bean.sdns.stamp,
+                tag: bean.name || 'sdns-server'
+            });
+        }
+    }
+    return servers;
+}
+
 function buildSingBoxFullConfig(outbound, opts) {
-    return {
+    const config = {
         log: {level: 'info'},
         inbounds: buildSingBoxInbounds(opts),
         outbounds: [
             Object.assign({tag: 'proxy'}, outbound),
-            {tag: 'direct', type: 'direct'},
-            {tag: 'bypass', type: 'direct'},
             {tag: 'block', type: 'block'}
         ],
         route: {
@@ -514,12 +840,24 @@ function buildSingBoxFullConfig(outbound, opts) {
             clash_api: {
                 external_controller: '[::]:9090',
                 external_ui: 'ui',
-                external_ui_download_detour: 'direct',
+                external_ui_download_detour: 'proxy',
                 access_control_allow_private_network: true,
                 secret: opts?.genClashSecret ? generateSecretHex32() : ''
             }
         }
     };
+
+    const dnsServers = (opts?.useExtended ? buildDNSServers(opts?.dnsBeans || []) : []);
+    if (dnsServers.length > 0) {
+        config.dns = {servers: dnsServers};
+        config.route.default_domain_resolver = dnsServers[0]?.tag || '';
+    }
+
+    if (opts?.useExtended) {
+        config.experimental.unified_delay = {enabled: true};
+    }
+
+    return config;
 }
 
 function buildSingBoxFullConfigMulti(outboundsWithTags, opts) {
@@ -554,28 +892,32 @@ function buildSingBoxFullConfigMulti(outboundsWithTags, opts) {
                 idle_timeout: '30m',
                 interrupt_exist_connections: false
             });
-            routeRules.push({ inbound: inbound.tag, outbound: autoTag });
+            routeRules.push({inbound: inbound.tag, action: 'route', outbound: autoTag});
             if (!firstDetourTag) firstDetourTag = autoTag;
         } else {
             const selectorOutbounds = [...tags];
             const defaultTag = selectorOutbounds[0] || 'direct';
-            managementOutbounds.push({type: 'selector', tag: selectTag, outbounds: selectorOutbounds, default: defaultTag, interrupt_exist_connections: false});
-            routeRules.push({ inbound: inbound.tag, outbound: selectTag });
+            managementOutbounds.push({
+                type: 'selector',
+                tag: selectTag,
+                outbounds: selectorOutbounds,
+                default: defaultTag,
+                interrupt_exist_connections: false
+            });
+            routeRules.push({inbound: inbound.tag, action: 'route', outbound: selectTag});
             if (!firstDetourTag) firstDetourTag = selectTag;
         }
     }
     const outbounds = [
         ...managementOutbounds,
         ...outboundsWithTags,
-        {tag: 'direct', type: 'direct'},
-        {tag: 'bypass', type: 'direct'},
         {tag: 'block', type: 'block'}
     ];
-    return {
+    const config = {
         log: {level: 'info'},
         inbounds,
         outbounds,
-        route: {rules: routeRules, final: firstDetourTag || 'direct'},
+        route: {rules: routeRules, final: firstDetourTag || 'block'},
         experimental: {
             cache_file: {enabled: true},
             clash_api: {
@@ -584,9 +926,21 @@ function buildSingBoxFullConfigMulti(outboundsWithTags, opts) {
                 external_ui_download_detour: 'direct',
                 access_control_allow_private_network: true,
                 secret: opts?.genClashSecret ? generateSecretHex32() : ''
-            }
+            },
         }
     };
+
+    const dnsServers = (opts?.useExtended ? buildDNSServers(opts?.dnsBeans || []) : []);
+    if (dnsServers.length > 0) {
+        config.dns = {servers: dnsServers};
+        config.route.default_domain_resolver = dnsServers[0]?.tag || '';
+    }
+
+    if (opts?.useExtended) {
+        config.experimental.unified_delay = {enabled: true};
+    }
+
+    return config;
 }
 
 function buildXrayOutbound(bean) {
@@ -663,9 +1017,9 @@ function buildXrayOutbound(bean) {
         }
         outbound = {protocol: bean.proto, tag: 'proxy', settings: {servers: [s]}};
     } else if (bean.proto === 'hy2' || bean.proto === 'tuic') {
-        throw new Error(bean.proto + ' не поддерживается в Xray. Используйте sing-box.');
+        throw new Error(bean.proto + ' not supported in Xray. Use sing-box.');
     } else {
-        throw new Error('Xray: Неизвестный протокол ' + bean.proto);
+        throw new Error('Xray: Unknown protocol ' + bean.proto);
     }
     outbound.streamSettings = streamSettings;
     return outbound;
@@ -680,9 +1034,22 @@ function buildXrayFullConfig(outbound) {
 }
 
 function buildXrayFullConfigMulti(outbounds) {
+    const basePort = 1080;
+    const inbounds = outbounds.map((ob, idx) => ({
+        tag: `socks-in-${idx + 1}`,
+        port: basePort + idx,
+        listen: '127.0.0.1',
+        protocol: 'socks',
+        settings: {udp: true}
+    }));
+    const rules = outbounds.map((ob, idx) => ({
+        inboundTag: [`socks-in-${idx + 1}`],
+        outboundTag: ob.tag || 'proxy'
+    }));
     return {
         log: {loglevel: 'warning'},
-        inbounds: [{tag: 'socks-in', port: 1080, listen: '127.0.0.1', protocol: 'socks', settings: {udp: true}}],
-        outbounds: [...outbounds, {tag: 'direct', protocol: 'freedom'}, {tag: 'block', protocol: 'blackhole'}]
+        inbounds,
+        outbounds: [...outbounds, {tag: 'direct', protocol: 'freedom'}, {tag: 'block', protocol: 'blackhole'}],
+        routing: {rules}
     };
 }

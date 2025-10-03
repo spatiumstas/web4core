@@ -36,7 +36,21 @@ jobs:
           sudo mv sing-box-*/sing-box /usr/local/bin/
           chmod +x /usr/local/bin/sing-box
 
+      - name: Download sing-box extended
+        run: |
+          mkdir -p bin
+          # Get latest release info for extended
+          EXTENDED_RELEASE=$(curl -s https://api.github.com/repos/shtorm-7/sing-box-extended/releases/latest)
+          EXTENDED_DOWNLOAD_URL=$(echo $EXTENDED_RELEASE | jq -r '.assets[] | select(.name | contains("linux-amd64") and (contains("extended"))) | .browser_download_url')
+          EXTENDED_VERSION=$(echo $EXTENDED_RELEASE | jq -r '.tag_name')
+          
+          echo "Downloading sing-box extended $EXTENDED_VERSION from $EXTENDED_DOWNLOAD_URL"
+          wget -O bin/sing-box-extended "$EXTENDED_DOWNLOAD_URL"
+          chmod +x bin/sing-box-extended
+
       - name: Generate and validate sing-box configs
+        env:
+          CONFIGS: ${{ secrets.CONFIGS }}
         run: |
           # Create test script
           cat > test_singbox.js << 'EOF'
@@ -70,8 +84,8 @@ jobs:
           vm.createContext(sandbox);
           vm.runInContext(mainJs, sandbox);
           
-          // Read test config from file
-          const testLinksContent = fs.readFileSync('src/configs.txt', 'utf8');
+          // Read test configs
+          const testLinksContent = process.env.CONFIGS;
           const testLinks = testLinksContent
             .split('\n')
             .map(line => line.trim())
@@ -85,9 +99,11 @@ jobs:
           
           for (let i = 0; i < testLinks.length; i++) {
             const link = testLinks[i];
-            const rawName = link.split('#')[1] || `Link-${i + 1}`;
-            let linkName = rawName;
-            try { linkName = decodeURIComponent(rawName); } catch {}
+            // Derive a safe display name from hash-part; avoid leaking full link
+            const rawHash = link.includes('#') ? link.substring(link.lastIndexOf('#') + 1) : '';
+            let linkName = '';
+            try { linkName = decodeURIComponent(rawHash || ''); } catch {}
+            if (!linkName || /:\/\//.test(linkName)) linkName = `Link-${i + 1}`;
             console.log(`Testing sing-box config ${i + 1}/${testLinks.length}: ${linkName}`);
           
             try {
@@ -100,14 +116,20 @@ jobs:
               let config;
               if (i === 0) {
                 // Single-link config (kept for coverage), also exercise named TUN
-                config = sandbox.buildSingBoxFullConfig(outbound, {addTun: true, addSocks: true, tunName: 'tun0'});
+                config = sandbox.buildSingBoxFullConfig(outbound, {addTun: true, addSocks: true, tunName: 'tun0', tunSniff: true});
               } else {
                 // Multi-config: use the same outbound twice to simulate multiple choices and multiple TUNs
                 const ob1 = Object.assign({tag: 'p1'}, outbound);
                 const ob2 = Object.assign({tag: 'p2'}, outbound);
-                config = sandbox.buildSingBoxFullConfigMulti([ob1, ob2], {addTun: true, addSocks: true, tunName: 'tun0,tun_ru,tun_auto'});
+                config = sandbox.buildSingBoxFullConfigMulti([ob1, ob2], {addTun: true, addSocks: true, tunName: 'tun0,tun_ru,tun_auto', tunSniff: true});
               }
           
+              // Assert: TUN sniff enabled when tunSniff flag is true
+              const tunInbound = (config.inbounds || []).find(i => i.type === 'tun');
+              if (!tunInbound || tunInbound.sniff !== true) {
+                throw new Error('tun sniff must be true when tunSniff is enabled');
+              }
+
               // Write config to file
               const configFile = `test_singbox_${i}.json`;
               fs.writeFileSync(configFile, JSON.stringify(config, null, 2));
@@ -133,9 +155,9 @@ jobs:
               try {
                 const cfgObj = JSON.parse(fs.readFileSync(configFile, 'utf8'));
                 cfgObj.inbounds = [{ tag: 'mixed-in', type: 'mixed', listen: '127.0.0.1', listen_port: 2080 }];
-                // route final to the first selector if exists
+                // route final to the first selector if exists, otherwise proxy
                 if (cfgObj.outbounds && cfgObj.outbounds.length) {
-                  const firstSelector = cfgObj.outbounds.find(o => o.type === 'selector')?.tag || 'direct';
+                  const firstSelector = cfgObj.outbounds.find(o => o.type === 'selector')?.tag || 'proxy';
                   cfgObj.route = cfgObj.route || {}; cfgObj.route.final = firstSelector;
                 }
                 const runFile = `run_singbox_${i}.json`;
@@ -182,7 +204,7 @@ jobs:
             const cfgObj = JSON.parse(fs.readFileSync(multiFile, 'utf8'));
             cfgObj.inbounds = [{ tag: 'mixed-in', type: 'mixed', listen: '127.0.0.1', listen_port: 2080 }];
             if (cfgObj.outbounds && cfgObj.outbounds.length) {
-              const firstSelector = cfgObj.outbounds.find(o => o.type === 'selector')?.tag || 'direct';
+              const firstSelector = cfgObj.outbounds.find(o => o.type === 'selector')?.tag || 'proxy';
               cfgObj.route = cfgObj.route || {}; cfgObj.route.final = firstSelector;
             }
             const runFile = `run_singbox_multi_all.json`;
@@ -211,6 +233,253 @@ jobs:
           # Run the test
           node test_singbox.js
 
+  validate-singbox-extended:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v4
+        with:
+          cache: false
+          go-version: '1.21'
+
+      - name: Download sing-box extended
+        run: |
+          # Get latest release info
+          LATEST_RELEASE=$(curl -s https://api.github.com/repos/shtorm-7/sing-box-extended/releases/latest)
+          DOWNLOAD_URL=$(echo $LATEST_RELEASE | jq -r '.assets[] | select(.name | contains("linux-amd64.tar.gz")) | .browser_download_url')
+          VERSION=$(echo $LATEST_RELEASE | jq -r '.tag_name')
+          
+          echo "Downloading sing-box extended $VERSION from $DOWNLOAD_URL"
+          wget -O sing-box-extended.tar.gz "$DOWNLOAD_URL"
+          tar -xzf sing-box-extended.tar.gz
+          sudo mv sing-box-*/sing-box /usr/local/bin/sing-box-extended
+          chmod +x /usr/local/bin/sing-box-extended
+
+
+      - name: Run Extended Configs with sing-box extended
+        env:
+          CONFIGS: ${{ secrets.CONFIGS }}
+          MIERU_JSON: ${{ secrets.MIERU_JSON }}
+          SDNS_LINK: ${{ secrets.SDNS_LINK }}
+          XHTTP_LINK: ${{ secrets.XHTTP_LINK }}
+        run: |
+          echo "Running extended configs with sing-box extended..."
+          
+          # Test all existing configs with extended features
+          echo "Testing existing configs with extended features..."
+          node -e "
+          const fs = require('fs');
+          const vm = require('vm');
+          const { execSync } = require('child_process');
+          
+          const mainJs = fs.readFileSync('src/main.js', 'utf8');
+          const sandbox = {
+            console: console,
+            require: require,
+            module: { exports: {} },
+            exports: {},
+            global: global,
+            process: process,
+            Buffer: Buffer,
+            setTimeout: setTimeout,
+            setInterval: setInterval,
+            clearTimeout: clearTimeout,
+            clearInterval: clearInterval,
+            URL: require('url').URL,
+            atob: (str) => Buffer.from(str, 'base64').toString('binary'),
+            btoa: (str) => Buffer.from(str, 'binary').toString('base64')
+          };
+          
+          vm.createContext(sandbox);
+          vm.runInContext(mainJs, sandbox);
+          
+          const testLinksContent = process.env.CONFIGS;
+          const testLinks = testLinksContent
+            .split('\n')
+            .map(line => line.trim())
+            .filter(line => line && !line.startsWith('//') && !line.startsWith('#'))
+            .filter(line => line.includes('://'));
+          
+          console.log('Testing', testLinks.length, 'existing links with extended features...');
+          
+          let failedTests = 0;
+          let validTests = 0;
+          
+          for (let i = 0; i < testLinks.length; i++) {
+            const link = testLinks[i];
+            const rawHash = link.includes('#') ? link.substring(link.lastIndexOf('#') + 1) : '';
+            let linkName = '';
+            try { linkName = decodeURIComponent(rawHash || ''); } catch {}
+            if (!linkName || /:\/\//.test(linkName)) linkName = \`Link-\${i + 1}\`;
+            console.log(\`Testing extended config \${i + 1}/\${testLinks.length}: \${linkName}\`);
+          
+            try {
+              const bean = sandbox.parseLink(link);
+              const outbound = sandbox.buildSingBoxOutbound(bean);
+              const config = sandbox.buildSingBoxFullConfigMulti([{tag: 'test', ...outbound}], {useExtended: true});
+          
+              const configFile = \`test_extended_\${i}.json\`;
+              fs.writeFileSync(configFile, JSON.stringify(config, null, 2));
+          
+              const cmd = \`bash -lc 'tmp=\$(mktemp); /usr/local/bin/sing-box-extended run -c \${configFile} >\$tmp 2>&1 & pid=\$!; sleep 2; kill \$pid || true; cat \$tmp; rm -f \$tmp'\`;
+              const out = execSync(cmd, { stdio: 'pipe', encoding: 'utf8' });
+              if (!/sing-box started/.test(out)) {
+                throw new Error('sing-box-extended did not report start');
+              }
+              console.log(\`✅ Extended config \${i + 1} is valid\`);
+              validTests++;
+              fs.unlinkSync(configFile);
+            } catch (error) {
+              console.log(\`❌ Extended config \${i + 1} failed: \${error.message}\`);
+              failedTests++;
+            }
+          }
+          
+          console.log(\`\n📊 Extended Results: \${validTests} valid, \${failedTests} failed\`);
+          
+          if (failedTests > 0) {
+            console.log(\`\n❌ \${failedTests} extended configs failed validation\`);
+            process.exit(1);
+          } else {
+            console.log(\`\n✅ All \${testLinks.length} extended configs are valid\`);
+          }
+          "
+          
+          # Test Mieru config
+          echo "Testing Mieru config..."
+          node -e "
+          const fs = require('fs');
+          const vm = require('vm');
+          
+          const mainJs = fs.readFileSync('src/main.js', 'utf8');
+          const sandbox = {
+            console: console,
+            require: require,
+            module: { exports: {} },
+            exports: {},
+            global: global,
+            process: process,
+            Buffer: Buffer,
+            setTimeout: setTimeout,
+            setInterval: setInterval,
+            clearTimeout: clearTimeout,
+            clearInterval: clearInterval,
+            URL: require('url').URL,
+            atob: (str) => Buffer.from(str, 'base64').toString('binary'),
+            btoa: (str) => Buffer.from(str, 'binary').toString('base64')
+          };
+          
+          vm.createContext(sandbox);
+          vm.runInContext(mainJs, sandbox);
+          
+          const beans = sandbox.buildBeansFromInput(process.env.MIERU_JSON);
+          const outbounds = beans.map(b => {
+            const outbound = sandbox.buildSingBoxOutbound(b);
+            return {tag: 'test', ...outbound};
+          });
+          const config = sandbox.buildSingBoxFullConfigMulti(outbounds, {useExtended: true});
+          fs.writeFileSync('/tmp/mieru-config.json', JSON.stringify(config, null, 2));
+          "
+          
+          cmd="bash -lc 'tmp=\$(mktemp); /usr/local/bin/sing-box-extended run -c /tmp/mieru-config.json >\$tmp 2>&1 & pid=\$!; sleep 2; kill \$pid || true; cat \$tmp; rm -f \$tmp'"
+          out=$(eval $cmd)
+          if ! echo "$out" | grep -q "sing-box started"; then
+            echo "❌ Mieru config failed to start"
+            echo "$out"
+            exit 1
+          fi
+          echo "✅ Mieru config ran successfully"
+          
+          # Test SDNS config
+          echo "Testing SDNS config..."
+          node -e "
+          const fs = require('fs');
+          const vm = require('vm');
+          
+          const mainJs = fs.readFileSync('src/main.js', 'utf8');
+          const sandbox = {
+            console: console,
+            require: require,
+            module: { exports: {} },
+            exports: {},
+            global: global,
+            process: process,
+            Buffer: Buffer,
+            setTimeout: setTimeout,
+            setInterval: setInterval,
+            clearTimeout: clearTimeout,
+            clearInterval: clearInterval,
+            URL: require('url').URL,
+            atob: (str) => Buffer.from(str, 'base64').toString('binary'),
+            btoa: (str) => Buffer.from(str, 'binary').toString('base64')
+          };
+          
+          vm.createContext(sandbox);
+          vm.runInContext(mainJs, sandbox);
+          
+          const beans = sandbox.buildBeansFromInput(process.env.SDNS_LINK);
+          const config = sandbox.buildSingBoxFullConfigMulti([], {useExtended: true, dnsBeans: beans});
+          fs.writeFileSync('/tmp/sdns-config.json', JSON.stringify(config, null, 2));
+          "
+          
+          cmd="bash -lc 'tmp=\$(mktemp); /usr/local/bin/sing-box-extended run -c /tmp/sdns-config.json >\$tmp 2>&1 & pid=\$!; sleep 2; kill \$pid || true; cat \$tmp; rm -f \$tmp'"
+          out=$(eval $cmd)
+          if ! echo "$out" | grep -q "sing-box started"; then
+            echo "❌ SDNS config failed to start"
+            echo "$out"
+            exit 1
+          fi
+          echo "✅ SDNS config ran successfully"
+          
+          # Test XHTTP config
+          echo "Testing XHTTP config..."
+          node -e "
+          const fs = require('fs');
+          const vm = require('vm');
+          
+          const mainJs = fs.readFileSync('src/main.js', 'utf8');
+          const sandbox = {
+            console: console,
+            require: require,
+            module: { exports: {} },
+            exports: {},
+            global: global,
+            process: process,
+            Buffer: Buffer,
+            setTimeout: setTimeout,
+            setInterval: setInterval,
+            clearTimeout: clearTimeout,
+            clearInterval: clearInterval,
+            URL: require('url').URL,
+            atob: (str) => Buffer.from(str, 'base64').toString('binary'),
+            btoa: (str) => Buffer.from(str, 'binary').toString('base64')
+          };
+          
+          vm.createContext(sandbox);
+          vm.runInContext(mainJs, sandbox);
+          
+          const beans = sandbox.buildBeansFromInput(process.env.XHTTP_LINK);
+          const outbounds = beans.map(b => {
+            const outbound = sandbox.buildSingBoxOutbound(b);
+            return {tag: 'test', ...outbound};
+          });
+          const config = sandbox.buildSingBoxFullConfigMulti(outbounds, {useExtended: true});
+          fs.writeFileSync('/tmp/xhttp-config.json', JSON.stringify(config, null, 2));
+          "
+          
+          cmd="bash -lc 'tmp=\$(mktemp); /usr/local/bin/sing-box-extended run -c /tmp/xhttp-config.json >\$tmp 2>&1 & pid=\$!; sleep 2; kill \$pid || true; cat \$tmp; rm -f \$tmp'"
+          out=$(eval $cmd)
+          if ! echo "$out" | grep -q "sing-box started"; then
+            echo "❌ XHTTP config failed to start"
+            echo "$out"
+            exit 1
+          fi
+          echo "✅ XHTTP config ran successfully"
+          
+          echo "🎉 All extended configs ran successfully!"
+
   validate-xray:
     runs-on: ubuntu-latest
     steps:
@@ -236,6 +505,8 @@ jobs:
           chmod +x /usr/local/bin/xray
 
       - name: Generate and validate Xray configs
+        env:
+          CONFIGS: ${{ secrets.CONFIGS }}
         run: |
           # Create test script
           cat > test_xray.js << 'EOF'
@@ -269,8 +540,8 @@ jobs:
           vm.createContext(sandbox);
           vm.runInContext(mainJs, sandbox);
           
-          // Read test links from file
-          const testLinksContent = fs.readFileSync('src/configs.txt', 'utf8');
+          // Read test links
+          const testLinksContent = process.env.CONFIGS;
           const allTestLinks = testLinksContent
             .split('\n')
             .map(line => line.trim())
@@ -289,7 +560,10 @@ jobs:
           
           for (let i = 0; i < testLinks.length; i++) {
             const link = testLinks[i];
-            const linkName = link.split('#')[1] || `Link-${i + 1}`;
+            const rawHash2 = link.includes('#') ? link.substring(link.lastIndexOf('#') + 1) : '';
+            let linkName = '';
+            try { linkName = decodeURIComponent(rawHash2 || ''); } catch {}
+            if (!linkName || /:\/\//.test(linkName)) linkName = `Link-${i + 1}`;
             console.log(`Testing Xray config ${i + 1}/${testLinks.length}: ${linkName}`);
           
             try {
@@ -321,6 +595,31 @@ jobs:
                 failedTests++;
               }
           
+              // Multi-config test: combine ALL supported links into one Xray config and validate
+              try {
+              const selected = testLinks
+                .filter(l => !l.startsWith('hy2://') && !l.startsWith('tuic://'))
+                .map(l => sandbox.parseLink(l));
+                const used = new Set();
+                const multiOutbounds = selected.map((b, idx) => {
+                  const ob = sandbox.buildXrayOutbound(b);
+                  // ensure unique tags for multi config
+                  ob.tag = sandbox.computeTag ? sandbox.computeTag(b, used) : `p${idx + 1}`;
+                  return ob;
+                });
+                const multiConfig = sandbox.buildXrayFullConfigMulti(multiOutbounds);
+                const multiFile = `test_xray_multi_all.json`;
+                fs.writeFileSync(multiFile, JSON.stringify(multiConfig, null, 2));
+    
+                const { execSync } = require('child_process');
+                execSync(`xray -test -config ${multiFile}`, { stdio: 'pipe', encoding: 'utf8' });
+                console.log('✅ Xray multi-config (ALL links) valid');
+                fs.unlinkSync(multiFile);
+              } catch (error) {
+                console.log(`❌ Xray multi-config test failed: ${error.message}`);
+                process.exit(1);
+              }
+          
               // Clean up
               fs.unlinkSync(configFile);
           
@@ -345,7 +644,7 @@ jobs:
 
   build:
     runs-on: ubuntu-latest
-    needs: [validate-singbox, validate-xray]
+    needs: [ validate-singbox, validate-singbox-extended, validate-xray ]
     if: github.ref == 'refs/heads/main'
 
     concurrency:

@@ -47,7 +47,7 @@
             <span>TUN</span>
         </label>
         <label class="custom-checkbox">
-            <input type="checkbox" id="cbSocks"/>
+            <input type="checkbox" id="cbSocks" checked/>
             <div class="checkmark"></div>
             <span>SOCKS5</span>
         </label>
@@ -56,17 +56,22 @@
             <div class="checkmark"></div>
             <span title="Clash API Secret">Clash Secret</span>
         </label>
-        <input class="input" type="text" id="tunName" placeholder="Интерфейс(ы): (tun0,tun1 или tun0:select,tun1:auto)" style="min-width:180px;"/>
+        <label class="custom-checkbox">
+            <input type="checkbox" id="cbExtended"/>
+            <div class="checkmark"></div>
+            <span title="Extended features (XHTTP, XUDP, SDNS, Unified delay)">Extended</span>
+        </label>
+        <input class="input" type="text" id="tunName" placeholder="Interface(s): (tun0,tun1 or tun0:select,tun1:auto)" style="min-width:180px;"/>
     </div>
 
     <div>
         <textarea id="links" class="input"
-                  placeholder="vless://...&#10;vmess://...&#10;trojan://...&#10;ss://...&#10;socks://...&#10;http://user:pass@host:port&#10;hy2://...&#10;tuic://..."
+                  placeholder="vless://...&#10;vmess://...&#10;trojan://...&#10;ss://...&#10;socks://...&#10;http://user:pass@host:port&#10;hy2://...&#10;tuic://...&#10;mieru://... (or json)&#10;sdns://...&#10"
                   style="scrollbar-width:none; -ms-overflow-style:none;"></textarea>
     </div>
 
     <div class="button-row">
-        <input type="submit" id="gen" value="Сгенерировать"/>
+        <input type="submit" id="gen" value="Generate"/>
     </div>
 
     <div id="errorBlock" class="hidden" role="alert" aria-live="polite" style="margin-top:8px;">
@@ -77,12 +82,12 @@
         <textarea id="out" class="input" readonly
                   style="scrollbar-width:none; -ms-overflow-style:none;"></textarea>
         <div class="button-row" style="margin-top:8px;">
-            <button id="btnCopy" class="circle-btn" title="Копировать" aria-label="Копировать">
+            <button id="btnCopy" class="circle-btn" title="Copy" aria-label="Copy">
                 <svg width="22" height="22" aria-hidden="true">
                     <use href="#copy"></use>
                 </svg>
             </button>
-            <button id="btnDownload" class="circle-btn" title="Скачать" aria-label="Скачать">
+            <button id="btnDownload" class="circle-btn" title="Download" aria-label="Download">
                 <svg width="22" height="22" aria-hidden="true">
                     <use href="#download-file"></use>
                 </svg>
@@ -104,14 +109,17 @@
         currentCore = core;
         coreToggle.setAttribute('data-core', core);
         coreToggle.setAttribute('aria-checked', core === 'singbox');
-        const cbTunLabel = document.getElementById('cbTun')?.parentElement;
+        const cbTun = document.getElementById('cbTun');
+        const cbTunLabel = cbTun?.parentElement;
         const cbSocksLabel = document.getElementById('cbSocks')?.parentElement;
-            const cbClashSecretLabel = document.getElementById('cbClashSecret')?.parentElement;
+        const cbClashSecretLabel = document.getElementById('cbClashSecret')?.parentElement;
+        const cbExtendedLabel = document.getElementById('cbExtended')?.parentElement;
         const tunNameInput = document.getElementById('tunName');
         const show = core === 'singbox' ? '' : 'none';
         if (cbTunLabel) cbTunLabel.style.display = show;
         if (cbSocksLabel) cbSocksLabel.style.display = show;
-            if (cbClashSecretLabel) cbClashSecretLabel.style.display = show;
+        if (cbClashSecretLabel) cbClashSecretLabel.style.display = show;
+        if (cbExtendedLabel) cbExtendedLabel.style.display = show;
         if (tunNameInput) tunNameInput.style.display = show;
 
     }
@@ -184,24 +192,25 @@
         const addTun = !!document.getElementById('cbTun')?.checked;
         const addSocks = !!document.getElementById('cbSocks')?.checked;
         const genClashSecret = !!document.getElementById('cbClashSecret')?.checked;
+        const useExtended = !!document.getElementById('cbExtended')?.checked;
         try {
-            const lines = raw.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
-            if (lines.length === 0) throw new Error('Не указана ссылка');
-            const beans = lines.map(parseLink);
+            if (!raw.trim()) throw new Error('No link provided');
+            const beans = buildBeansFromInput(raw);
+            if (!beans.length) throw new Error('No valid links or profiles provided');
             beans.forEach(validateBean);
             let finalConfig;
             if (currentCore === 'singbox') {
-                const opts = {addTun: addTun, addSocks: addSocks, tunName, genClashSecret};
-                if (beans.length === 1) {
-                    const ob = buildSingBoxOutbound(beans[0]);
-                    finalConfig = buildSingBoxFullConfig(ob, opts);
-                } else {
+                const opts = {addTun: addTun, addSocks: addSocks, tunName, genClashSecret, useExtended};
+                {
                     const used = new Set();
-                    const outbounds = beans.map(b => {
+                    const dnsBeans = beans.filter(b => b.proto === 'sdns');
+                    const outboundBeans = beans.filter(b => b.proto !== 'sdns');
+                    const outbounds = outboundBeans.map(b => {
                         const ob = buildSingBoxOutbound(b);
                         const tag = computeTag(b, used);
                         return Object.assign({tag}, ob);
                     });
+                    opts.dnsBeans = dnsBeans;
                     finalConfig = buildSingBoxFullConfigMulti(outbounds, opts);
                 }
             } else {
@@ -223,7 +232,7 @@
             errorBlock.classList.add('hidden');
             outBlock.classList.remove('hidden');
         } catch (e) {
-            errorText.textContent = 'Ошибка: ' + (e && e.message ? e.message : String(e));
+            errorText.textContent = 'Error: ' + (e && e.message ? e.message : String(e));
             outBlock.classList.add('hidden');
             errorBlock.classList.remove('hidden');
         }
