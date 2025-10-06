@@ -1,6 +1,7 @@
 :root {
     --bg-dark: #1b2434;
     --primary: #379dd8;
+    --error: #e86f6f;
     --text: #e2e8f0;
     --muted: #9aa4b2;
     --border: #4d545f;
@@ -37,10 +38,6 @@ header {
     max-width: var(--form-max);
     margin: 10px auto 6px;
     text-align: center;
-}
-
-#asciiHeader {
-    cursor: pointer;
 }
 
 header pre {
@@ -99,6 +96,20 @@ label {
     box-shadow: 0 0 0 3px rgba(55, 157, 216, .2);
 }
 
+#links.input-error,
+textarea.input-error,
+input.input-error,
+select.input-error {
+    border-color: var(--error) !important;
+    box-shadow: 0 0 0 3px rgba(232, 111, 111, .25) !important;
+}
+
+#links.input-error:hover,
+#links.input-error:focus {
+    border-color: var(--error) !important;
+    box-shadow: 0 0 0 3px rgba(232, 111, 111, .3) !important;
+}
+
 #links {
     height: 150px;
     scrollbar-width: none;
@@ -145,6 +156,27 @@ label {
 .btn-primary:hover, input[type="submit"]:hover {
     background: var(--primary);
     color: white;
+}
+
+input[type="submit"]:active, button:active {
+    transform: scale(0.95);
+}
+
+input[type="submit"][disabled] {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+@keyframes fadePulse {
+    0% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.5;
+    }
+    100% {
+        opacity: 1;
+    }
 }
 
 .circle-btn {
@@ -276,8 +308,28 @@ label {
     color: var(--text);
 }
 
+.custom-checkbox:active {
+    transform: scale(0.97);
+}
+
 .hidden {
     display: none !important;
+}
+
+.invisible {
+    visibility: hidden;
+}
+
+#errorBlock {
+    height: 24px;
+    min-height: 24px;
+}
+
+#errorText {
+    line-height: 24px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 @media (max-width: 600px) {

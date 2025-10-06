@@ -116,12 +116,13 @@ jobs:
               let config;
               if (i === 0) {
                 // Single-link config (kept for coverage), also exercise named TUN
-                config = sandbox.buildSingBoxFullConfig(outbound, {addTun: true, addSocks: true, tunName: 'tun0', tunSniff: true});
+                const ob = Object.assign({tag: 'p1'}, outbound);
+                config = sandbox.buildSingBoxConfig([ob], {addTun: true, addSocks: true, tunName: 'tun0', tunSniff: true});
               } else {
                 // Multi-config: use the same outbound twice to simulate multiple choices and multiple TUNs
                 const ob1 = Object.assign({tag: 'p1'}, outbound);
                 const ob2 = Object.assign({tag: 'p2'}, outbound);
-                config = sandbox.buildSingBoxFullConfigMulti([ob1, ob2], {addTun: true, addSocks: true, tunName: 'tun0,tun_ru,tun_auto', tunSniff: true});
+                config = sandbox.buildSingBoxConfig([ob1, ob2], {addTun: true, addSocks: true, tunName: 'tun0,tun_ru,tun_auto', tunSniff: true});
               }
           
               // Assert: TUN sniff enabled when tunSniff flag is true
@@ -193,7 +194,7 @@ jobs:
               return Object.assign({ tag }, ob);
             });
             // Mixed modes test: tun0:select,tun1:auto
-            const multiConfig = sandbox.buildSingBoxFullConfigMulti(multiOutbounds, { addTun: true, addSocks: true, tunName: 'tun0:select,tun1:auto' });
+            const multiConfig = sandbox.buildSingBoxConfig(multiOutbounds, { addTun: true, addSocks: true, tunName: 'tun0:select,tun1:auto' });
             const multiFile = `test_singbox_multi_all.json`;
             fs.writeFileSync(multiFile, JSON.stringify(multiConfig, null, 2));
 
@@ -318,7 +319,7 @@ jobs:
             try {
               const bean = sandbox.parseLink(link);
               const outbound = sandbox.buildSingBoxOutbound(bean);
-              const config = sandbox.buildSingBoxFullConfigMulti([{tag: 'test', ...outbound}], {useExtended: true});
+              const config = sandbox.buildSingBoxConfig([{tag: 'test', ...outbound}], {useExtended: true});
           
               const configFile = \`test_extended_\${i}.json\`;
               fs.writeFileSync(configFile, JSON.stringify(config, null, 2));
@@ -379,7 +380,7 @@ jobs:
             const outbound = sandbox.buildSingBoxOutbound(b);
             return {tag: 'test', ...outbound};
           });
-          const config = sandbox.buildSingBoxFullConfigMulti(outbounds, {useExtended: true});
+          const config = sandbox.buildSingBoxConfig(outbounds, {useExtended: true});
           fs.writeFileSync('/tmp/mieru-config.json', JSON.stringify(config, null, 2));
           "
           
@@ -420,7 +421,7 @@ jobs:
           vm.runInContext(mainJs, sandbox);
           
           const beans = sandbox.buildBeansFromInput(process.env.SDNS_LINK);
-          const config = sandbox.buildSingBoxFullConfigMulti([], {useExtended: true, dnsBeans: beans});
+          const config = sandbox.buildSingBoxConfig([], {useExtended: true, dnsBeans: beans});
           fs.writeFileSync('/tmp/sdns-config.json', JSON.stringify(config, null, 2));
           "
           
@@ -465,7 +466,7 @@ jobs:
             const outbound = sandbox.buildSingBoxOutbound(b);
             return {tag: 'test', ...outbound};
           });
-          const config = sandbox.buildSingBoxFullConfigMulti(outbounds, {useExtended: true});
+          const config = sandbox.buildSingBoxConfig(outbounds, {useExtended: true});
           fs.writeFileSync('/tmp/xhttp-config.json', JSON.stringify(config, null, 2));
           "
           
@@ -500,8 +501,9 @@ jobs:
           
           echo "Downloading Xray $VERSION from $DOWNLOAD_URL"
           wget -O xray.zip "$DOWNLOAD_URL"
-          unzip xray.zip
-          sudo mv xray /usr/local/bin/
+          rm -rf /tmp/xray && mkdir -p /tmp/xray
+          unzip -q xray.zip -d /tmp/xray
+          sudo mv /tmp/xray/xray /usr/local/bin/
           chmod +x /usr/local/bin/xray
 
       - name: Generate and validate Xray configs
@@ -572,7 +574,7 @@ jobs:
           
               // Generate Xray config
               const outbound = sandbox.buildXrayOutbound(bean);
-              const config = sandbox.buildXrayFullConfig(outbound);
+              const config = sandbox.buildXrayConfig(outbound);
           
               // Write config to file
               const configFile = `test_xray_${i}.json`;
@@ -607,7 +609,7 @@ jobs:
                   ob.tag = sandbox.computeTag ? sandbox.computeTag(b, used) : `p${idx + 1}`;
                   return ob;
                 });
-                const multiConfig = sandbox.buildXrayFullConfigMulti(multiOutbounds);
+                const multiConfig = sandbox.buildXrayConfig(multiOutbounds);
                 const multiFile = `test_xray_multi_all.json`;
                 fs.writeFileSync(multiFile, JSON.stringify(multiConfig, null, 2));
     

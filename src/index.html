@@ -70,12 +70,12 @@
                   style="scrollbar-width:none; -ms-overflow-style:none;"></textarea>
     </div>
 
-    <div class="button-row">
-        <input type="submit" id="gen" value="Generate"/>
+    <div id="errorBlock" class="invisible" role="alert" aria-live="polite" style="margin-top:-10px; min-height:20px;">
+        <div id="errorText"></div>
     </div>
 
-    <div id="errorBlock" class="hidden" role="alert" aria-live="polite" style="margin-top:8px;">
-        <div id="errorText"></div>
+    <div class="button-row" style="margin-top:6px;">
+        <input type="submit" id="gen" value="Generate"/>
     </div>
 
     <div id="outBlock" class="hidden">
@@ -186,7 +186,8 @@
         });
     }
 
-    document.getElementById('gen').addEventListener('click', () => {
+    function validateField(showOutput) {
+        const genBtn = document.getElementById('gen');
         const raw = document.getElementById('links').value;
         const tunName = document.getElementById('tunName').value.trim();
         const addTun = !!document.getElementById('cbTun')?.checked;
@@ -194,10 +195,24 @@
         const genClashSecret = !!document.getElementById('cbClashSecret')?.checked;
         const useExtended = !!document.getElementById('cbExtended')?.checked;
         try {
-            if (!raw.trim()) throw new Error('No link provided');
+            if (!raw.trim()) {
+                if (genBtn) genBtn.disabled = true;
+                errorText.textContent = '';
+                errorBlock.classList.add('invisible');
+                outBlock.classList.add('hidden');
+                document.getElementById('links').classList.remove('input-error');
+                return false;
+            }
             const beans = buildBeansFromInput(raw);
             if (!beans.length) throw new Error('No valid links or profiles provided');
             beans.forEach(validateBean);
+            if (!showOutput) {
+                errorText.textContent = '';
+                errorBlock.classList.add('invisible');
+                if (genBtn) genBtn.disabled = false;
+                document.getElementById('links').classList.remove('input-error');
+                return {beans, tunName, addTun, addSocks, genClashSecret, useExtended};
+            }
             let finalConfig;
             if (currentCore === 'singbox') {
                 const opts = {addTun: addTun, addSocks: addSocks, tunName, genClashSecret, useExtended};
@@ -211,12 +226,12 @@
                         return Object.assign({tag}, ob);
                     });
                     opts.dnsBeans = dnsBeans;
-                    finalConfig = buildSingBoxFullConfigMulti(outbounds, opts);
+                    finalConfig = buildSingBoxConfig(outbounds, opts);
                 }
             } else {
                 if (beans.length === 1) {
                     const ob = buildXrayOutbound(beans[0]);
-                    finalConfig = buildXrayFullConfig(ob);
+                    finalConfig = buildXrayConfig(ob);
                 } else {
                     const used = new Set();
                     const outbounds = beans.map(b => {
@@ -224,18 +239,30 @@
                         ob.tag = computeTag(b, used);
                         return ob;
                     });
-                    finalConfig = buildXrayFullConfigMulti(outbounds);
+                    finalConfig = buildXrayConfig(outbounds);
                 }
             }
             outEl.value = JSON.stringify(finalConfig, null, 2);
             errorText.textContent = '';
-            errorBlock.classList.add('hidden');
+            errorBlock.classList.add('invisible');
             outBlock.classList.remove('hidden');
+            if (genBtn) genBtn.disabled = false;
+            document.getElementById('links').classList.remove('input-error');
+            return true;
         } catch (e) {
-            errorText.textContent = 'Error: ' + (e && e.message ? e.message : String(e));
-            outBlock.classList.add('hidden');
-            errorBlock.classList.remove('hidden');
+            errorText.textContent = (e && e.message ? e.message : String(e));
+            if (genBtn) genBtn.disabled = true;
+            if (showOutput) {
+                outBlock.classList.add('hidden');
+            }
+            errorBlock.classList.remove('invisible');
+            document.getElementById('links').classList.add('input-error');
+            return false;
         }
+    }
+
+    document.getElementById('gen').addEventListener('click', () => {
+        validateField(true);
     });
 
     const btnCopy = document.getElementById('btnCopy');
@@ -262,6 +289,16 @@
     });
 
     setupCheckboxValidation();
+
+    const linksInput = document.getElementById('links');
+    const genBtn = document.getElementById('gen');
+    if (genBtn) genBtn.disabled = true;
+
+    const triggerLiveValidation = () => validateField(false);
+    if (linksInput) {
+        linksInput.addEventListener('input', triggerLiveValidation);
+        linksInput.addEventListener('blur', triggerLiveValidation);
+    }
 </script>
 </body>
 </html>

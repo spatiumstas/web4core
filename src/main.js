@@ -823,44 +823,7 @@ function buildDNSServers(dnsBeans) {
     return servers;
 }
 
-function buildSingBoxFullConfig(outbound, opts) {
-    const config = {
-        log: {level: 'info'},
-        inbounds: buildSingBoxInbounds(opts),
-        outbounds: [
-            Object.assign({tag: 'proxy'}, outbound),
-            {tag: 'block', type: 'block'}
-        ],
-        route: {
-            rules: [],
-            final: 'proxy'
-        },
-        experimental: {
-            cache_file: {enabled: true},
-            clash_api: {
-                external_controller: '[::]:9090',
-                external_ui: 'ui',
-                external_ui_download_detour: 'proxy',
-                access_control_allow_private_network: true,
-                secret: opts?.genClashSecret ? generateSecretHex32() : ''
-            }
-        }
-    };
-
-    const dnsServers = (opts?.useExtended ? buildDNSServers(opts?.dnsBeans || []) : []);
-    if (dnsServers.length > 0) {
-        config.dns = {servers: dnsServers};
-        config.route.default_domain_resolver = dnsServers[0]?.tag || '';
-    }
-
-    if (opts?.useExtended) {
-        config.experimental.unified_delay = {enabled: true};
-    }
-
-    return config;
-}
-
-function buildSingBoxFullConfigMulti(outboundsWithTags, opts) {
+function buildSingBoxConfig(outboundsWithTags, opts) {
     const tags = outboundsWithTags.map(ob => ob.tag);
     const inbounds = buildSingBoxInbounds(opts);
     const managementOutbounds = [];
@@ -871,17 +834,13 @@ function buildSingBoxFullConfigMulti(outboundsWithTags, opts) {
         return m[2] || m[1];
     };
     let firstDetourTag = '';
-    const tunModes = new Map();
-    if (opts && opts.addTun) {
-        const specs = parseTunSpec(opts.tunName || '');
-        for (const s of specs) tunModes.set(s.name, s.mode);
-    }
     for (const inbound of inbounds) {
         const suffix = suffixFromInbound(inbound.tag);
-        const mode = inbound.tag.startsWith('tun-in') ? (tunModes.get(suffix) || 'select') : 'select';
         const selectTag = `select-${suffix}`;
         const autoTag = `auto-${suffix}`;
-        if (mode === 'auto') {
+        const hasMany = tags.length > 1;
+
+        if (hasMany) {
             managementOutbounds.push({
                 type: 'urltest',
                 tag: autoTag,
@@ -892,25 +851,31 @@ function buildSingBoxFullConfigMulti(outboundsWithTags, opts) {
                 idle_timeout: '30m',
                 interrupt_exist_connections: false
             });
-            routeRules.push({inbound: inbound.tag, action: 'route', outbound: autoTag});
-            if (!firstDetourTag) firstDetourTag = autoTag;
-        } else {
-            const selectorOutbounds = [...tags];
-            const defaultTag = selectorOutbounds[0] || 'direct';
             managementOutbounds.push({
                 type: 'selector',
                 tag: selectTag,
-                outbounds: selectorOutbounds,
-                default: defaultTag,
+                outbounds: [autoTag, ...tags],
+                default: autoTag,
                 interrupt_exist_connections: false
             });
-            routeRules.push({inbound: inbound.tag, action: 'route', outbound: selectTag});
-            if (!firstDetourTag) firstDetourTag = selectTag;
+        } else {
+            const onlyTag = tags[0] || 'direct';
+            managementOutbounds.push({
+                type: 'selector',
+                tag: selectTag,
+                outbounds: [onlyTag],
+                default: onlyTag,
+                interrupt_exist_connections: false
+            });
         }
+
+        routeRules.push({inbound: inbound.tag, action: 'route', outbound: selectTag});
+        if (!firstDetourTag) firstDetourTag = selectTag;
     }
     const outbounds = [
         ...managementOutbounds,
         ...outboundsWithTags,
+        {tag: 'direct', type: 'direct'},
         {tag: 'block', type: 'block'}
     ];
     const config = {
@@ -1019,21 +984,21 @@ function buildXrayOutbound(bean) {
     } else if (bean.proto === 'hy2' || bean.proto === 'tuic') {
         throw new Error(bean.proto + ' not supported in Xray. Use sing-box.');
     } else {
-        throw new Error('Xray: Unknown protocol ' + bean.proto);
+        throw new Error('Unknown protocol: ' + bean.proto);
     }
     outbound.streamSettings = streamSettings;
     return outbound;
 }
 
-function buildXrayFullConfig(outbound) {
-    return {
-        log: {loglevel: 'warning'},
-        inbounds: [{tag: 'socks-in', port: 1080, listen: '127.0.0.1', protocol: 'socks', settings: {udp: true}}],
-        outbounds: [outbound, {tag: 'direct', protocol: 'freedom'}, {tag: 'block', protocol: 'blackhole'}]
-    };
-}
-
-function buildXrayFullConfigMulti(outbounds) {
+function buildXrayConfig(outbounds) {
+    if (!Array.isArray(outbounds)) outbounds = [outbounds];
+    if (outbounds.length === 1) {
+        return {
+            log: {loglevel: 'warning'},
+            inbounds: [{tag: 'socks-in', port: 1080, listen: '127.0.0.1', protocol: 'socks', settings: {udp: true}}],
+            outbounds: [outbounds[0], {tag: 'direct', protocol: 'freedom'}, {tag: 'block', protocol: 'blackhole'}]
+        };
+    }
     const basePort = 1080;
     const inbounds = outbounds.map((ob, idx) => ({
         tag: `socks-in-${idx + 1}`,
