@@ -828,50 +828,38 @@ function buildSingBoxConfig(outboundsWithTags, opts) {
     const inbounds = buildSingBoxInbounds(opts);
     const managementOutbounds = [];
     const routeRules = [];
-    const suffixFromInbound = (tag) => {
-        const m = (tag || '').match(/^(.*?)-in(?:-(.*))?$/);
-        if (!m) return tag;
-        return m[2] || m[1];
-    };
-    let firstDetourTag = '';
-    for (const inbound of inbounds) {
-        const suffix = suffixFromInbound(inbound.tag);
-        const selectTag = `select-${suffix}`;
-        const autoTag = `auto-${suffix}`;
-        const hasMany = tags.length > 1;
+    const hasMany = tags.length > 1;
 
-        if (hasMany) {
-            managementOutbounds.push({
-                type: 'urltest',
-                tag: autoTag,
-                outbounds: tags,
-                url: 'https://www.gstatic.com/generate_204',
-                interval: '3m',
-                tolerance: 50,
-                idle_timeout: '30m',
-                interrupt_exist_connections: false
-            });
-            managementOutbounds.push({
-                type: 'selector',
-                tag: selectTag,
-                outbounds: [autoTag, ...tags],
-                default: autoTag,
-                interrupt_exist_connections: false
-            });
-        } else {
-            const onlyTag = tags[0] || 'direct';
-            managementOutbounds.push({
-                type: 'selector',
-                tag: selectTag,
-                outbounds: [onlyTag],
-                default: onlyTag,
-                interrupt_exist_connections: false
-            });
-        }
-
-        routeRules.push({inbound: inbound.tag, action: 'route', outbound: selectTag});
-        if (!firstDetourTag) firstDetourTag = selectTag;
+    if (hasMany) {
+        managementOutbounds.push({
+            type: 'urltest',
+            tag: 'auto',
+            outbounds: tags,
+            url: 'https://www.gstatic.com/generate_204',
+            interval: '3m',
+            tolerance: 50,
+            idle_timeout: '30m',
+            interrupt_exist_connections: false
+        });
+        managementOutbounds.push({
+            type: 'selector',
+            tag: 'select',
+            outbounds: ['auto', ...tags],
+            default: 'auto',
+            interrupt_exist_connections: false
+        });
+    } else {
+        const onlyTag = tags[0] || 'direct';
+        managementOutbounds.push({
+            type: 'selector',
+            tag: 'select',
+            outbounds: [onlyTag],
+            default: onlyTag,
+            interrupt_exist_connections: false
+        });
     }
+
+    routeRules.push({ip_version: 6, outbound: 'block'});
     const outbounds = [
         ...managementOutbounds,
         ...outboundsWithTags,
@@ -882,7 +870,7 @@ function buildSingBoxConfig(outboundsWithTags, opts) {
         log: {level: 'info'},
         inbounds,
         outbounds,
-        route: {rules: routeRules, final: firstDetourTag || 'block'},
+        route: {rules: routeRules, final: 'select'},
         experimental: {
             cache_file: {enabled: true},
             clash_api: {

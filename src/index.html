@@ -206,6 +206,12 @@
             const beans = buildBeansFromInput(raw);
             if (!beans.length) throw new Error('No valid links or profiles provided');
             beans.forEach(validateBean);
+            if (!useExtended) {
+                const hasExtendedOnly = beans.some(b => b.proto === 'mieru' || b.proto === 'sdns');
+                if (hasExtendedOnly) {
+                    throw new Error('Enable Extended to generate Mieru/SDNS configurations');
+                }
+            }
             if (!showOutput) {
                 errorText.textContent = '';
                 errorBlock.classList.add('invisible');
@@ -218,9 +224,10 @@
                 const opts = {addTun: addTun, addSocks: addSocks, tunName, genClashSecret, useExtended};
                 {
                     const used = new Set();
-                    const dnsBeans = beans.filter(b => b.proto === 'sdns');
+                    const dnsBeans = useExtended ? beans.filter(b => b.proto === 'sdns') : [];
                     const outboundBeans = beans.filter(b => b.proto !== 'sdns');
                     const outbounds = outboundBeans.map(b => {
+                        b._useExtended = !!useExtended;
                         const ob = buildSingBoxOutbound(b);
                         const tag = computeTag(b, used);
                         return Object.assign({tag}, ob);
