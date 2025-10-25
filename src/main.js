@@ -44,11 +44,15 @@ function sanitizeTag(s) {
 }
 
 function generateSecretHex32() {
-    const bytes = [];
-    for (let i = 0; i < 16; i++) {
-        bytes.push(Math.floor(Math.random() * 256));
+    try {
+        const buf = new Uint8Array(16);
+        (self.crypto || window.crypto).getRandomValues(buf);
+        return Array.from(buf, b => b.toString(16).padStart(2, '0')).join('');
+    } catch {
+        const bytes = [];
+        for (let i = 0; i < 16; i++) bytes.push(Math.floor(Math.random() * 256));
+        return bytes.map(b => b.toString(16).padStart(2, '0')).join('');
     }
-    return bytes.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
 function computeTag(bean, used) {
@@ -176,7 +180,7 @@ function validateBean(bean) {
 }
 
 function parseTunSpec(tunSpec) {
-    const items = (tunSpec || '')
+    return (tunSpec || '')
         .split(',')
         .map(s => s.trim())
         .filter(Boolean)
@@ -188,7 +192,6 @@ function parseTunSpec(tunSpec) {
             return {name, mode};
         })
         .filter(x => x.name);
-    return items;
 }
 
 function parseLink(input) {
@@ -210,21 +213,28 @@ function parseLink(input) {
 function parseSocksHttp(urlStr) {
     const u = new URL(urlStr);
     const query = getQuery(u);
-    const isHTTP = u.protocol.startsWith('http');
+    const isHttps = u.protocol === 'https:';
+    const isHttp = u.protocol === 'http:';
     const isSocks4 = u.protocol.startsWith('socks4');
+    let effectiveSecurity = (query.get('security') || '').toLowerCase();
+    if (!effectiveSecurity) {
+        if (isHttps) effectiveSecurity = 'tls';
+        else if (isHttp) effectiveSecurity = '';
+        else effectiveSecurity = '';
+    }
     const bean = {
-        proto: isHTTP ? 'http' : 'socks',
+        proto: (isHttp || isHttps) ? 'http' : 'socks',
         host: u.hostname,
-        port: asInt(u.port, isHTTP ? 443 : 1080),
+        port: asInt(u.port, isHttps ? 443 : isHttp ? 80 : 1080),
         name: decodeURIComponent(u.hash.replace('#', '')),
         socks: {
-            type: isHTTP ? 'http' : (isSocks4 ? 'socks4' : 'socks5'),
+            type: isHttp || isHttps ? 'http' : (isSocks4 ? 'socks4' : 'socks5'),
             username: decodeURIComponent(u.username || ''),
             password: decodeURIComponent(u.password || '')
         },
         stream: {
             network: 'tcp',
-            security: isHTTP ? 'tls' : (query.get('security') || '').toLowerCase(),
+            security: effectiveSecurity.replace('reality', 'tls').replace('none', ''),
             sni: query.get('sni') || '',
             alpn: [],
             allowInsecure: false,
@@ -373,8 +383,8 @@ function parseSS(urlStr) {
     if (!password && u.username) {
         const dec = decodeBase64Url(u.username);
         if (dec.includes(':')) {
-            const i = dec.indexOf(':'), a = dec.slice(0, i), b = dec.slice(i + 1);
-            method = a;
+            const i = dec.indexOf(':'), b = dec.slice(i + 1);
+            method = dec.slice(0, i);
             password = b;
         }
     }
@@ -402,7 +412,7 @@ function parseHysteria2(urlStr) {
         hysteria2: {
             obfsPassword: q.get('obfs-password') || '',
             hopPort: q.get('mport') || '',
-            hopInterval: asInt(q.get('hop_interval') || '10', 10),
+            hopInterval: (q.get('hop_interval') || ''),
             alpn: q.get('alpn') || 'h3',
             sni: q.get('sni') || '',
             allowInsecure: ['1', 'true'].includes((q.get('insecure') || '').toLowerCase())
@@ -544,7 +554,8 @@ function buildStreamFromQuery(q, isTrojan) {
     const security = (q.get('security') || (isTrojan ? 'tls' : '')).toLowerCase().replace('reality', 'tls').replace('none', '');
     const sni = q.get('sni') || q.get('peer') || '';
     const alpn = splitCSV(q.get('alpn') || '');
-    const allowInsecure = q.has('allowInsecure');
+    const aiRaw = (q.get('allowInsecure') || q.get('insecure') || '').toLowerCase();
+    const allowInsecure = ['1', 'true', 'yes'].includes(aiRaw);
     const fp = q.get('fp') || '';
     const reality = {pbk: q.get('pbk') || '', sid: (q.get('sid') || '').split(',')[0] || '', spx: q.get('spx') || ''};
     const stream = {
@@ -566,6 +577,10 @@ function buildStreamFromQuery(q, isTrojan) {
     if (type === 'ws') {
         stream.path = q.get('path') || '';
         stream.host = q.get('host') || '';
+        const ed = asInt((q.get('ed') || '').toString(), 0);
+        if (ed > 0) {
+            stream.wsEarlyData = {max_early_data: ed, early_data_header_name: 'Sec-WebSocket-Protocol'};
+        }
     } else if (type === 'http') {
         stream.path = q.get('path') || '';
         stream.host = (q.get('host') || '').replace(/\|/g, ',');
@@ -635,6 +650,12 @@ function buildSingBoxOutbound(bean) {
                 if (hostHeader) t.headers = {Host: hostHeader};
                 const pathWithoutEd = (stream.path || '').split('?ed=')[0];
                 if (pathWithoutEd) t.path = pathWithoutEd;
+                const ed = stream.wsEarlyData?.max_early_data || 0;
+                const edName = stream.wsEarlyData?.early_data_header_name || '';
+                if (ed > 0) {
+                    t.max_early_data = ed;
+                    t.early_data_header_name = edName || 'Sec-WebSocket-Protocol';
+                }
             } else if (stream.network === 'http') {
                 if (stream.path) t.path = stream.path;
                 if (stream.host) t.host = splitCSV(stream.host).map(s => s);
@@ -731,7 +752,13 @@ function buildSingBoxOutbound(bean) {
             outbound.obfs = {type: 'salamander', password: bean.hysteria2.obfsPassword};
         }
         if (bean.hysteria2?.hopPort) outbound.hop_ports = bean.hysteria2.hopPort;
-        if (Number.isFinite(bean.hysteria2?.hopInterval)) outbound.hop_interval = bean.hysteria2.hopInterval + 's';
+        if (bean.hysteria2?.hopInterval) {
+            const hi = String(bean.hysteria2.hopInterval).trim();
+            const hasUnit = /(?:ms|s|m|h|d)$/i.test(hi);
+            outbound.hop_interval = hasUnit ? hi : (/^\d+$/.test(hi) ? hi + 's' : hi);
+        } else {
+            outbound.hop_interval = '10s';
+        }
     } else if (bean.proto === 'tuic') {
         const tls = commonTLS() || {enabled: true};
         outbound = {type: 'tuic', server: bean.host, server_port: bean.port || 443, tls};
@@ -771,7 +798,7 @@ function buildSingBoxInbounds(opts) {
     const inbounds = [];
     if (opts.addTun) {
         const specs = parseTunSpec(opts.tunName || '');
-        const ifaces = specs.length ? specs.map(x => x.name) : ['tun0'];
+        const ifaces = specs.length ? specs.map(x => x.name) : ['singtun0'];
         for (let i = 0; i < ifaces.length; i++) {
             const name = ifaces[i];
             const tag = ifaces.length > 1 ? `tun-in-${name}` : 'tun-in';
@@ -783,16 +810,9 @@ function buildSingBoxInbounds(opts) {
                 interface_name: name,
                 address: [cidr],
                 stack: 'gvisor',
-                sniff: false,
-                sniff_override_destination: false,
-                auto_route: false
+                auto_route: false,
+                strict_route: false
             };
-            if (opts && opts.tunSniff) {
-                tun.sniff = true;
-            }
-            if (opts.useExtended) {
-                tun.strict_route = false;
-            }
             inbounds.push(tun);
         }
     }
@@ -802,8 +822,6 @@ function buildSingBoxInbounds(opts) {
             type: 'mixed',
             listen: '127.0.0.1',
             listen_port: 2080,
-            sniff: false,
-            sniff_override_destination: false
         });
     }
     return inbounds;
@@ -917,19 +935,29 @@ function buildXrayOutbound(bean) {
         if (s.fp) streamSettings.realitySettings.fingerprint = s.fp;
     }
     if (streamSettings.network === 'ws') {
-        streamSettings.wsSettings = {};
-        if (s.path) streamSettings.wsSettings.path = s.path;
-        if (s.host) streamSettings.wsSettings.headers = {Host: s.host};
+        streamSettings.network = 'xhttp';
+        streamSettings.xhttpSettings = {};
+        if (s.host) streamSettings.xhttpSettings.host = s.host;
+        if (s.path) streamSettings.xhttpSettings.path = s.path;
+        streamSettings.xhttpSettings.mode = 'auto';
     } else if (streamSettings.network === 'xhttp') {
         streamSettings.xhttpSettings = {};
         if (s.host) streamSettings.xhttpSettings.host = s.host;
         if (s.path) streamSettings.xhttpSettings.path = s.path;
+        if (s.xhttpMode) streamSettings.xhttpSettings.mode = s.xhttpMode; else streamSettings.xhttpSettings.mode = 'stream-up';
     } else if (streamSettings.network === 'grpc') {
-        streamSettings.grpcSettings = {};
-        if (s.path) streamSettings.grpcSettings.serviceName = s.path;
+        streamSettings.network = 'xhttp';
+        streamSettings.xhttpSettings = {};
+        if (s.path) streamSettings.xhttpSettings.path = s.path;
+        if (s.host) streamSettings.xhttpSettings.host = s.host;
+        streamSettings.xhttpSettings.mode = 'stream-up';
     } else if (streamSettings.network === 'tcp' && s.headerType === 'http') {
         streamSettings.tcpSettings = {header: {type: 'http', request: {headers: {Host: s.host}}}};
         if (s.path) streamSettings.tcpSettings.header.request.path = [s.path];
+    }
+    if (streamSettings.network === 'xhttp' && streamSettings.tlsSettings && Array.isArray(streamSettings.tlsSettings.alpn)) {
+        streamSettings.tlsSettings.alpn = streamSettings.tlsSettings.alpn.filter(v => (v || '').toLowerCase() !== 'http/1.1');
+        if (streamSettings.tlsSettings.alpn.length === 0) delete streamSettings.tlsSettings.alpn;
     }
     let outbound = null;
     if (bean.proto === 'vmess') {
