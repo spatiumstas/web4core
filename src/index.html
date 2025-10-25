@@ -1,12 +1,14 @@
 <!DOCTYPE html>
 <html lang="ru">
-<meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
-<link rel="stylesheet" href="style.css">
-<link rel="icon" type="image/png" href="https://img.icons8.com/fluency/240/security-configuration.png">
-<link rel="shortcut icon" href="https://img.icons8.com/fluency/240/security-configuration.png">
-<link rel="apple-touch-icon" href="https://img.icons8.com/fluency/240/security-configuration.png">
-<title>web4core</title>
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
+    <link rel="stylesheet" href="style.css">
+    <link rel="icon" type="image/png" href="https://img.icons8.com/fluency/240/security-configuration.png">
+    <link rel="shortcut icon" href="https://img.icons8.com/fluency/240/security-configuration.png">
+    <link rel="apple-touch-icon" href="https://img.icons8.com/fluency/240/security-configuration.png">
+    <title>web4core</title>
+</head>
 <body>
 <header id="asciiHeader">
     <pre>
@@ -31,8 +33,8 @@
         <path d="M6.173 12.414l-3.89-3.89 1.414-1.414 2.476 2.475 6.364-6.364 1.414 1.414-7.778 7.778z"/>
     </symbol>
 </svg>
-<main class="container" style="align-items:stretch;">
-    <div class="row" style="justify-content:flex-start; gap:12px;">
+<main class="container container--stretch">
+    <div class="row row--left gap-12">
         <div id="coreToggle" class="core-toggle" data-core="singbox" aria-label="Core selector" role="switch"
              aria-checked="true" tabindex="0">
             <div class="knob"></div>
@@ -61,27 +63,25 @@
             <div class="checkmark"></div>
             <span title="Extended features (XHTTP, XUDP, SDNS, Unified delay)">Extended</span>
         </label>
-        <input class="input" type="text" id="tunName" placeholder="Interface(s): (tun0,tun1 or tun0:select,tun1:auto)" style="min-width:180px;"/>
+        <input class="input" type="text" id="tunName" placeholder="Interface(s): (tun0,tun1 or tun0:select,tun1:auto)"/>
     </div>
 
-    <div>
-        <textarea id="links" class="input"
-                  placeholder="vless://...&#10;vmess://...&#10;trojan://...&#10;ss://...&#10;socks://...&#10;http://user:pass@host:port&#10;hy2://...&#10;tuic://...&#10;mieru://... (or json)&#10;sdns://...&#10"
-                  style="scrollbar-width:none; -ms-overflow-style:none;"></textarea>
+    <div class="full">
+        <textarea id="links" class="input full"
+                  placeholder="vless://...&#10;vmess://...&#10;trojan://...&#10;ss://...&#10;socks://...&#10;http://user:pass@host:port&#10;hy2://...&#10;tuic://...&#10;mieru://... (or json)&#10;sdns://...&#10"></textarea>
     </div>
 
-    <div id="errorBlock" class="invisible" role="alert" aria-live="polite" style="margin-top:-10px; min-height:20px;">
+    <div id="errorBlock" class="row row--left" role="status" aria-live="polite">
         <div id="errorText"></div>
     </div>
 
-    <div class="button-row" style="margin-top:6px;">
+    <div class="button-row">
         <input type="submit" id="gen" value="Generate"/>
     </div>
 
-    <div id="outBlock" class="hidden">
-        <textarea id="out" class="input" readonly
-                  style="scrollbar-width:none; -ms-overflow-style:none;"></textarea>
-        <div class="button-row" style="margin-top:8px;">
+    <div id="outBlock" class="hidden full">
+        <textarea id="out" class="input full" readonly></textarea>
+        <div class="button-row mt-8 full">
             <button id="btnCopy" class="circle-btn" title="Copy" aria-label="Copy">
                 <svg width="22" height="22" aria-hidden="true">
                     <use href="#copy"></use>
@@ -104,6 +104,11 @@
     const outBlock = document.getElementById('outBlock');
     const errorBlock = document.getElementById('errorBlock');
     const errorText = document.getElementById('errorText');
+    const toggleHidden = (el, hidden) => {
+        if (el) {
+            el.classList.toggle('is-hidden', hidden);
+        }
+    };
 
     function setCore(core) {
         currentCore = core;
@@ -115,22 +120,24 @@
         const cbClashSecretLabel = document.getElementById('cbClashSecret')?.parentElement;
         const cbExtendedLabel = document.getElementById('cbExtended')?.parentElement;
         const tunNameInput = document.getElementById('tunName');
-        const show = core === 'singbox' ? '' : 'none';
-        if (cbTunLabel) cbTunLabel.style.display = show;
-        if (cbSocksLabel) cbSocksLabel.style.display = show;
-        if (cbClashSecretLabel) cbClashSecretLabel.style.display = show;
-        if (cbExtendedLabel) cbExtendedLabel.style.display = show;
-        if (tunNameInput) tunNameInput.style.display = show;
+        const hide = core !== 'singbox';
+        toggleHidden(cbTunLabel, hide);
+        toggleHidden(cbSocksLabel, hide);
+        toggleHidden(cbClashSecretLabel, hide);
+        toggleHidden(cbExtendedLabel, hide);
+        toggleHidden(tunNameInput, hide);
 
     }
 
     lblSing.addEventListener('click', (e) => {
         e.stopPropagation();
         setCore('singbox');
+        validateField(false);
     });
     lblXray.addEventListener('click', (e) => {
         e.stopPropagation();
         setCore('xray');
+        validateField(false);
     });
 
     let dragging = false;
@@ -164,6 +171,7 @@
     coreToggle.addEventListener('click', () => {
         if (suppressClick) return;
         setCore(currentCore === 'singbox' ? 'xray' : 'singbox');
+        validateField(false);
     });
 
     const outEl = document.getElementById('out');
@@ -171,6 +179,7 @@
     function setupCheckboxValidation() {
         const cbTun = document.getElementById('cbTun');
         const cbSocks = document.getElementById('cbSocks');
+        const cbExtended = document.getElementById('cbExtended');
         if (!cbTun || !cbSocks) return;
 
         cbTun.addEventListener('change', () => {
@@ -184,6 +193,11 @@
                 cbTun.checked = true;
             }
         });
+        if (cbExtended) {
+            cbExtended.addEventListener('change', () => {
+                validateField(false);
+            });
+        }
     }
 
     function validateField(showOutput) {
@@ -198,7 +212,6 @@
             if (!raw.trim()) {
                 if (genBtn) genBtn.disabled = true;
                 errorText.textContent = '';
-                errorBlock.classList.add('invisible');
                 outBlock.classList.add('hidden');
                 document.getElementById('links').classList.remove('input-error');
                 return false;
@@ -206,6 +219,13 @@
             const beans = buildBeansFromInput(raw);
             if (!beans.length) throw new Error('No valid links or profiles provided');
             beans.forEach(validateBean);
+            if (currentCore === 'xray') {
+                const unsupported = beans.filter(b => ['hy2', 'tuic', 'mieru', 'sdns'].includes(b.proto));
+                if (unsupported.length) {
+                    const names = Array.from(new Set(unsupported.map(b => b.proto))).join(', ');
+                    throw new Error('Xray does not support: ' + names + '. Use sing-box.');
+                }
+            }
             if (!useExtended) {
                 const hasExtendedOnly = beans.some(b => b.proto === 'mieru' || b.proto === 'sdns');
                 if (hasExtendedOnly) {
@@ -214,7 +234,6 @@
             }
             if (!showOutput) {
                 errorText.textContent = '';
-                errorBlock.classList.add('invisible');
                 if (genBtn) genBtn.disabled = false;
                 document.getElementById('links').classList.remove('input-error');
                 return {beans, tunName, addTun, addSocks, genClashSecret, useExtended};
@@ -251,7 +270,6 @@
             }
             outEl.value = JSON.stringify(finalConfig, null, 2);
             errorText.textContent = '';
-            errorBlock.classList.add('invisible');
             outBlock.classList.remove('hidden');
             if (genBtn) genBtn.disabled = false;
             document.getElementById('links').classList.remove('input-error');
@@ -262,14 +280,23 @@
             if (showOutput) {
                 outBlock.classList.add('hidden');
             }
-            errorBlock.classList.remove('invisible');
             document.getElementById('links').classList.add('input-error');
             return false;
         }
     }
 
     document.getElementById('gen').addEventListener('click', () => {
-        validateField(true);
+        const ok = validateField(true);
+        if (ok) {
+            const block = document.getElementById('outBlock');
+            if (block && block.scrollIntoView) {
+                block.scrollIntoView({behavior: 'smooth', block: 'center', inline: 'nearest'});
+            }
+            const outEl = document.getElementById('out');
+            if (outEl && outEl.focus) {
+                try { outEl.focus({preventScroll: true}); } catch {}
+            }
+        }
     });
 
     const btnCopy = document.getElementById('btnCopy');

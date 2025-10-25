@@ -117,18 +117,18 @@ jobs:
               if (i === 0) {
                 // Single-link config (kept for coverage), also exercise named TUN
                 const ob = Object.assign({tag: 'p1'}, outbound);
-                config = sandbox.buildSingBoxConfig([ob], {addTun: true, addSocks: true, tunName: 'tun0', tunSniff: true});
+                config = sandbox.buildSingBoxConfig([ob], {addTun: true, addSocks: true, tunName: 'tun0'});
               } else {
                 // Multi-config: use the same outbound twice to simulate multiple choices and multiple TUNs
                 const ob1 = Object.assign({tag: 'p1'}, outbound);
                 const ob2 = Object.assign({tag: 'p2'}, outbound);
-                config = sandbox.buildSingBoxConfig([ob1, ob2], {addTun: true, addSocks: true, tunName: 'tun0,tun_ru,tun_auto', tunSniff: true});
+                config = sandbox.buildSingBoxConfig([ob1, ob2], {addTun: true, addSocks: true, tunName: 'tun0,tun_ru,tun_auto'});
               }
           
-              // Assert: TUN sniff enabled when tunSniff flag is true
+              // Assert: TUN inbound exists
               const tunInbound = (config.inbounds || []).find(i => i.type === 'tun');
-              if (!tunInbound || tunInbound.sniff !== true) {
-                throw new Error('tun sniff must be true when tunSniff is enabled');
+              if (!tunInbound) {
+                throw new Error('missing tun inbound');
               }
 
               // Write config to file

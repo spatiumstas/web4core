@@ -1,5 +1,5 @@
 :root {
-    --bg-dark: #1b2434;
+    --bg-dark: #161c27;
     --primary: #379dd8;
     --error: #e86f6f;
     --text: #e2e8f0;
@@ -42,7 +42,7 @@ header {
 
 header pre {
     display: grid;
-    font-size: max(0.68rem, 1.9vmin) !important;
+    font-size: max(0.68rem, 1.9vmin);
     justify-content: center;
     align-content: center;
     text-align: center;
@@ -60,6 +60,14 @@ main.container {
     align-items: center;
 }
 
+.container--stretch { align-items: stretch; }
+.row--left { justify-content: flex-start; }
+.gap-12 { gap: 12px; }
+.mt-8 { margin-top: 8px; }
+.is-hidden { display: none !important; }
+#tunName { min-width: 180px; }
+.full { width: 100%; max-width: var(--form-max); }
+
 .row {
     display: flex;
     gap: 10px;
@@ -72,6 +80,10 @@ main.container {
 label {
     font-size: 14px;
     color: var(--text);
+}
+
+#asciiHeader {
+    cursor: pointer;
 }
 
 .input, select, textarea {
@@ -232,15 +244,12 @@ input[type="submit"][disabled] {
     border-radius: 999px;
     background: rgba(55, 157, 216, 0.25);
     border: 1px solid var(--primary);
-    transition: transform .2s ease;
-}
-
-.core-toggle[data-core="singbox"] .knob {
-    transform: translateX(2px);
+    transition: left .2s ease;
+    left: 2px;
 }
 
 .core-toggle[data-core="xray"] .knob {
-    transform: translateX(calc(100% + 6px));
+    left: calc(50% + 2px);
 }
 
 .custom-checkbox {
@@ -320,11 +329,6 @@ input[type="submit"][disabled] {
     visibility: hidden;
 }
 
-#errorBlock {
-    height: 24px;
-    min-height: 24px;
-}
-
 #errorText {
     line-height: 24px;
     white-space: nowrap;
@@ -368,10 +372,6 @@ input[type="submit"][disabled] {
         top: 3px;
         bottom: 3px;
         width: calc(50% - 6px);
-    }
-
-    .core-toggle[data-core="xray"] .knob {
-        transform: translateX(calc(100% + 8px));
     }
 
     .input {
