@@ -217,9 +217,10 @@ input[type="submit"][disabled] {
     border-radius: 999px;
     border: 1px solid var(--border);
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr 1fr 1fr;
     align-items: center;
     user-select: none;
+    -webkit-tap-highlight-color: transparent;
 }
 
 .core-toggle .labels {
@@ -240,7 +241,7 @@ input[type="submit"][disabled] {
     z-index: 1;
     top: 2px;
     bottom: 2px;
-    width: calc(50% - 4px);
+    width: calc(33.333% - 4px);
     border-radius: 999px;
     background: rgba(55, 157, 216, 0.25);
     border: 1px solid var(--primary);
@@ -248,9 +249,8 @@ input[type="submit"][disabled] {
     left: 2px;
 }
 
-.core-toggle[data-core="xray"] .knob {
-    left: calc(50% + 2px);
-}
+.core-toggle[data-core="xray"] .knob { left: calc(33.333% + 2px); }
+.core-toggle[data-core="mihomo"] .knob { left: calc(66.666% + 2px); }
 
 .custom-checkbox {
     position: relative;
@@ -265,6 +265,7 @@ input[type="submit"][disabled] {
     background: var(--bg-dark);
     transition: all 0.2s ease;
     min-width: fit-content;
+    -webkit-tap-highlight-color: transparent;
 }
 
 .custom-checkbox:hover {
@@ -371,7 +372,7 @@ input[type="submit"][disabled] {
     .core-toggle .knob {
         top: 3px;
         bottom: 3px;
-        width: calc(50% - 6px);
+        width: calc(33.333% - 6px);
     }
 
     .input {

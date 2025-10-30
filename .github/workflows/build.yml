@@ -644,9 +644,108 @@ jobs:
           # Run the test
           node test_xray.js
 
+  validate-mihomo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Mihomo
+        run: |
+          set -e
+          API_JSON=$(curl -s https://api.github.com/repos/MetaCubeX/mihomo/releases/latest)
+          VERSION=$(echo "$API_JSON" | jq -r '.tag_name')
+          echo "Latest Mihomo version: $VERSION"
+
+          # Prefer linux-amd64 .gz assets (v3 > v2 > v1)
+          URL=$(echo "$API_JSON" | jq -r '
+            (
+              .assets[] | select(.name | test("^mihomo-linux-amd64-v3-.*\\.gz$")) | .browser_download_url
+            ),(
+              .assets[] | select(.name | test("^mihomo-linux-amd64-v2-.*\\.gz$")) | .browser_download_url
+            ),(
+              .assets[] | select(.name | test("^mihomo-linux-amd64-v1-.*\\.gz$")) | .browser_download_url
+            ) | select(.!=null) | .  ' | head -n1)
+          if [[ -z "$URL" ]]; then echo "Failed to resolve Mihomo download URL"; exit 1; fi
+          echo "Downloading Mihomo from $URL"
+          wget -O /tmp/mihomo.dl "$URL"
+          # All selected artifacts are .gz: write decompressed binary
+          gunzip -c /tmp/mihomo.dl | sudo tee /usr/local/bin/mihomo >/dev/null
+          sudo chmod +x /usr/local/bin/mihomo
+
+      - name: Generate and validate Mihomo configs
+        env:
+          CONFIGS: ${{ secrets.CONFIGS }}
+        run: |
+          # Create test script
+          cat > test_mihomo.js << 'EOF'
+          const fs = require('fs');
+          const vm = require('vm');
+          const { execSync } = require('child_process');
+          const mainJs = fs.readFileSync('src/main.js', 'utf8');
+          const sandbox = {
+            console, require, module: {exports:{}}, exports: {}, global, process, Buffer,
+            URL: require('url').URL,
+            atob: (s)=>Buffer.from(s,'base64').toString('binary'),
+            btoa: (s)=>Buffer.from(s,'binary').toString('base64')
+          };
+          vm.createContext(sandbox);
+          vm.runInContext(mainJs, sandbox);
+
+          const raw = process.env.CONFIGS || '';
+          const links = raw.split('\n').map(s=>s.trim()).filter(s=>s && !s.startsWith('#') && s.includes('://'));
+          const beans = links
+            .map(l => sandbox.parseLink(l))
+            .filter(b => !['mieru','sdns'].includes(b.proto))
+            .filter(b => !(b.proto === 'socks' && b.socks && b.socks.type === 'socks4'));
+
+          let fail = 0, ok = 0;
+          console.log('Found', beans.length, 'Mihomo-compatible links');
+
+          for (let i=0;i<beans.length;i++){
+            try{
+              const bean = beans[i];
+              const cfgObj = sandbox.buildMihomoConfig([bean]);
+              const yaml = sandbox.overlayMihomoYaml(sandbox.MIHOMO_DEFAULT_TEMPLATE, cfgObj.proxies, cfgObj['proxy-groups']);
+              const f = `mihomo_${i}.yaml`;
+              fs.writeFileSync(f, yaml);
+              console.log(`Testing Mihomo config ${i+1}/${beans.length}: ${cfgObj.proxies[0].name || 'unnamed'}`);
+              const out = execSync(`mihomo -t -f ${f}`, {stdio:'pipe', encoding:'utf8'});
+              // mihomo -t prints nothing on success; keep a marker for traceability
+              console.log(`✅ Passed ${i+1}`);
+              ok++;
+            }catch(e){
+              console.log('❌ Mihomo single config failed:', e.message);
+              if (e.stdout) console.log('   Stdout:', e.stdout.toString());
+              if (e.stderr) console.log('   Stderr:', e.stderr.toString());
+              fail++;
+            }
+          }
+
+          // Multi-config
+          try{
+            const cfgObj = sandbox.buildMihomoConfig(beans);
+            const yaml = sandbox.overlayMihomoYaml(sandbox.MIHOMO_DEFAULT_TEMPLATE, cfgObj.proxies, cfgObj['proxy-groups']);
+            fs.writeFileSync('mihomo_all.yaml', yaml);
+            execSync('mihomo -t -f mihomo_all.yaml', {stdio:'pipe', encoding:'utf8'});
+            console.log('✅ Mihomo multi-config valid');
+          }catch(e){
+            console.log('❌ Mihomo multi-config failed:', e.message);
+            process.exit(1);
+          }
+
+          if (fail>0){
+            console.log(`❌ ${fail} Mihomo configs failed, ${ok} passed`);
+            process.exit(1);
+          } else {
+            console.log(`✅ All ${ok} Mihomo configs passed`);
+          }
+          EOF
+
+          node test_mihomo.js
+
   build:
     runs-on: ubuntu-latest
-    needs: [ validate-singbox, validate-singbox-extended, validate-xray ]
+    needs: [ validate-singbox, validate-singbox-extended, validate-xray, validate-mihomo ]
     if: github.ref == 'refs/heads/main'
 
     concurrency:

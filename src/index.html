@@ -41,6 +41,7 @@
             <div class="labels">
                 <span id="lblSing">sing-box</span>
                 <span id="lblXray">Xray</span>
+                <span id="lblMihomo">Mihomo</span>
             </div>
         </div>
         <label class="custom-checkbox">
@@ -68,7 +69,7 @@
 
     <div class="full">
         <textarea id="links" class="input full"
-                  placeholder="vless://...&#10;vmess://...&#10;trojan://...&#10;ss://...&#10;socks://...&#10;http://user:pass@host:port&#10;hy2://...&#10;tuic://...&#10;mieru://... (or json)&#10;sdns://...&#10"></textarea>
+                  placeholder="subscription link&#10;vless://...&#10;vmess://...&#10;trojan://...&#10;ss://...&#10;socks://...&#10;http://user:pass@host:port&#10;hy2://...&#10;tuic://...&#10;mieru://... (or json)&#10;sdns://...&#10"></textarea>
     </div>
 
     <div id="errorBlock" class="row row--left" role="status" aria-live="polite">
@@ -77,6 +78,7 @@
 
     <div class="button-row">
         <input type="submit" id="gen" value="Generate"/>
+        <button id="btnReverse" class="btn-primary is-hidden" aria-label="Reverse">Reverse</button>
     </div>
 
     <div id="outBlock" class="hidden full">
@@ -101,6 +103,7 @@
     const coreToggle = document.getElementById('coreToggle');
     const lblSing = document.getElementById('lblSing');
     const lblXray = document.getElementById('lblXray');
+    const lblMihomo = document.getElementById('lblMihomo');
     const outBlock = document.getElementById('outBlock');
     const errorBlock = document.getElementById('errorBlock');
     const errorText = document.getElementById('errorText');
@@ -139,6 +142,11 @@
         setCore('xray');
         validateField(false);
     });
+    lblMihomo.addEventListener('click', (e) => {
+        e.stopPropagation();
+        setCore('mihomo');
+        validateField(false);
+    });
 
     let dragging = false;
     let startX = 0;
@@ -167,11 +175,6 @@
             setCore('singbox');
             moved = true;
         }
-    });
-    coreToggle.addEventListener('click', () => {
-        if (suppressClick) return;
-        setCore(currentCore === 'singbox' ? 'xray' : 'singbox');
-        validateField(false);
     });
 
     const outEl = document.getElementById('out');
@@ -223,10 +226,16 @@
                 const unsupported = beans.filter(b => ['hy2', 'tuic', 'mieru', 'sdns'].includes(b.proto));
                 if (unsupported.length) {
                     const names = Array.from(new Set(unsupported.map(b => b.proto))).join(', ');
-                    throw new Error('Xray does not support: ' + names + '. Use sing-box.');
+                    throw new Error('Xray does not support: ' + names);
+                }
+            } else if (currentCore === 'mihomo') {
+                const unsupported = beans.filter(b => ['mieru', 'sdns'].includes(b.proto));
+                if (unsupported.length) {
+                    const names = Array.from(new Set(unsupported.map(b => b.proto))).join(', ');
+                    throw new Error('Mihomo does not support: ' + names);
                 }
             }
-            if (!useExtended) {
+            if (!useExtended && currentCore === 'singbox') {
                 const hasExtendedOnly = beans.some(b => b.proto === 'mieru' || b.proto === 'sdns');
                 if (hasExtendedOnly) {
                     throw new Error('Enable Extended to generate Mieru/SDNS configurations');
@@ -254,7 +263,7 @@
                     opts.dnsBeans = dnsBeans;
                     finalConfig = buildSingBoxConfig(outbounds, opts);
                 }
-            } else {
+            } else if (currentCore === 'xray') {
                 if (beans.length === 1) {
                     const ob = buildXrayOutbound(beans[0]);
                     finalConfig = buildXrayConfig(ob);
@@ -267,6 +276,20 @@
                     });
                     finalConfig = buildXrayConfig(outbounds);
                 }
+            } else if (currentCore === 'mihomo') {
+                const unsupported = beans.filter(b => ['mieru', 'sdns'].includes(b.proto));
+                if (unsupported.length) {
+                    const names = Array.from(new Set(unsupported.map(b => b.proto))).join(', ');
+                    throw new Error('Mihomo does not support: ' + names);
+                }
+                const outBeans = beans.filter(b => !['mieru', 'sdns'].includes(b.proto));
+                const yamlObj = buildMihomoConfig(outBeans);
+                outEl.value = overlayMihomoYaml(MIHOMO_DEFAULT_TEMPLATE, yamlObj.proxies, yamlObj['proxy-groups']);
+                errorText.textContent = '';
+                outBlock.classList.remove('hidden');
+                if (genBtn) genBtn.disabled = false;
+                document.getElementById('links').classList.remove('input-error');
+                return true;
             }
             outEl.value = JSON.stringify(finalConfig, null, 2);
             errorText.textContent = '';
@@ -286,6 +309,42 @@
     }
 
     document.getElementById('gen').addEventListener('click', () => {
+        const genBtn = document.getElementById('gen');
+        const linksEl = document.getElementById('links');
+        const raw = (linksEl?.value || '').trim();
+        const maybeUrl = raw.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+        const isSingleHttp = maybeUrl.length === 1 && /^https?:\/\//i.test(maybeUrl[0]) && !/@/.test(maybeUrl[0]);
+        const hasPathBeyondRoot = (() => {
+            try {
+                const u = new URL(maybeUrl[0]);
+                return (u.pathname && u.pathname !== '/');
+            } catch {
+                return false;
+            }
+        })();
+        const shouldTreatAsSub = isSingleHttp && hasPathBeyondRoot;
+        if (shouldTreatAsSub && window._fetchSubscription) {
+            if (genBtn) genBtn.disabled = true;
+            errorText.textContent = '';
+            window._fetchSubscription(maybeUrl[0]).then(text => {
+                if (!text) {
+                    throw new Error('Subscription returned no valid links');
+                }
+                linksEl.value = text;
+                const ok = validateField(true);
+                if (!ok) {
+                    linksEl.value = raw;
+                }
+            }).catch((e) => {
+                const msg = (e && e.message) ? e.message : 'Network error';
+                errorText.textContent = 'Failed to fetch subscription: ' + msg;
+                document.getElementById('outBlock').classList.add('hidden');
+                linksEl.classList.add('input-error');
+            }).finally(() => {
+                if (genBtn) genBtn.disabled = false;
+            });
+            return;
+        }
         const ok = validateField(true);
         if (ok) {
             const block = document.getElementById('outBlock');
@@ -294,7 +353,10 @@
             }
             const outEl = document.getElementById('out');
             if (outEl && outEl.focus) {
-                try { outEl.focus({preventScroll: true}); } catch {}
+                try {
+                    outEl.focus({preventScroll: true});
+                } catch {
+                }
             }
         }
     });
@@ -313,11 +375,12 @@
         }
     });
     btnDownload.addEventListener('click', () => {
-        const blob = new Blob([outEl.value || ''], {type: 'application/json'});
+        const isYaml = currentCore === 'mihomo';
+        const blob = new Blob([outEl.value || ''], {type: isYaml ? 'text/yaml' : 'application/json'});
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = (currentCore === 'singbox' ? 'singbox_config.json' : 'xray_config.json');
+        a.download = (currentCore === 'singbox' ? 'singbox_config.json' : (currentCore === 'xray' ? 'xray_config.json' : 'mihomo_config.yaml'));
         a.click();
         URL.revokeObjectURL(url);
     });
@@ -328,10 +391,104 @@
     const genBtn = document.getElementById('gen');
     if (genBtn) genBtn.disabled = true;
 
-    const triggerLiveValidation = () => validateField(false);
+    const btnReverse = document.getElementById('btnReverse');
+
+    function looksLikeJsonConfig(text) {
+        const t = (text || '').trim();
+        if (!t || (t[0] !== '{' && t[0] !== '[')) return false;
+        try {
+            const obj = JSON.parse(t);
+            return obj && typeof obj === 'object' && Array.isArray(obj.outbounds) && obj.outbounds.length > 0;
+        } catch {
+            return false;
+        }
+    }
+
+    function isReverseOnlyJson(text) {
+        const t = (text || '').trim();
+        if (!t || (t[0] !== '{' && t[0] !== '[')) return false;
+        try {
+            const obj = JSON.parse(t);
+            return !!(obj && typeof obj === 'object' && Array.isArray(obj.outbounds) && obj.outbounds.length > 0 && !obj.profiles);
+        } catch {
+            return false;
+        }
+    }
+
+    function toggleReverseVisibility() {
+        if (!btnReverse) return;
+        const raw = (document.getElementById('links')?.value || '').trim();
+        const show = looksLikeJsonConfig(raw);
+        btnReverse.classList.toggle('is-hidden', !show);
+    }
+
+    const triggerLiveValidation = () => {
+        if (linksInput && isReverseOnlyJson(linksInput.value)) return;
+        validateField(false);
+    };
     if (linksInput) {
-        linksInput.addEventListener('input', triggerLiveValidation);
-        linksInput.addEventListener('blur', triggerLiveValidation);
+        const handleJsonMode = () => {
+            const raw = (linksInput.value || '').trim();
+            const reverseOnly = isReverseOnlyJson(raw);
+            const genBtn = document.getElementById('gen');
+            if (genBtn) genBtn.disabled = reverseOnly || !raw;
+            if (reverseOnly) {
+                errorText.textContent = '';
+                outBlock.classList.add('hidden');
+                linksInput.classList.remove('input-error');
+            }
+        };
+        const updateJsonUiState = () => {
+            toggleReverseVisibility();
+            handleJsonMode();
+        };
+        linksInput.addEventListener('input', () => {
+            triggerLiveValidation();
+            updateJsonUiState();
+        });
+        linksInput.addEventListener('blur', () => {
+            triggerLiveValidation();
+            updateJsonUiState();
+        });
+        updateJsonUiState();
+    }
+    if (btnReverse) {
+        toggleReverseVisibility();
+        btnReverse.addEventListener('click', () => {
+            const raw = (document.getElementById('links')?.value || '').trim();
+            try {
+                if (!window._reverseConvert) throw new Error('Reverse converter is not available');
+                const text = window._reverseConvert(raw);
+                if (!text) throw new Error('No links generated from config');
+                outEl.value = text;
+                errorText.textContent = '';
+                outBlock.classList.remove('hidden');
+                document.getElementById('links').classList.remove('input-error');
+                const block = document.getElementById('outBlock');
+                if (block && block.scrollIntoView) block.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'center',
+                    inline: 'nearest'
+                });
+                if (outEl && outEl.focus) {
+                    try {
+                        outEl.focus({preventScroll: true});
+                    } catch {
+                    }
+                }
+            } catch (e) {
+                errorText.textContent = (e && e.message) ? e.message : 'Reverse failed';
+                outBlock.classList.add('hidden');
+                document.getElementById('links').classList.add('input-error');
+            }
+        });
+    }
+
+    const header = document.getElementById('asciiHeader');
+    if (header) {
+        header.addEventListener('click', function () {
+            location.reload();
+        });
     }
 </script>
 </body>
