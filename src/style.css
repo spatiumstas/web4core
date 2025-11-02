@@ -60,13 +60,34 @@ main.container {
     align-items: center;
 }
 
-.container--stretch { align-items: stretch; }
-.row--left { justify-content: flex-start; }
-.gap-12 { gap: 12px; }
-.mt-8 { margin-top: 8px; }
-.is-hidden { display: none !important; }
-#tunName { min-width: 180px; }
-.full { width: 100%; max-width: var(--form-max); }
+.container--stretch {
+    align-items: stretch;
+}
+
+.row--left {
+    justify-content: flex-start;
+}
+
+.gap-12 {
+    gap: 12px;
+}
+
+.mt-8 {
+    margin-top: 8px;
+}
+
+.is-hidden {
+    display: none !important;
+}
+
+#tunName {
+    min-width: 180px;
+}
+
+.full {
+    width: 100%;
+    max-width: var(--form-max);
+}
 
 .row {
     display: flex;
@@ -249,8 +270,13 @@ input[type="submit"][disabled] {
     left: 2px;
 }
 
-.core-toggle[data-core="xray"] .knob { left: calc(33.333% + 2px); }
-.core-toggle[data-core="mihomo"] .knob { left: calc(66.666% + 2px); }
+.core-toggle[data-core="xray"] .knob {
+    left: calc(33.333% + 2px);
+}
+
+.core-toggle[data-core="mihomo"] .knob {
+    left: calc(66.666% + 2px);
+}
 
 .custom-checkbox {
     position: relative;

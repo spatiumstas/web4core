@@ -49,6 +49,8 @@ const FETCH_INIT = {
 const PUBLIC_CORS_FALLBACKS = [
     (x) => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(x)
 ];
+const URLTEST_URL = 'https://www.gstatic.com/generate_204';
+const URLTEST_INTERVAL = '3m';
 
 function buildSchemesRegex(flags) {
     const escaped = SUPPORTED_SCHEMES.map(s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
@@ -1063,12 +1065,26 @@ function buildSingBoxInbounds(opts) {
         }
     }
     if (opts.addSocks) {
-        inbounds.push({
-            tag: 'mixed-in',
-            type: 'mixed',
-            listen: '127.0.0.1',
-            listen_port: 2080,
-        });
+        const specs = parseTunSpec(opts.tunName || '');
+        if (opts.addTun && opts.perTunMixed && specs.length > 1) {
+            const ifaces = specs.map(x => x.name);
+            for (let i = 0; i < ifaces.length; i++) {
+                const name = ifaces[i];
+                inbounds.push({
+                    tag: `mixed-in-${name}`,
+                    type: 'mixed',
+                    listen: '127.0.0.1',
+                    listen_port: 2080 + i,
+                });
+            }
+        } else {
+            inbounds.push({
+                tag: 'mixed-in',
+                type: 'mixed',
+                listen: '127.0.0.1',
+                listen_port: 2080,
+            });
+        }
     }
     return inbounds;
 }
@@ -1095,20 +1111,25 @@ function buildSingBoxConfig(outboundsWithTags, opts) {
     const hasMany = tags.length > 1;
     const tunSpecs = parseTunSpec(opts?.tunName || '');
     const inboundTagFor = (name) => (tunSpecs.length > 1 ? `tun-in-${name}` : 'tun-in');
+    const mixedInboundTagFor = (name) => (tunSpecs.length > 1 ? `mixed-in-${name}` : 'mixed-in');
+    let createdGlobalAuto = false;
+    let createdGlobalSelector = false;
 
     if (hasMany) {
         const hasPerTunAuto = tunSpecs.some(t => t.mode === 'auto');
-        if (!hasPerTunAuto) {
+        const hasTun = tunSpecs.length > 0;
+        if (!hasPerTunAuto && !hasTun) {
             managementOutbounds.push({
                 type: 'urltest',
                 tag: 'auto',
                 outbounds: tags,
-                url: 'https://www.gstatic.com/generate_204',
-                interval: '3m',
+                url: URLTEST_URL,
+                interval: URLTEST_INTERVAL,
                 tolerance: 50,
                 idle_timeout: '30m',
                 interrupt_exist_connections: false
             });
+            createdGlobalAuto = true;
             managementOutbounds.push({
                 type: 'selector',
                 tag: 'select',
@@ -1116,7 +1137,8 @@ function buildSingBoxConfig(outboundsWithTags, opts) {
                 default: 'auto',
                 interrupt_exist_connections: false
             });
-        } else {
+            createdGlobalSelector = true;
+        } else if (!hasTun) {
             managementOutbounds.push({
                 type: 'selector',
                 tag: 'select',
@@ -1124,36 +1146,74 @@ function buildSingBoxConfig(outboundsWithTags, opts) {
                 default: tags[0] || 'direct',
                 interrupt_exist_connections: false
             });
+            createdGlobalSelector = true;
         }
     } else {
         const onlyTag = tags[0] || 'direct';
-        managementOutbounds.push({
-            type: 'selector',
-            tag: 'select',
-            outbounds: [onlyTag],
-            default: onlyTag,
-            interrupt_exist_connections: false
-        });
+        const hasTun = tunSpecs.length > 0;
+        if (!hasTun) {
+            managementOutbounds.push({
+                type: 'selector',
+                tag: 'select',
+                outbounds: [onlyTag],
+                default: onlyTag,
+                interrupt_exist_connections: false
+            });
+            createdGlobalSelector = true;
+        }
     }
 
     if (tunSpecs.length > 0) {
+        const hasPerTunAuto = tunSpecs.some(t => t.mode === 'auto');
+        const globalAutoAvailable = createdGlobalAuto === true;
         const autoNames = tunSpecs.filter(t => t.mode === 'auto').map(t => t.name);
         const selectNames = tunSpecs.filter(t => t.mode === 'select').map(t => t.name);
+
         for (const name of autoNames) {
-            managementOutbounds.push({
-                type: 'urltest',
-                tag: `auto-${name}`,
-                outbounds: tags,
-                url: 'https://www.gstatic.com/generate_204',
-                interval: '3m',
-                tolerance: 50,
-                idle_timeout: '30m',
-                interrupt_exist_connections: false
-            });
-            routeRules.push({inbound: inboundTagFor(name), outbound: `auto-${name}`});
+            if (hasMany) {
+                managementOutbounds.push({
+                    type: 'urltest',
+                    tag: `auto-${name}`,
+                    outbounds: tags,
+                    url: URLTEST_URL,
+                    interval: URLTEST_INTERVAL,
+                    tolerance: 50,
+                    idle_timeout: '30m',
+                    interrupt_exist_connections: false
+                });
+                routeRules.push({inbound: inboundTagFor(name), outbound: `auto-${name}`});
+            } else {
+                const onlyTag = tags[0] || 'direct';
+                routeRules.push({inbound: inboundTagFor(name), outbound: onlyTag});
+            }
         }
         for (const name of selectNames) {
-            routeRules.push({inbound: inboundTagFor(name), outbound: 'select'});
+            if (hasMany) {
+                const outs = globalAutoAvailable ? ['auto', ...tags] : [...tags];
+                const def = globalAutoAvailable ? 'auto' : (tags[0] || 'direct');
+                managementOutbounds.push({
+                    type: 'selector',
+                    tag: `select-${name}`,
+                    outbounds: outs,
+                    default: def,
+                    interrupt_exist_connections: false
+                });
+                routeRules.push({inbound: inboundTagFor(name), outbound: `select-${name}`});
+            } else {
+                const onlyTag = tags[0] || 'direct';
+                routeRules.push({inbound: inboundTagFor(name), outbound: onlyTag});
+            }
+        }
+
+        if (opts.addSocks && opts.perTunMixed) {
+            for (const name of autoNames) {
+                const onlyTag = tags[0] || 'direct';
+                routeRules.push({inbound: mixedInboundTagFor(name), outbound: hasMany ? `auto-${name}` : onlyTag});
+            }
+            for (const name of selectNames) {
+                const onlyTag = tags[0] || 'direct';
+                routeRules.push({inbound: mixedInboundTagFor(name), outbound: hasMany ? `select-${name}` : onlyTag});
+            }
         }
     }
 
@@ -1168,7 +1228,7 @@ function buildSingBoxConfig(outboundsWithTags, opts) {
         log: {level: 'info'},
         inbounds,
         outbounds,
-        route: {rules: routeRules, final: 'select'},
+        route: {rules: routeRules, final: (createdGlobalSelector ? 'select' : 'direct')},
         experimental: {
             cache_file: {enabled: true},
             clash_api: {
@@ -1286,7 +1346,7 @@ function buildXrayOutbound(bean) {
     return outbound;
 }
 
-function buildXrayConfig(outbounds) {
+function buildXrayConfig(outbounds, opts) {
     if (!Array.isArray(outbounds)) outbounds = [outbounds];
     if (outbounds.length === 1) {
         return {
@@ -1296,23 +1356,48 @@ function buildXrayConfig(outbounds) {
         };
     }
     const basePort = 1080;
-    const inbounds = outbounds.map((ob, idx) => ({
-        tag: `socks-in-${idx + 1}`,
-        port: basePort + idx,
-        listen: '127.0.0.1',
-        protocol: 'socks',
-        settings: {udp: true}
-    }));
-    const rules = outbounds.map((ob, idx) => ({
-        inboundTag: [`socks-in-${idx + 1}`],
-        outboundTag: ob.tag || 'proxy'
-    }));
-    return {
+    const enableBalancer = !!(opts && opts.enableBalancer);
+    const inbounds = enableBalancer
+        ? [{tag: 'socks-in', port: basePort, listen: '127.0.0.1', protocol: 'socks', settings: {udp: true}}]
+        : outbounds.map((ob, idx) => ({
+            tag: `socks-in-${idx + 1}`,
+            port: basePort + idx,
+            listen: '127.0.0.1',
+            protocol: 'socks',
+            settings: {udp: true}
+        }));
+    const rules = enableBalancer
+        ? [{inboundTag: ['socks-in'], balancerTag: 'auto'}]
+        : outbounds.map((ob, idx) => ({
+            inboundTag: [`socks-in-${idx + 1}`],
+            outboundTag: ob.tag || 'proxy'
+        }));
+    const routing = enableBalancer
+        ? {
+            rules,
+            balancers: [{
+                tag: 'auto',
+                selector: outbounds.map(ob => ob.tag).filter(Boolean),
+                strategy: {type: 'leastPing'}
+            }]
+        }
+        : {rules};
+    const config = {
         log: {loglevel: 'warning'},
         inbounds,
         outbounds: [...outbounds, {tag: 'direct', protocol: 'freedom'}, {tag: 'block', protocol: 'blackhole'}],
-        routing: {rules}
+        routing
     };
+    if (enableBalancer) {
+        const selector = outbounds.map(ob => ob.tag).filter(Boolean);
+        config.observatory = {
+            subjectSelector: selector,
+            probeURL: URLTEST_URL,
+            probeInterval: URLTEST_INTERVAL,
+            enableConcurrency: selector.length > 8
+        };
+    }
+    return config;
 }
 
 function toYamlScalar(value, key) {
@@ -1580,7 +1665,7 @@ function buildMihomoConfig(beans) {
     return config;
 }
 
-function overlayMihomoYaml(baseYamlText, proxies, groups) {
+function overlayMihomoYaml(baseYamlText, proxies, groups, providers, rules) {
     const text = (baseYamlText || '').replace(/\r\n/g, '\n');
     const lines = text.split('\n');
     const findSection = (key) => {
@@ -1605,6 +1690,8 @@ function overlayMihomoYaml(baseYamlText, proxies, groups) {
     };
     replaceSection('proxies', proxies);
     replaceSection('proxy-groups', groups);
+    if (providers) replaceSection('proxy-providers', providers);
+    if (rules) replaceSection('rules', rules);
     return lines.join('\n');
 }
 
@@ -1634,7 +1721,7 @@ const MIHOMO_DEFAULT_TEMPLATE = [
 ].join('\n');
 
 try {
-    if (typeof global !== 'undefined') global.MIHOMO_DEFAULT_TEMPLATE = MIHOMO_DEFAULT_TEMPLATE;
+    if (typeof globalThis !== 'undefined') globalThis.MIHOMO_DEFAULT_TEMPLATE = MIHOMO_DEFAULT_TEMPLATE;
 } catch {
 }
 
@@ -1678,9 +1765,9 @@ async function fetchSubscription(url) {
             return 'Request timeout (15s)';
         }
         if (msg.includes('NetworkError') || msg.includes('Failed to fetch') || msg.includes('Network request failed')) {
-            return 'Network error (check connection or CORS)';
+            return 'Network error, check connection';
         }
-        return 'CORS error (using fallback proxy)';
+        return 'CORS error, using fallback proxy';
     }
 
     async function fetchWithFallback(u, depth) {
@@ -1746,10 +1833,6 @@ async function fetchSubscription(url) {
     const allowed = new Set(SUPPORTED_SCHEMES);
     const filtered = lines.filter(line => allowed.has((line.split(':', 1)[0] || '').toLowerCase()));
     return filtered.join('\n');
-}
-
-if (typeof window !== 'undefined') {
-    window._fetchSubscription = fetchSubscription;
 }
 
 function buildLinkFromBean(bean) {
@@ -2170,6 +2253,22 @@ function detectConfigAndConvertToLinks(raw) {
 }
 
 try {
-    if (typeof window !== 'undefined') window._reverseConvert = detectConfigAndConvertToLinks;
+    if (typeof globalThis !== 'undefined') {
+        globalThis.web4core = Object.assign({}, globalThis.web4core || {}, {
+            buildBeansFromInput,
+            validateBean,
+            computeTag,
+            buildSingBoxOutbound,
+            buildSingBoxConfig,
+            buildXrayOutbound,
+            buildXrayConfig,
+            buildMihomoConfig,
+            buildMihomoYaml: function (proxies, groups, providers, rules) {
+                return overlayMihomoYaml(MIHOMO_DEFAULT_TEMPLATE, proxies, groups, providers, rules);
+            },
+            reverseConvert: detectConfigAndConvertToLinks,
+            fetchSubscription
+        });
+    }
 } catch {
 }
