@@ -1,12 +1,3 @@
-if (typeof document !== 'undefined') {
-    document.addEventListener('keydown', function (e) {
-        if ((e.ctrlKey || e.metaKey) && e.code === 'KeyS') {
-            e.preventDefault();
-            document.querySelector('input[type="submit"]').click();
-        }
-    });
-}
-
 function decodeBase64Url(input) {
     try {
         const s = input.replace(/-/g, '+').replace(/_/g, '/');
@@ -47,6 +38,7 @@ const FETCH_INIT = {
     redirect: 'follow'
 };
 const PUBLIC_CORS_FALLBACKS = [
+    (x) => 'https://sub.web2core.workers.dev/?url=' + encodeURIComponent(x),
     (x) => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(x)
 ];
 const URLTEST_URL = 'https://www.gstatic.com/generate_204';
@@ -312,6 +304,12 @@ function validateBean(bean) {
             break;
         default:
             throw new Error('Unknown protocol: ' + p);
+    }
+    if (bean.stream && bean.stream.reality && typeof bean.stream.reality.sid === 'string') {
+        const sidTrimmed = bean.stream.reality.sid.trim();
+        if (sidTrimmed && sidTrimmed.length > 16) {
+            throw new Error('REALITY shortId is too long (max 16 hex characters)');
+        }
     }
 }
 
@@ -1044,6 +1042,7 @@ function buildSingBoxOutbound(bean) {
 
 function buildSingBoxInbounds(opts) {
     const inbounds = [];
+    const androidMode = !!opts.androidMode;
     if (opts.addTun) {
         const specs = parseTunSpec(opts.tunName || '');
         const ifaces = specs.length ? specs.map(x => x.name) : ['singtun0'];
@@ -1051,15 +1050,17 @@ function buildSingBoxInbounds(opts) {
             const name = ifaces[i];
             const tag = ifaces.length > 1 ? `tun-in-${name}` : 'tun-in';
             const octet = ifaces.length > 1 ? (i === 0 ? 1 : i * 10) : 1;
-            const cidr = ifaces.length > 1 ? `${`172.19.0.${octet}`}/30` : '172.19.0.1/32';
+            const baseAddr = `172.19.0.${octet}`;
+            const prefix = (ifaces.length > 1 || androidMode) ? 30 : 32;
+            const cidr = `${baseAddr}/${prefix}`;
             const tun = {
                 type: 'tun',
                 tag,
                 interface_name: name,
                 address: [cidr],
                 stack: 'gvisor',
-                auto_route: false,
-                strict_route: false
+                auto_route: androidMode ? true : false,
+                strict_route: androidMode ? true : false
             };
             inbounds.push(tun);
         }
@@ -1217,6 +1218,11 @@ function buildSingBoxConfig(outboundsWithTags, opts) {
         }
     }
 
+    if (opts?.androidMode) {
+        routeRules.unshift({protocol: 'dns', action: 'hijack-dns'});
+        routeRules.unshift({action: 'sniff'});
+    }
+
     routeRules.push({ip_version: 6, outbound: 'block'});
     const outbounds = [
         ...managementOutbounds,
@@ -1224,30 +1230,51 @@ function buildSingBoxConfig(outboundsWithTags, opts) {
         {tag: 'direct', type: 'direct'},
         {tag: 'block', type: 'block'}
     ];
+    const experimental = {};
+    if (!opts?.androidMode) {
+        experimental.cache_file = {enabled: true};
+        experimental.clash_api = {
+            external_controller: '[::]:9090',
+            external_ui: 'ui',
+            external_ui_download_detour: 'direct',
+            access_control_allow_private_network: true,
+            secret: opts?.genClashSecret ? generateSecretHex32() : ''
+        };
+    }
     const config = {
         log: {level: 'info'},
         inbounds,
         outbounds,
-        route: {rules: routeRules, final: (createdGlobalSelector ? 'select' : 'direct')},
-        experimental: {
-            cache_file: {enabled: true},
-            clash_api: {
-                external_controller: '[::]:9090',
-                external_ui: 'ui',
-                external_ui_download_detour: 'direct',
-                access_control_allow_private_network: true,
-                secret: opts?.genClashSecret ? generateSecretHex32() : ''
-            },
-        }
+        route: {rules: routeRules, final: (createdGlobalSelector ? 'select' : 'direct')}
     };
+    if (Object.keys(experimental).length > 0) {
+        config.experimental = experimental;
+    }
 
     const dnsServers = (opts?.useExtended ? buildDNSServers(opts?.dnsBeans || []) : []);
     if (dnsServers.length > 0) {
         config.dns = {servers: dnsServers};
         config.route.default_domain_resolver = dnsServers[0]?.tag || '';
+    } else if (opts?.androidMode) {
+        config.dns = {
+            servers: [
+                {
+                    type: 'local',
+                    tag: 'local'
+                }
+            ],
+            strategy: 'ipv4_only'
+        };
+        config.route.default_domain_resolver = 'local';
+    }
+
+    if (opts?.androidMode) {
+        config.route.auto_detect_interface = true;
+        config.route.override_android_vpn = true;
     }
 
     if (opts?.useExtended) {
+        if (!config.experimental) config.experimental = {};
         config.experimental.unified_delay = {enabled: true};
     }
 
@@ -1275,11 +1302,10 @@ function buildXrayOutbound(bean) {
         if (s.fp) streamSettings.realitySettings.fingerprint = s.fp;
     }
     if (streamSettings.network === 'ws') {
-        streamSettings.network = 'xhttp';
-        streamSettings.xhttpSettings = {};
-        if (s.host) streamSettings.xhttpSettings.host = s.host;
-        if (s.path) streamSettings.xhttpSettings.path = s.path;
-        streamSettings.xhttpSettings.mode = 'auto';
+        streamSettings.wsSettings = {};
+        if (s.host) streamSettings.wsSettings.headers = {Host: s.host};
+        if (s.path) streamSettings.wsSettings.path = s.path;
+        if (s.wsEarlyData) streamSettings.wsSettings.maxEarlyData = asInt(s.wsEarlyData, 0);
     } else if (streamSettings.network === 'xhttp') {
         streamSettings.xhttpSettings = {};
         if (s.host) streamSettings.xhttpSettings.host = s.host;
@@ -1645,14 +1671,20 @@ function buildMihomoConfig(beans) {
     const groups = [];
     if (names.length > 1) {
         groups.push({
-            name: 'auto',
+            name: '⚡️ Fastest',
             type: 'url-test',
             proxies: names,
             url: 'https://www.gstatic.com/generate_204',
             interval: 45
         });
+        groups.push({
+            name: 'PROXY',
+            type: 'select',
+            proxies: ['⚡️ Fastest', ...names]
+        });
+    } else {
+        groups.push({name: 'PROXY', type: 'select', proxies: names});
     }
-    groups.push({name: 'select', type: 'select', proxies: names.length > 1 ? ['auto', ...names] : names});
     const config = {
         'mixed-port': 7890,
         'allow-lan': false,
@@ -1660,7 +1692,7 @@ function buildMihomoConfig(beans) {
         'log-level': 'info',
         proxies,
         'proxy-groups': groups,
-        rules: ['MATCH,select']
+        rules: ['MATCH,PROXY']
     };
     return config;
 }
@@ -1717,7 +1749,7 @@ const MIHOMO_DEFAULT_TEMPLATE = [
     'proxies:',
     'proxy-groups:',
     'rules:',
-    '  - "MATCH,select"'
+    '  - "MATCH,PROXY"'
 ].join('\n');
 
 try {
@@ -1728,20 +1760,23 @@ try {
 async function fetchSubscription(url) {
     if (typeof fetch !== 'function') throw new Error('Fetch API not available');
 
+    const allowedSchemes = new Set(SUPPORTED_SCHEMES.filter(s => s !== 'http' && s !== 'https'));
+    const splitLines = (text) => (text || '').split(/\n/).map(s => s.trim()).filter(Boolean);
+
+    function hasRealSubscriptionLinks(text) {
+        const lines = splitLines(text);
+        if (!lines.length) return false;
+        return lines.some(line => {
+            const scheme = (line.split(':', 1)[0] || '').toLowerCase();
+            return allowedSchemes.has(scheme);
+        });
+    }
+
     async function tryFetch(u) {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), SUB_FETCH_TIMEOUT);
         try {
-            const resp = await fetch(u, {
-                method: 'GET',
-                cache: 'no-store',
-                credentials: 'omit',
-                headers: {
-                    'Accept': 'text/plain, */*'
-                },
-                redirect: 'follow',
-                signal: controller.signal
-            });
+            const resp = await fetch(u, Object.assign({}, FETCH_INIT, {signal: controller.signal}));
             clearTimeout(timeout);
             if (!resp.ok) {
                 const reason = resp.statusText || httpReason(resp.status) || '';
@@ -1773,8 +1808,20 @@ async function fetchSubscription(url) {
     async function fetchWithFallback(u, depth) {
         if (depth > MAX_SUB_REDIRECTS) throw new Error('Too many redirects');
 
-        const direct = isHttpUrl(u) ? await tryFetch(u) : {error: new Error('not-http')};
         const attempts = [];
+        const direct = isHttpUrl(u) ? await tryFetch(u) : {error: new Error('not-http')};
+
+        if (!direct.error && typeof direct.text === 'string') {
+            let probe = direct.text || '';
+            const dec = normalizeSubscriptionBody(probe);
+            if (dec) probe = dec;
+            const lines = splitLines(probe);
+            const isSingleHttpPointer = lines.length === 1 && isHttpUrl(lines[0]) && !looksLikeLinksList(lines[0]);
+            if (!isSingleHttpPointer && !hasRealSubscriptionLinks(probe)) {
+                direct.error = new Error('Subscription returned no valid links');
+            }
+        }
+
         attempts.push(direct);
         if (direct.error) {
             for (const makeUrl of PUBLIC_CORS_FALLBACKS) {
@@ -1829,9 +1876,8 @@ async function fetchSubscription(url) {
         }
     }
     if (/\bproxies\s*:/i.test(body) && !looksLikeLinksList(body)) throw new Error('Clash YAML subscription is not supported here');
-    const lines = body.split(/\n/).map(s => s.trim()).filter(Boolean);
-    const allowed = new Set(SUPPORTED_SCHEMES);
-    const filtered = lines.filter(line => allowed.has((line.split(':', 1)[0] || '').toLowerCase()));
+    const lines = splitLines(body);
+    const filtered = lines.filter(line => allowedSchemes.has((line.split(':', 1)[0] || '').toLowerCase()));
     return filtered.join('\n');
 }
 
@@ -2233,12 +2279,7 @@ function parseXrayConfigToBeans(conf) {
 function detectConfigAndConvertToLinks(raw) {
     const text = (raw || '').trim();
     if (!text) throw new Error('Empty input');
-    let obj = null;
-    try {
-        obj = JSON.parse(text);
-    } catch {
-        obj = null;
-    }
+    const obj = tryJSON(text);
     if (!obj) throw new Error('Unsupported or invalid JSON config');
     let beans = [];
     if (Array.isArray(obj?.outbounds) && obj.outbounds.length) {

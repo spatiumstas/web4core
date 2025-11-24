@@ -103,6 +103,71 @@ label {
     color: var(--text);
 }
 
+.toolbar {
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: nowrap;
+}
+
+.toolbar .core-toggle {
+    width: auto;
+    flex: 1 1 auto;
+    max-width: none;
+}
+
+.settings-toggle {
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text);
+    height: 40px;
+    padding: 0 14px;
+    font-size: 13px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+}
+
+.settings-toggle:hover {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(55, 157, 216, .15);
+}
+
+.settings-panel {
+    width: 100%;
+    max-width: var(--form-max);
+    overflow: hidden;
+    max-height: 260px;
+    opacity: 1;
+    transform: translateY(0);
+    transition: max-height .3s ease-in-out, opacity .3s ease-in-out, transform .3s ease-in-out;
+    padding: 0 6px;
+}
+
+.settings-panel--collapsed {
+    max-height: 0;
+    opacity: 0;
+    transform: translateY(-4px);
+    pointer-events: none;
+}
+
+.settings-panel__chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 4px 0 8px;
+}
+
+.settings-panel__field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 12px;
+    color: var(--muted);
+}
+
 #asciiHeader {
     cursor: pointer;
 }
@@ -119,14 +184,42 @@ label {
     max-width: var(--form-max);
 }
 
-.input:hover, textarea:hover, select:hover {
-    border-color: var(--primary);
-    box-shadow: 0 0 0 3px rgba(55, 157, 216, .15);
-}
-
 .input:focus, textarea:focus, select:focus {
     border-color: var(--primary);
     box-shadow: 0 0 0 3px rgba(55, 157, 216, .2);
+}
+
+.input-loading {
+    position: relative;
+    border-color: rgba(55, 157, 216, .9);
+    box-shadow: 0 0 0 1px rgba(55, 157, 216, .75),
+    0 0 14px 3px rgba(55, 157, 216, .55),
+    0 0 26px 8px rgba(55, 157, 216, .35);
+    animation: inputGlow 1.4s linear infinite;
+}
+
+@keyframes inputGlow {
+    0% {
+        box-shadow: 0 0 0 1px rgba(55, 157, 216, .55),
+        0 0 10px 2px rgba(55, 157, 216, .4),
+        0 0 18px 5px rgba(55, 157, 216, .25);
+    }
+    50% {
+        box-shadow: 0 0 0 1px rgba(55, 157, 216, 1),
+        0 0 18px 4px rgba(55, 157, 216, .75),
+        0 0 32px 10px rgba(55, 157, 216, .5);
+    }
+    100% {
+        box-shadow: 0 0 0 1px rgba(55, 157, 216, .55),
+        0 0 10px 2px rgba(55, 157, 216, .4),
+        0 0 18px 5px rgba(55, 157, 216, .25);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .input-loading {
+        animation: none;
+    }
 }
 
 #links.input-error,
@@ -186,11 +279,6 @@ select.input-error {
     cursor: pointer;
 }
 
-.btn-primary:hover, input[type="submit"]:hover {
-    background: var(--primary);
-    color: white;
-}
-
 input[type="submit"]:active, button:active {
     transform: scale(0.95);
 }
@@ -198,18 +286,6 @@ input[type="submit"]:active, button:active {
 input[type="submit"][disabled] {
     opacity: 0.5;
     cursor: not-allowed;
-}
-
-@keyframes fadePulse {
-    0% {
-        opacity: 1;
-    }
-    50% {
-        opacity: 0.5;
-    }
-    100% {
-        opacity: 1;
-    }
 }
 
 .circle-btn {
@@ -225,15 +301,10 @@ input[type="submit"][disabled] {
     cursor: pointer;
 }
 
-.circle-btn:hover {
-    background: var(--primary);
-    color: white;
-}
-
 .core-toggle {
     position: relative;
     width: 100%;
-    max-width: var(--form-max);
+    max-width: calc(var(--form-max) - 120px);
     height: 40px;
     border-radius: 999px;
     border: 1px solid var(--border);
@@ -294,11 +365,6 @@ input[type="submit"][disabled] {
     -webkit-tap-highlight-color: transparent;
 }
 
-.custom-checkbox:hover {
-    border-color: var(--primary);
-    background: rgba(55, 157, 216, 0.1);
-}
-
 .custom-checkbox input[type="checkbox"] {
     position: absolute;
     opacity: 0;
@@ -339,8 +405,8 @@ input[type="submit"][disabled] {
 }
 
 .custom-checkbox span {
-    font-size: 14px;
-    font-weight: 500;
+    font-size: 13px;
+    font-weight: 400;
     color: var(--text);
 }
 
@@ -348,12 +414,42 @@ input[type="submit"][disabled] {
     transform: scale(0.97);
 }
 
-.hidden {
-    display: none !important;
+.settings-panel__chips .custom-checkbox {
+    border-radius: 999px;
+    border-width: 1px;
+    border-color: transparent;
+    background: rgba(148, 163, 184, 0.12);
+    padding: 6px 14px;
+    gap: 6px;
+    min-width: 0;
 }
 
-.invisible {
-    visibility: hidden;
+.settings-panel__chips .custom-checkbox .checkmark {
+    display: none;
+}
+
+.settings-panel__chips .custom-checkbox span {
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.settings-panel__chips .custom-checkbox:has(input[type="checkbox"]:checked) {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: #0b1120;
+    box-shadow: 0 0 0 2px rgba(55, 157, 216, 0.3);
+}
+
+.settings-panel__chips .custom-checkbox:has(input[type="checkbox"]:checked) span {
+    color: #ffffff;
+}
+
+.settings-panel__chips .custom-checkbox:has(input[type="checkbox"]:focus-visible) {
+    box-shadow: 0 0 0 3px rgba(55, 157, 216, 0.5);
+}
+
+.hidden {
+    display: none !important;
 }
 
 #errorText {
@@ -361,6 +457,36 @@ input[type="submit"][disabled] {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .input:hover,
+    textarea:hover,
+    select:hover {
+        border-color: var(--primary);
+        box-shadow: 0 0 0 3px rgba(55, 157, 216, .15);
+    }
+
+    .btn-primary:hover,
+    input[type="submit"]:hover {
+        background: var(--primary);
+        color: white;
+    }
+
+    .circle-btn:hover {
+        background: var(--primary);
+        color: white;
+    }
+
+    .custom-checkbox:hover {
+        border-color: var(--primary);
+        background: rgba(55, 157, 216, 0.1);
+    }
+
+    .settings-panel__chips .custom-checkbox:hover {
+        border-color: var(--primary);
+        background: rgba(55, 157, 216, 0.16);
+    }
 }
 
 @media (max-width: 600px) {
