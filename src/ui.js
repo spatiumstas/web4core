@@ -22,7 +22,9 @@ const el = {
     lblXrayBalancer: document.getElementById('lblXrayBalancer'),
     cbPerTunMixed: document.getElementById('cbPerTunMixed'),
     lblPerTunMixed: document.getElementById('lblPerTunMixed'),
-    out: document.getElementById('out')
+    out: document.getElementById('out'),
+    btnSettings: document.getElementById('btnSettings'),
+    settingsPanel: document.getElementById('settingsPanel')
 };
 
 const state = {
@@ -45,7 +47,13 @@ const setError = (msg) => {
     el.errorText.textContent = msg || '';
 };
 const setGenerateEnabled = (enabled) => {
-    if (el.gen) el.gen.disabled = !enabled;
+    if (!el.gen) return;
+    el.gen.disabled = !enabled;
+    toggleHidden(el.gen, !enabled);
+};
+const setInputLoading = (loading) => {
+    if (!el.links) return;
+    el.links.classList.toggle('input-loading', !!loading);
 };
 const renderOutput = (text, isYaml) => {
     el.out.value = text || '';
@@ -83,14 +91,14 @@ function setCore(core) {
     toggleHidden(cbSocksLabel, hideSing);
     toggleHidden(cbClashSecretLabel, hideSing);
     toggleHidden(cbExtendedLabel, hideSing);
-    toggleHidden(el.tunName, hideSing);
+    toggleHidden(el.tunName?.parentElement || el.tunName, hideSing);
     toggleHidden(el.lblMihomoSub, core !== 'mihomo');
     toggleHidden(el.lblPerTunMixed, hideSing);
-    toggleHidden(el.lblXrayBalancer, true);
+    toggleHidden(el.lblXrayBalancer, core !== 'xray');
 }
 
 function isMihomoSubscriptionMode() {
-    return getCore() === 'mihomo' && !!document.getElementById('cbMihomoSub')?.checked;
+    return getCore() === 'mihomo' && !!el.cbMihomoSub?.checked;
 }
 
 document.addEventListener('keydown', function (e) {
@@ -116,31 +124,12 @@ el.lblMihomo.addEventListener('click', (e) => {
     validateField(false);
 });
 
-let dragging = false, startX = 0, moved = false, suppressClick = false;
-el.coreToggle.addEventListener('mousedown', (e) => {
-    dragging = true;
-    moved = false;
-    startX = e.clientX;
-});
-window.addEventListener('mouseup', () => {
-    if (dragging && moved) {
-        suppressClick = true;
-        setTimeout(() => suppressClick = false, 0);
-    }
-    dragging = false;
-});
-window.addEventListener('mousemove', (e) => {
-    if (!dragging) return;
-    const dx = e.clientX - startX;
-    if (dx > 10) {
-        setCore('xray');
-        moved = true;
-    }
-    if (dx < -10) {
-        setCore('singbox');
-        moved = true;
-    }
-});
+if (el.btnSettings && el.settingsPanel) {
+    el.btnSettings.addEventListener('click', () => {
+        const collapsed = el.settingsPanel.classList.toggle('settings-panel--collapsed');
+        el.btnSettings.setAttribute('aria-expanded', String(!collapsed));
+    });
+}
 
 function setupCheckboxValidation() {
     if (!el.cbTun || !el.cbSocks) return;
@@ -166,6 +155,7 @@ function setupCheckboxValidation() {
 
 function validateField(showOutput) {
     const raw = el.links.value;
+    const hasText = !!raw.trim();
     const tunName = el.tunName.value.trim();
     const addTun = !!el.cbTun?.checked;
     const addSocks = !!el.cbSocks?.checked;
@@ -173,7 +163,7 @@ function validateField(showOutput) {
     const useExtended = !!el.cbExtended?.checked;
     const subMihomo = isMihomoSubscriptionMode();
     try {
-        if (!raw.trim()) {
+        if (!hasText) {
             setGenerateEnabled(false);
             setError('');
             hideOutput();
@@ -217,8 +207,6 @@ function validateField(showOutput) {
             setGenerateEnabled(true);
             el.links.classList.remove('input-error');
             const perTunMixed = !!el.cbPerTunMixed?.checked;
-            const showBalancer = (getCore() === 'xray' && Array.isArray(beans) && beans.length >= 2);
-            toggleHidden(el.lblXrayBalancer, !showBalancer);
             return {beans, tunName, addTun, addSocks, perTunMixed, genClashSecret, useExtended};
         }
 
@@ -243,8 +231,6 @@ function validateField(showOutput) {
         }
 
         if (getCore() === 'xray') {
-            const showBalancer = (Array.isArray(beans) && beans.length >= 2);
-            toggleHidden(el.lblXrayBalancer, !showBalancer);
             let finalConfig;
             if (beans.length === 1) finalConfig = globalThis.web4core.buildXrayConfig(globalThis.web4core.buildXrayOutbound(beans[0]), {});
             else {
@@ -302,28 +288,44 @@ function assertNoProtocols(beans, list, label) {
 
 function detectSubscriptionUrl(raw) {
     const lines = (raw || '').split(/\r?\n/).map(s => s.trim()).filter(Boolean);
-    if (lines.length !== 1) return {isSub: false, url: ''};
-    const u = lines[0];
-    if (!/^https?:\/\//i.test(u) || /@/.test(u)) return {isSub: false, url: ''};
-    try {
-        const p = new URL(u).pathname || '';
-        return {isSub: (p && p !== '/'), url: u};
-    } catch {
-        return {isSub: false, url: ''};
+    const subUrls = [];
+    const others = [];
+    for (const line of lines) {
+        if (!line) continue;
+        if (!/^https?:\/\//i.test(line) || /@/.test(line)) {
+            others.push(line);
+            continue;
+        }
+        try {
+            const p = new URL(line).pathname || '';
+            if (p && p !== '/') subUrls.push(line);
+            else others.push(line);
+        } catch {
+            others.push(line);
+        }
     }
+    return {subUrls, others};
 }
 
 el.gen.addEventListener('click', () => {
     const raw = (el.links?.value || '').trim();
     const det = detectSubscriptionUrl(raw);
-    const shouldTreatAsSub = det.isSub;
+    const hasSub = Array.isArray(det.subUrls) && det.subUrls.length > 0;
     const skipBecauseMihomoProvider = isMihomoSubscriptionMode();
-    if (shouldTreatAsSub && !skipBecauseMihomoProvider && globalThis.web4core?.fetchSubscription) {
+    if (hasSub && !skipBecauseMihomoProvider && globalThis.web4core?.fetchSubscription) {
         setGenerateEnabled(false);
+        setInputLoading(true);
         setError('');
-        globalThis.web4core.fetchSubscription(det.url).then(text => {
-            if (!text) throw new Error(MSG_SUB_EMPTY);
-            el.links.value = text;
+        const subPromises = det.subUrls.map(u => globalThis.web4core.fetchSubscription(u));
+        Promise.all(subPromises).then(texts => {
+            const merged = [];
+            for (const text of texts) {
+                if (!text) throw new Error(MSG_SUB_EMPTY);
+                merged.push(...text.split(/\r?\n/).map(s => s.trim()).filter(Boolean));
+            }
+            const combined = [...det.others, ...merged].join('\n');
+            if (!combined.trim()) throw new Error(MSG_SUB_EMPTY);
+            el.links.value = combined;
             validateField(true);
             scrollOutIntoView();
         }).catch((e) => {
@@ -333,6 +335,7 @@ el.gen.addEventListener('click', () => {
             el.links.classList.add('input-error');
         }).finally(() => {
             setGenerateEnabled(true);
+            setInputLoading(false);
         });
         return;
     }
@@ -364,8 +367,8 @@ el.btnDownload.addEventListener('click', () => {
 });
 
 setupCheckboxValidation();
-setGenerateEnabled(true);
 setCore(state.core);
+validateField(false);
 
 function looksLikeJsonConfig(text) {
     const t = (text || '').trim();
@@ -405,8 +408,8 @@ if (el.links) {
     const handleJsonMode = () => {
         const raw = (el.links.value || '').trim();
         const reverseOnly = isReverseOnlyJson(raw);
-        setGenerateEnabled(!(reverseOnly || !raw));
         if (reverseOnly) {
+            setGenerateEnabled(false);
             setError('');
             hideOutput();
             el.links.classList.remove('input-error');
@@ -450,7 +453,3 @@ const header = document.getElementById('asciiHeader');
 if (header) header.addEventListener('click', function () {
     location.reload();
 });
-
-if (!state.core) setCore('singbox');
-
-

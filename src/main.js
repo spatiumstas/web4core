@@ -47,6 +47,7 @@ const FETCH_INIT = {
     redirect: 'follow'
 };
 const PUBLIC_CORS_FALLBACKS = [
+    (x) => 'https://sub.web2core.workers.dev/?url=' + encodeURIComponent(x),
     (x) => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(x)
 ];
 const URLTEST_URL = 'https://www.gstatic.com/generate_204';
@@ -1275,11 +1276,10 @@ function buildXrayOutbound(bean) {
         if (s.fp) streamSettings.realitySettings.fingerprint = s.fp;
     }
     if (streamSettings.network === 'ws') {
-        streamSettings.network = 'xhttp';
-        streamSettings.xhttpSettings = {};
-        if (s.host) streamSettings.xhttpSettings.host = s.host;
-        if (s.path) streamSettings.xhttpSettings.path = s.path;
-        streamSettings.xhttpSettings.mode = 'auto';
+        streamSettings.wsSettings = {};
+        if (s.host) streamSettings.wsSettings.headers = {Host: s.host};
+        if (s.path) streamSettings.wsSettings.path = s.path;
+        if (s.wsEarlyData) streamSettings.wsSettings.maxEarlyData = asInt(s.wsEarlyData, 0);
     } else if (streamSettings.network === 'xhttp') {
         streamSettings.xhttpSettings = {};
         if (s.host) streamSettings.xhttpSettings.host = s.host;
@@ -1728,6 +1728,18 @@ try {
 async function fetchSubscription(url) {
     if (typeof fetch !== 'function') throw new Error('Fetch API not available');
 
+    const allowedSchemes = new Set(SUPPORTED_SCHEMES.filter(s => s !== 'http' && s !== 'https'));
+    const splitLines = (text) => (text || '').split(/\n/).map(s => s.trim()).filter(Boolean);
+
+    function hasRealSubscriptionLinks(text) {
+        const lines = splitLines(text);
+        if (!lines.length) return false;
+        return lines.some(line => {
+            const scheme = (line.split(':', 1)[0] || '').toLowerCase();
+            return allowedSchemes.has(scheme);
+        });
+    }
+
     async function tryFetch(u) {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), SUB_FETCH_TIMEOUT);
@@ -1773,8 +1785,20 @@ async function fetchSubscription(url) {
     async function fetchWithFallback(u, depth) {
         if (depth > MAX_SUB_REDIRECTS) throw new Error('Too many redirects');
 
-        const direct = isHttpUrl(u) ? await tryFetch(u) : {error: new Error('not-http')};
         const attempts = [];
+        const direct = isHttpUrl(u) ? await tryFetch(u) : {error: new Error('not-http')};
+
+        if (!direct.error && typeof direct.text === 'string') {
+            let probe = direct.text || '';
+            const dec = normalizeSubscriptionBody(probe);
+            if (dec) probe = dec;
+            const lines = splitLines(probe);
+            const isSingleHttpPointer = lines.length === 1 && isHttpUrl(lines[0]) && !looksLikeLinksList(lines[0]);
+            if (!isSingleHttpPointer && !hasRealSubscriptionLinks(probe)) {
+                direct.error = new Error('Subscription returned no valid links');
+            }
+        }
+
         attempts.push(direct);
         if (direct.error) {
             for (const makeUrl of PUBLIC_CORS_FALLBACKS) {
@@ -1829,9 +1853,8 @@ async function fetchSubscription(url) {
         }
     }
     if (/\bproxies\s*:/i.test(body) && !looksLikeLinksList(body)) throw new Error('Clash YAML subscription is not supported here');
-    const lines = body.split(/\n/).map(s => s.trim()).filter(Boolean);
-    const allowed = new Set(SUPPORTED_SCHEMES);
-    const filtered = lines.filter(line => allowed.has((line.split(':', 1)[0] || '').toLowerCase()));
+    const lines = splitLines(body);
+    const filtered = lines.filter(line => allowedSchemes.has((line.split(':', 1)[0] || '').toLowerCase()));
     return filtered.join('\n');
 }
 

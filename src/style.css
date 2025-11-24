@@ -103,6 +103,70 @@ label {
     color: var(--text);
 }
 
+.toolbar {
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: nowrap;
+}
+
+.toolbar .core-toggle {
+    width: auto;
+    flex: 1 1 auto;
+    max-width: none;
+}
+
+.settings-toggle {
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text);
+    height: 40px;
+    padding: 0 14px;
+    font-size: 13px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+}
+
+.settings-toggle:hover {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(55, 157, 216, .15);
+}
+
+.settings-panel {
+    width: 100%;
+    max-width: var(--form-max);
+    overflow: hidden;
+    max-height: 260px;
+    opacity: 1;
+    transform: translateY(0);
+    transition: max-height .3s ease-in-out, opacity .3s ease-in-out, transform .3s ease-in-out;
+}
+
+.settings-panel--collapsed {
+    max-height: 0;
+    opacity: 0;
+    transform: translateY(-4px);
+    pointer-events: none;
+}
+
+.settings-panel__chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.settings-panel__field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 12px;
+    color: var(--muted);
+}
+
 #asciiHeader {
     cursor: pointer;
 }
@@ -127,6 +191,39 @@ label {
 .input:focus, textarea:focus, select:focus {
     border-color: var(--primary);
     box-shadow: 0 0 0 3px rgba(55, 157, 216, .2);
+}
+
+.input-loading {
+    position: relative;
+    border-color: rgba(55, 157, 216, .9);
+    box-shadow: 0 0 0 1px rgba(55, 157, 216, .75),
+    0 0 14px 3px rgba(55, 157, 216, .55),
+    0 0 26px 8px rgba(55, 157, 216, .35);
+    animation: inputGlow 1.4s linear infinite;
+}
+
+@keyframes inputGlow {
+    0% {
+        box-shadow: 0 0 0 1px rgba(55, 157, 216, .55),
+        0 0 10px 2px rgba(55, 157, 216, .4),
+        0 0 18px 5px rgba(55, 157, 216, .25);
+    }
+    50% {
+        box-shadow: 0 0 0 1px rgba(55, 157, 216, 1),
+        0 0 18px 4px rgba(55, 157, 216, .75),
+        0 0 32px 10px rgba(55, 157, 216, .5);
+    }
+    100% {
+        box-shadow: 0 0 0 1px rgba(55, 157, 216, .55),
+        0 0 10px 2px rgba(55, 157, 216, .4),
+        0 0 18px 5px rgba(55, 157, 216, .25);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .input-loading {
+        animation: none;
+    }
 }
 
 #links.input-error,
@@ -200,18 +297,6 @@ input[type="submit"][disabled] {
     cursor: not-allowed;
 }
 
-@keyframes fadePulse {
-    0% {
-        opacity: 1;
-    }
-    50% {
-        opacity: 0.5;
-    }
-    100% {
-        opacity: 1;
-    }
-}
-
 .circle-btn {
     width: 40px;
     height: 40px;
@@ -233,7 +318,7 @@ input[type="submit"][disabled] {
 .core-toggle {
     position: relative;
     width: 100%;
-    max-width: var(--form-max);
+    max-width: calc(var(--form-max) - 120px);
     height: 40px;
     border-radius: 999px;
     border: 1px solid var(--border);
@@ -339,8 +424,8 @@ input[type="submit"][disabled] {
 }
 
 .custom-checkbox span {
-    font-size: 14px;
-    font-weight: 500;
+    font-size: 13px;
+    font-weight: 400;
     color: var(--text);
 }
 
@@ -350,10 +435,6 @@ input[type="submit"][disabled] {
 
 .hidden {
     display: none !important;
-}
-
-.invisible {
-    visibility: hidden;
 }
 
 #errorText {
