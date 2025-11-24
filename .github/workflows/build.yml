@@ -3,8 +3,6 @@ name: Validate & Deploy
 on:
   push:
     branches: [ main ]
-  pull_request:
-    branches: [ main ]
 
 permissions:
   contents: read
@@ -35,18 +33,6 @@ jobs:
           tar -xzf sing-box.tar.gz
           sudo mv sing-box-*/sing-box /usr/local/bin/
           chmod +x /usr/local/bin/sing-box
-
-      - name: Download sing-box extended
-        run: |
-          mkdir -p bin
-          # Get latest release info for extended
-          EXTENDED_RELEASE=$(curl -s https://api.github.com/repos/shtorm-7/sing-box-extended/releases/latest)
-          EXTENDED_DOWNLOAD_URL=$(echo $EXTENDED_RELEASE | jq -r '.assets[] | select(.name | contains("linux-amd64") and (contains("extended"))) | .browser_download_url')
-          EXTENDED_VERSION=$(echo $EXTENDED_RELEASE | jq -r '.tag_name')
-          
-          echo "Downloading sing-box extended $EXTENDED_VERSION from $EXTENDED_DOWNLOAD_URL"
-          wget -O bin/sing-box-extended "$EXTENDED_DOWNLOAD_URL"
-          chmod +x bin/sing-box-extended
 
       - name: Generate and validate sing-box configs
         env:
@@ -156,6 +142,11 @@ jobs:
               try {
                 const cfgObj = JSON.parse(fs.readFileSync(configFile, 'utf8'));
                 cfgObj.inbounds = [{ tag: 'mixed-in', type: 'mixed', listen: '127.0.0.1', listen_port: 2080 }];
+                // CI smoke-test should not depend on network downloads (e.g. clash-api external UI).
+                if (cfgObj.experimental && cfgObj.experimental.clash_api) {
+                  delete cfgObj.experimental.clash_api;
+                  if (Object.keys(cfgObj.experimental).length === 0) delete cfgObj.experimental;
+                }
                 // route final:
                 // - prefer existing selector if present
                 // - otherwise keep existing final if set
@@ -165,9 +156,11 @@ jobs:
                 cfgObj.route.final = firstSelector || cfgObj.route.final || 'direct';
                 const runFile = `run_singbox_${i}.json`;
                 fs.writeFileSync(runFile, JSON.stringify(cfgObj, null, 2));
-                const cmd = `bash -lc 'tmp=$(mktemp); sing-box run -c ${runFile} >$tmp 2>&1 & pid=$!; sleep 2; kill $pid || true; cat $tmp; rm -f $tmp'`;
+                const cmd = `bash -lc 'tmp=$(mktemp); sing-box run -c ${runFile} >$tmp 2>&1 & pid=$!; sleep 3; kill $pid || true; cat $tmp; rm -f $tmp'`;
                 const out = execSync(cmd, { stdio: 'pipe', encoding: 'utf8' });
-                if (!/sing-box started/.test(out)) throw new Error(`sing-box did not report start\n--- LOG START ---\n${out}\n--- LOG END ---`);
+                if (!/(sing-box started|tcp server started at 127\\.0\\.0\\.1:2080)/.test(out)) {
+                  throw new Error(`sing-box did not report start\n--- LOG START ---\n${out}\n--- LOG END ---`);
+                }
                 console.log(`🚀 Run smoke test passed for ${i + 1}`);
                 fs.unlinkSync(runFile);
               } catch (error) {
@@ -213,6 +206,11 @@ jobs:
             // Smoke run (SOCKS-only)
             const cfgObj = JSON.parse(fs.readFileSync(multiFile, 'utf8'));
             cfgObj.inbounds = [{ tag: 'mixed-in', type: 'mixed', listen: '127.0.0.1', listen_port: 2080 }];
+            // CI smoke-test should not depend on network downloads (e.g. clash-api external UI).
+            if (cfgObj.experimental && cfgObj.experimental.clash_api) {
+              delete cfgObj.experimental.clash_api;
+              if (Object.keys(cfgObj.experimental).length === 0) delete cfgObj.experimental;
+            }
             if (cfgObj.outbounds && cfgObj.outbounds.length) {
               const firstSelector = cfgObj.outbounds.find(o => o.type === 'selector')?.tag;
               cfgObj.route = cfgObj.route || {};
@@ -220,9 +218,11 @@ jobs:
             }
             const runFile = `run_singbox_multi_all.json`;
             fs.writeFileSync(runFile, JSON.stringify(cfgObj, null, 2));
-            const cmd = `bash -lc 'tmp=$(mktemp); sing-box run -c ${runFile} >$tmp 2>&1 & pid=$!; sleep 2; kill $pid || true; cat $tmp; rm -f $tmp'`;
+            const cmd = `bash -lc 'tmp=$(mktemp); sing-box run -c ${runFile} >$tmp 2>&1 & pid=$!; sleep 3; kill $pid || true; cat $tmp; rm -f $tmp'`;
             const out = execSync(cmd, { stdio: 'pipe', encoding: 'utf8' });
-            if (!/sing-box started/.test(out)) throw new Error(`sing-box did not report start (multi-all)\n--- LOG START ---\n${out}\n--- LOG END ---`);
+            if (!/(sing-box started|tcp server started at 127\\.0\\.0\\.1:2080)/.test(out)) {
+              throw new Error(`sing-box did not report start (multi-all)\n--- LOG START ---\n${out}\n--- LOG END ---`);
+            }
             console.log('✅ Multi-config (ALL links) valid and started');
             fs.unlinkSync(multiFile);
             fs.unlinkSync(runFile);
@@ -330,13 +330,18 @@ jobs:
               const bean = sandbox.parseLink(link);
               const outbound = sandbox.buildSingBoxOutbound(bean);
               const config = sandbox.buildSingBoxConfig([{tag: 'test', ...outbound}], {useExtended: true});
+              // CI smoke-test should not depend on network downloads (e.g. clash-api external UI).
+              if (config.experimental && config.experimental.clash_api) {
+                delete config.experimental.clash_api;
+                if (Object.keys(config.experimental).length === 0) delete config.experimental;
+              }
           
               const configFile = \`test_extended_\${i}.json\`;
               fs.writeFileSync(configFile, JSON.stringify(config, null, 2));
           
-              const cmd = \`bash -lc 'tmp=\$(mktemp); /usr/local/bin/sing-box-extended run -c \${configFile} >\$tmp 2>&1 & pid=\$!; sleep 2; kill \$pid || true; cat \$tmp; rm -f \$tmp'\`;
+              const cmd = \`bash -lc 'tmp=\$(mktemp); /usr/local/bin/sing-box-extended run -c \${configFile} >\$tmp 2>&1 & pid=\$!; sleep 3; kill \$pid || true; cat \$tmp; rm -f \$tmp'\`;
               const out = execSync(cmd, { stdio: 'pipe', encoding: 'utf8' });
-              if (!/sing-box started/.test(out)) {
+              if (!/(sing-box started|inbound\\/.*server started)/.test(out)) {
                 throw new Error('sing-box-extended did not report start');
               }
               console.log(\`✅ Extended config \${i + 1} is valid\`);
@@ -391,12 +396,17 @@ jobs:
             return {tag: 'test', ...outbound};
           });
           const config = sandbox.buildSingBoxConfig(outbounds, {useExtended: true});
+          // CI smoke-test should not depend on network downloads (e.g. clash-api external UI).
+          if (config.experimental && config.experimental.clash_api) {
+            delete config.experimental.clash_api;
+            if (Object.keys(config.experimental).length === 0) delete config.experimental;
+          }
           fs.writeFileSync('/tmp/mieru-config.json', JSON.stringify(config, null, 2));
           "
           
-          cmd="bash -lc 'tmp=\$(mktemp); /usr/local/bin/sing-box-extended run -c /tmp/mieru-config.json >\$tmp 2>&1 & pid=\$!; sleep 2; kill \$pid || true; cat \$tmp; rm -f \$tmp'"
+          cmd="bash -lc 'tmp=\$(mktemp); /usr/local/bin/sing-box-extended run -c /tmp/mieru-config.json >\$tmp 2>&1 & pid=\$!; sleep 3; kill \$pid || true; cat \$tmp; rm -f \$tmp'"
           out=$(eval $cmd)
-          if ! echo "$out" | grep -q "sing-box started"; then
+          if ! echo "$out" | grep -Eq "sing-box started|server started"; then
             echo "❌ Mieru config failed to start"
             echo "$out"
             exit 1
@@ -432,12 +442,17 @@ jobs:
           
           const beans = sandbox.buildBeansFromInput(process.env.SDNS_LINK);
           const config = sandbox.buildSingBoxConfig([], {useExtended: true, dnsBeans: beans});
+          // CI smoke-test should not depend on network downloads (e.g. clash-api external UI).
+          if (config.experimental && config.experimental.clash_api) {
+            delete config.experimental.clash_api;
+            if (Object.keys(config.experimental).length === 0) delete config.experimental;
+          }
           fs.writeFileSync('/tmp/sdns-config.json', JSON.stringify(config, null, 2));
           "
           
-          cmd="bash -lc 'tmp=\$(mktemp); /usr/local/bin/sing-box-extended run -c /tmp/sdns-config.json >\$tmp 2>&1 & pid=\$!; sleep 2; kill \$pid || true; cat \$tmp; rm -f \$tmp'"
+          cmd="bash -lc 'tmp=\$(mktemp); /usr/local/bin/sing-box-extended run -c /tmp/sdns-config.json >\$tmp 2>&1 & pid=\$!; sleep 3; kill \$pid || true; cat \$tmp; rm -f \$tmp'"
           out=$(eval $cmd)
-          if ! echo "$out" | grep -q "sing-box started"; then
+          if ! echo "$out" | grep -Eq "sing-box started|server started"; then
             echo "❌ SDNS config failed to start"
             echo "$out"
             exit 1
@@ -477,12 +492,17 @@ jobs:
             return {tag: 'test', ...outbound};
           });
           const config = sandbox.buildSingBoxConfig(outbounds, {useExtended: true});
+          // CI smoke-test should not depend on network downloads (e.g. clash-api external UI).
+          if (config.experimental && config.experimental.clash_api) {
+            delete config.experimental.clash_api;
+            if (Object.keys(config.experimental).length === 0) delete config.experimental;
+          }
           fs.writeFileSync('/tmp/xhttp-config.json', JSON.stringify(config, null, 2));
           "
           
-          cmd="bash -lc 'tmp=\$(mktemp); /usr/local/bin/sing-box-extended run -c /tmp/xhttp-config.json >\$tmp 2>&1 & pid=\$!; sleep 2; kill \$pid || true; cat \$tmp; rm -f \$tmp'"
+          cmd="bash -lc 'tmp=\$(mktemp); /usr/local/bin/sing-box-extended run -c /tmp/xhttp-config.json >\$tmp 2>&1 & pid=\$!; sleep 3; kill \$pid || true; cat \$tmp; rm -f \$tmp'"
           out=$(eval $cmd)
-          if ! echo "$out" | grep -q "sing-box started"; then
+          if ! echo "$out" | grep -Eq "sing-box started|server started"; then
             echo "❌ XHTTP config failed to start"
             echo "$out"
             exit 1

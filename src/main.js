@@ -1,12 +1,3 @@
-if (typeof document !== 'undefined') {
-    document.addEventListener('keydown', function (e) {
-        if ((e.ctrlKey || e.metaKey) && e.code === 'KeyS') {
-            e.preventDefault();
-            document.querySelector('input[type="submit"]').click();
-        }
-    });
-}
-
 function decodeBase64Url(input) {
     try {
         const s = input.replace(/-/g, '+').replace(/_/g, '/');
@@ -27,18 +18,55 @@ function tryJSON(s) {
 
 function isHttpUrl(s) {
     try {
-        const u = new URL((s || '').trim());
+        const u = parseUrl((s || '').trim());
         return u.protocol === 'http:' || u.protocol === 'https:';
     } catch {
         return false;
     }
 }
 
+function parseUrl(urlStr) {
+    const raw = (urlStr || '').trim();
+    if (!raw) throw new Error('Invalid URL');
+    if (typeof globalThis !== 'undefined' && typeof globalThis.parseUri === 'function') {
+        const parsed = globalThis.parseUri(raw, 'default');
+        const qp = parsed.queryParams || new URLSearchParams(parsed.query ? ('?' + parsed.query) : '');
+        const scheme = (parsed.protocol || raw.split(':', 1)[0] || '').toLowerCase();
+        return {
+            href: parsed.href || raw,
+            protocol: parsed.protocol ? (parsed.protocol + ':') : (scheme ? (scheme + ':') : ''),
+            hostname: parsed.hostname || '',
+            port: parsed.port || '',
+            username: parsed.username || '',
+            password: parsed.password || '',
+            hash: parsed.fragment ? ('#' + parsed.fragment) : '',
+            searchParams: qp
+        };
+    }
+    if (typeof URL === 'function') {
+        const u = new URL(raw);
+        return {
+            href: u.href,
+            protocol: u.protocol,
+            hostname: u.hostname,
+            port: u.port,
+            username: u.username,
+            password: u.password,
+            hash: u.hash,
+            searchParams: u.searchParams
+        };
+    }
+    throw new Error('URL parser not available');
+}
+
 const SUPPORTED_SCHEMES = ['vmess', 'vless', 'trojan', 'ss', 'socks', 'http', 'https', 'hy2', 'hysteria2', 'tuic', 'mieru', 'sdns'];
 const SUPPORTED_SCHEMES_URL_REGEX = new RegExp(buildSchemesRegex().source + "[^\\s<>\"']+", 'ig');
 const MAX_SUB_REDIRECTS = 2;
 const SUB_FETCH_TIMEOUT = 15000;
+const SUB_FETCH_INTERVAL = 300;
 const SUB_FALLBACK_RETRIES = 2;
+const URLTEST = 'https://www.gstatic.com/generate_204';
+const URLTEST_INTERVAL = '3m';
 const FETCH_INIT = {
     method: 'GET',
     cache: 'no-store',
@@ -47,10 +75,9 @@ const FETCH_INIT = {
     redirect: 'follow'
 };
 const PUBLIC_CORS_FALLBACKS = [
+    (x) => 'https://sub.web2core.workers.dev/?url=' + encodeURIComponent(x),
     (x) => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(x)
 ];
-const URLTEST_URL = 'https://www.gstatic.com/generate_204';
-const URLTEST_INTERVAL = '3m';
 
 function buildSchemesRegex(flags) {
     const escaped = SUPPORTED_SCHEMES.map(s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
@@ -313,6 +340,12 @@ function validateBean(bean) {
         default:
             throw new Error('Unknown protocol: ' + p);
     }
+    if (bean.stream && bean.stream.reality && typeof bean.stream.reality.sid === 'string') {
+        const sidTrimmed = bean.stream.reality.sid.trim();
+        if (sidTrimmed && sidTrimmed.length > 16) {
+            throw new Error('REALITY shortId is too long (max 16 hex characters)');
+        }
+    }
 }
 
 function normalizeStream(stream, serverAddress) {
@@ -363,7 +396,7 @@ function parseLink(input) {
 }
 
 function parseSocksHttp(urlStr) {
-    const u = new URL(urlStr);
+    const u = parseUrl(urlStr);
     const query = getQuery(u);
     const isHttps = u.protocol === 'https:';
     const isHttp = u.protocol === 'http:';
@@ -409,7 +442,7 @@ function parseSocksHttp(urlStr) {
 }
 
 function parseTrojan(urlStr) {
-    const u = new URL(urlStr);
+    const u = parseUrl(urlStr);
     const q = getQuery(u);
     const bean = {
         proto: 'trojan',
@@ -427,7 +460,7 @@ function parseTrojan(urlStr) {
 }
 
 function parseVLESS(urlStr) {
-    const u = new URL(urlStr);
+    const u = parseUrl(urlStr);
     if (u.protocol !== 'vless:') throw new Error('A vless:// link is required');
     const q = getQuery(u);
     const rawAfterScheme = urlStr.slice('vless://'.length);
@@ -531,7 +564,7 @@ function parseVMess(urlStr) {
         bean.stream = normalizeStream(bean.stream, bean.host);
         return bean;
     }
-    const u = new URL(urlStr);
+    const u = parseUrl(urlStr);
     const q = getQuery(u);
     const bean = {
         proto: 'vmess',
@@ -549,7 +582,7 @@ function parseVMess(urlStr) {
 }
 
 function parseSS(urlStr) {
-    const u = new URL(urlStr);
+    const u = parseUrl(urlStr);
     const name = decodeURIComponent(u.hash.replace('#', ''));
     let method = u.username, password = u.password;
     let host = u.hostname;
@@ -632,7 +665,7 @@ function parseSS(urlStr) {
 }
 
 function parseHysteria2(urlStr) {
-    const u = new URL(urlStr);
+    const u = parseUrl(urlStr);
     const q = getQuery(u);
     const pwd = u.password ? (decodeURIComponent(u.username || '') + ':' + decodeURIComponent(u.password)) : decodeURIComponent(u.username || '');
     return {
@@ -653,7 +686,7 @@ function parseHysteria2(urlStr) {
 }
 
 function parseTUIC(urlStr) {
-    const u = new URL(urlStr);
+    const u = parseUrl(urlStr);
     const q = getQuery(u);
     return {
         proto: 'tuic',
@@ -682,7 +715,7 @@ function parseTUIC(urlStr) {
 }
 
 function parseMieru(urlStr) {
-    const u = new URL(urlStr);
+    const u = parseUrl(urlStr);
     if (u.protocol !== 'mieru:') throw new Error('A mieru:// link is required');
     const q = getQuery(u);
     const username = decodeURIComponent(u.username || '');
@@ -752,7 +785,7 @@ function parseMieruProfilesJson(jsonObj) {
 }
 
 function parseSDNS(urlStr) {
-    const u = new URL(urlStr);
+    const u = parseUrl(urlStr);
     if (u.protocol !== 'sdns:') throw new Error('A sdns:// link is required');
     const stamp = urlStr;
     const name = decodeURIComponent(u.hash.replace('#', ''));
@@ -1044,6 +1077,7 @@ function buildSingBoxOutbound(bean) {
 
 function buildSingBoxInbounds(opts) {
     const inbounds = [];
+    const androidMode = !!opts.androidMode;
     if (opts.addTun) {
         const specs = parseTunSpec(opts.tunName || '');
         const ifaces = specs.length ? specs.map(x => x.name) : ['singtun0'];
@@ -1051,15 +1085,17 @@ function buildSingBoxInbounds(opts) {
             const name = ifaces[i];
             const tag = ifaces.length > 1 ? `tun-in-${name}` : 'tun-in';
             const octet = ifaces.length > 1 ? (i === 0 ? 1 : i * 10) : 1;
-            const cidr = ifaces.length > 1 ? `${`172.19.0.${octet}`}/30` : '172.19.0.1/32';
+            const baseAddr = `172.19.0.${octet}`;
+            const prefix = (ifaces.length > 1 || androidMode) ? 30 : 32;
+            const cidr = `${baseAddr}/${prefix}`;
             const tun = {
                 type: 'tun',
                 tag,
                 interface_name: name,
                 address: [cidr],
                 stack: 'gvisor',
-                auto_route: false,
-                strict_route: false
+                auto_route: androidMode ? true : false,
+                strict_route: androidMode ? true : false
             };
             inbounds.push(tun);
         }
@@ -1123,7 +1159,7 @@ function buildSingBoxConfig(outboundsWithTags, opts) {
                 type: 'urltest',
                 tag: 'auto',
                 outbounds: tags,
-                url: URLTEST_URL,
+                url: URLTEST,
                 interval: URLTEST_INTERVAL,
                 tolerance: 50,
                 idle_timeout: '30m',
@@ -1175,7 +1211,7 @@ function buildSingBoxConfig(outboundsWithTags, opts) {
                     type: 'urltest',
                     tag: `auto-${name}`,
                     outbounds: tags,
-                    url: URLTEST_URL,
+                    url: URLTEST,
                     interval: URLTEST_INTERVAL,
                     tolerance: 50,
                     idle_timeout: '30m',
@@ -1217,6 +1253,11 @@ function buildSingBoxConfig(outboundsWithTags, opts) {
         }
     }
 
+    if (opts?.androidMode) {
+        routeRules.unshift({protocol: 'dns', action: 'hijack-dns'});
+        routeRules.unshift({action: 'sniff'});
+    }
+
     routeRules.push({ip_version: 6, outbound: 'block'});
     const outbounds = [
         ...managementOutbounds,
@@ -1224,30 +1265,51 @@ function buildSingBoxConfig(outboundsWithTags, opts) {
         {tag: 'direct', type: 'direct'},
         {tag: 'block', type: 'block'}
     ];
+    const experimental = {};
+    if (!opts?.androidMode) {
+        experimental.cache_file = {enabled: true};
+        experimental.clash_api = {
+            external_controller: '[::]:9090',
+            external_ui: 'ui',
+            external_ui_download_detour: 'direct',
+            access_control_allow_private_network: true,
+            secret: opts?.genClashSecret ? generateSecretHex32() : ''
+        };
+    }
     const config = {
         log: {level: 'info'},
         inbounds,
         outbounds,
-        route: {rules: routeRules, final: (createdGlobalSelector ? 'select' : 'direct')},
-        experimental: {
-            cache_file: {enabled: true},
-            clash_api: {
-                external_controller: '[::]:9090',
-                external_ui: 'ui',
-                external_ui_download_detour: 'direct',
-                access_control_allow_private_network: true,
-                secret: opts?.genClashSecret ? generateSecretHex32() : ''
-            },
-        }
+        route: {rules: routeRules, final: (createdGlobalSelector ? 'select' : 'direct')}
     };
+    if (Object.keys(experimental).length > 0) {
+        config.experimental = experimental;
+    }
 
     const dnsServers = (opts?.useExtended ? buildDNSServers(opts?.dnsBeans || []) : []);
     if (dnsServers.length > 0) {
         config.dns = {servers: dnsServers};
         config.route.default_domain_resolver = dnsServers[0]?.tag || '';
+    } else if (opts?.androidMode) {
+        config.dns = {
+            servers: [
+                {
+                    type: 'local',
+                    tag: 'local'
+                }
+            ],
+            strategy: 'ipv4_only'
+        };
+        config.route.default_domain_resolver = 'local';
+    }
+
+    if (opts?.androidMode) {
+        config.route.auto_detect_interface = true;
+        config.route.override_android_vpn = true;
     }
 
     if (opts?.useExtended) {
+        if (!config.experimental) config.experimental = {};
         config.experimental.unified_delay = {enabled: true};
     }
 
@@ -1275,11 +1337,10 @@ function buildXrayOutbound(bean) {
         if (s.fp) streamSettings.realitySettings.fingerprint = s.fp;
     }
     if (streamSettings.network === 'ws') {
-        streamSettings.network = 'xhttp';
-        streamSettings.xhttpSettings = {};
-        if (s.host) streamSettings.xhttpSettings.host = s.host;
-        if (s.path) streamSettings.xhttpSettings.path = s.path;
-        streamSettings.xhttpSettings.mode = 'auto';
+        streamSettings.wsSettings = {};
+        if (s.host) streamSettings.wsSettings.headers = {Host: s.host};
+        if (s.path) streamSettings.wsSettings.path = s.path;
+        if (s.wsEarlyData) streamSettings.wsSettings.maxEarlyData = asInt(s.wsEarlyData, 0);
     } else if (streamSettings.network === 'xhttp') {
         streamSettings.xhttpSettings = {};
         if (s.host) streamSettings.xhttpSettings.host = s.host;
@@ -1392,7 +1453,7 @@ function buildXrayConfig(outbounds, opts) {
         const selector = outbounds.map(ob => ob.tag).filter(Boolean);
         config.observatory = {
             subjectSelector: selector,
-            probeURL: URLTEST_URL,
+            probeURL: URLTEST,
             probeInterval: URLTEST_INTERVAL,
             enableConcurrency: selector.length > 8
         };
@@ -1626,7 +1687,7 @@ function deduplicateProxies(beans) {
     });
 }
 
-function buildMihomoConfig(beans) {
+function buildMihomoConfig(beans, opts) {
     const dedupedBeans = deduplicateProxies(beans);
     const proxies = dedupedBeans.map(b => buildMihomoProxy(b));
     const used = new Set();
@@ -1645,27 +1706,88 @@ function buildMihomoConfig(beans) {
     const groups = [];
     if (names.length > 1) {
         groups.push({
-            name: 'auto',
+            name: '⚡️ Fastest',
             type: 'url-test',
             proxies: names,
-            url: 'https://www.gstatic.com/generate_204',
-            interval: 45
+            url: URLTEST,
+            interval: SUB_FETCH_INTERVAL
         });
+        groups.push({
+            name: 'PROXY',
+            type: 'select',
+            proxies: ['⚡️ Fastest', ...names]
+        });
+    } else {
+        groups.push({name: 'PROXY', type: 'select', proxies: names});
     }
-    groups.push({name: 'select', type: 'select', proxies: names.length > 1 ? ['auto', ...names] : names});
+    const usePerProxyPort = !!(opts && opts.perProxyPort);
+    const basePort = (opts && opts.basePort) || 7890;
+    const listeners = [];
+    if (usePerProxyPort && proxies.length > 0) {
+        for (let i = 0; i < proxies.length; i++) {
+            const port = basePort + i;
+            listeners.push({
+                name: `mixed-${proxies[i].name}`,
+                type: 'mixed',
+                port: port,
+                proxy: proxies[i].name
+            });
+        }
+    }
     const config = {
-        'mixed-port': 7890,
         'allow-lan': false,
         mode: 'rule',
         'log-level': 'info',
         proxies,
         'proxy-groups': groups,
-        rules: ['MATCH,select']
+        rules: ['MATCH,PROXY']
     };
+    if (!usePerProxyPort) {
+        config['mixed-port'] = basePort;
+    } else if (listeners.length > 0) {
+        config.listeners = listeners;
+    }
     return config;
 }
 
-function overlayMihomoYaml(baseYamlText, proxies, groups, providers, rules) {
+function buildMihomoSubscriptionConfig(subscriptionUrls) {
+    if (!Array.isArray(subscriptionUrls) || subscriptionUrls.length === 0) {
+        throw new Error('At least one subscription URL is required');
+    }
+
+    const providers = {};
+    const providerNames = [];
+    subscriptionUrls.forEach((url, index) => {
+        const providerName = subscriptionUrls.length === 1 ? 'my_subscription' : `subscription_${index + 1}`;
+        providers[providerName] = {
+            type: 'http',
+            url: url,
+            interval: 3600,
+            'health-check': {
+                enable: true,
+                interval: 600,
+                url: URLTEST,
+                'expected-status': 204
+            }
+        };
+        providerNames.push(providerName);
+    });
+
+    const groups = [{
+        name: '⚡️ Fastest',
+        type: 'url-test',
+        use: providerNames,
+        url: URLTEST,
+        interval: SUB_FETCH_INTERVAL,
+        tolerance: 50
+    }];
+
+    const rules = ['MATCH,⚡️ Fastest'];
+
+    return {providers, groups, rules};
+}
+
+function overlayMihomoYaml(baseYamlText, proxies, groups, providers, rules, listeners) {
     const text = (baseYamlText || '').replace(/\r\n/g, '\n');
     const lines = text.split('\n');
     const findSection = (key) => {
@@ -1692,6 +1814,13 @@ function overlayMihomoYaml(baseYamlText, proxies, groups, providers, rules) {
     replaceSection('proxy-groups', groups);
     if (providers) replaceSection('proxy-providers', providers);
     if (rules) replaceSection('rules', rules);
+    if (listeners && listeners.length > 0) {
+        replaceSection('listeners', listeners);
+        const mixedPortIndex = lines.findIndex(l => /^mixed-port\s*:/i.test(l));
+        if (mixedPortIndex !== -1) {
+            lines.splice(mixedPortIndex, 1);
+        }
+    }
     return lines.join('\n');
 }
 
@@ -1702,22 +1831,18 @@ const MIHOMO_DEFAULT_TEMPLATE = [
     'mode: rule',
     'log-level: info',
     'ipv6: false',
+    'external-controller: 0.0.0.0:9090',
+    'external-ui: ui',
+    'secret: ',
     'unified-delay: true',
     'profile:',
     '  store-selected: true',
     '  store-fake-ip: true',
-    'dns:',
-    '  enable: true',
-    '  prefer-h3: true',
-    '  use-system-hosts: true',
-    '  enhanced-mode: redir-host',
-    '  nameserver:',
-    '    - https://cloudflare-dns.com/dns-query',
     '',
     'proxies:',
     'proxy-groups:',
     'rules:',
-    '  - "MATCH,select"'
+    '  - "MATCH,PROXY"'
 ].join('\n');
 
 try {
@@ -1728,20 +1853,23 @@ try {
 async function fetchSubscription(url) {
     if (typeof fetch !== 'function') throw new Error('Fetch API not available');
 
+    const allowedSchemes = new Set(SUPPORTED_SCHEMES.filter(s => s !== 'http' && s !== 'https'));
+    const splitLines = (text) => (text || '').split(/\n/).map(s => s.trim()).filter(Boolean);
+
+    function hasRealSubscriptionLinks(text) {
+        const lines = splitLines(text);
+        if (!lines.length) return false;
+        return lines.some(line => {
+            const scheme = (line.split(':', 1)[0] || '').toLowerCase();
+            return allowedSchemes.has(scheme);
+        });
+    }
+
     async function tryFetch(u) {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), SUB_FETCH_TIMEOUT);
         try {
-            const resp = await fetch(u, {
-                method: 'GET',
-                cache: 'no-store',
-                credentials: 'omit',
-                headers: {
-                    'Accept': 'text/plain, */*'
-                },
-                redirect: 'follow',
-                signal: controller.signal
-            });
+            const resp = await fetch(u, Object.assign({}, FETCH_INIT, {signal: controller.signal}));
             clearTimeout(timeout);
             if (!resp.ok) {
                 const reason = resp.statusText || httpReason(resp.status) || '';
@@ -1773,8 +1901,20 @@ async function fetchSubscription(url) {
     async function fetchWithFallback(u, depth) {
         if (depth > MAX_SUB_REDIRECTS) throw new Error('Too many redirects');
 
-        const direct = isHttpUrl(u) ? await tryFetch(u) : {error: new Error('not-http')};
         const attempts = [];
+        const direct = isHttpUrl(u) ? await tryFetch(u) : {error: new Error('not-http')};
+
+        if (!direct.error && typeof direct.text === 'string') {
+            let probe = direct.text || '';
+            const dec = normalizeSubscriptionBody(probe);
+            if (dec) probe = dec;
+            const lines = splitLines(probe);
+            const isSingleHttpPointer = lines.length === 1 && isHttpUrl(lines[0]) && !looksLikeLinksList(lines[0]);
+            if (!isSingleHttpPointer && !hasRealSubscriptionLinks(probe)) {
+                direct.error = new Error('Subscription returned no valid links');
+            }
+        }
+
         attempts.push(direct);
         if (direct.error) {
             for (const makeUrl of PUBLIC_CORS_FALLBACKS) {
@@ -1829,427 +1969,9 @@ async function fetchSubscription(url) {
         }
     }
     if (/\bproxies\s*:/i.test(body) && !looksLikeLinksList(body)) throw new Error('Clash YAML subscription is not supported here');
-    const lines = body.split(/\n/).map(s => s.trim()).filter(Boolean);
-    const allowed = new Set(SUPPORTED_SCHEMES);
-    const filtered = lines.filter(line => allowed.has((line.split(':', 1)[0] || '').toLowerCase()));
+    const lines = splitLines(body);
+    const filtered = lines.filter(line => allowedSchemes.has((line.split(':', 1)[0] || '').toLowerCase()));
     return filtered.join('\n');
-}
-
-function buildLinkFromBean(bean) {
-    const namePart = bean.name ? ('#' + encodeURIComponent(bean.name)) : '';
-    const s = bean.stream || {};
-    const qp = new URLSearchParams();
-    const addParam = (k, v) => {
-        if (v === undefined || v === null) return;
-        const sv = Array.isArray(v) ? v.join(',') : String(v);
-        if (sv !== '') qp.set(k, sv);
-    };
-    const addTlsAndReality = () => {
-        const hasReality = !!(s.reality && s.reality.pbk);
-        const hasTls = (s.security === 'tls') || hasReality;
-        if (hasTls) qp.set('security', hasReality ? 'reality' : 'tls');
-        addParam('sni', s.sni);
-        if (Array.isArray(s.alpn) && s.alpn.length) addParam('alpn', s.alpn);
-        addParam('fp', s.fp);
-        if (hasReality) {
-            addParam('pbk', s.reality.pbk);
-            addParam('sid', s.reality.sid);
-            addParam('spx', s.reality.spx);
-            addParam('pqv', s.reality.pqv);
-        }
-    };
-    const addCommonFlags = () => {
-        if (bean.udp === true) qp.set('udp', '1');
-        if (bean.udpOverTcp === true) qp.set('udp-over-tcp', '1');
-        if (bean.ipVersion) qp.set('ip-version', bean.ipVersion);
-    };
-    const addTransport = () => {
-        const net = (s.network || 'tcp').toLowerCase();
-        if (net && net !== 'tcp') qp.set('type', net === 'h2' ? 'http' : net);
-        if (net === 'ws') {
-            addParam('path', s.path);
-            addParam('host', s.host);
-            if (s.wsEarlyData && s.wsEarlyData.max_early_data) addParam('ed', String(s.wsEarlyData.max_early_data));
-        } else if (net === 'http' || net === 'h2') {
-            addParam('path', s.path);
-            addParam('host', s.host);
-        } else if (net === 'grpc') {
-            addParam('serviceName', s.path);
-        } else if (net === 'httpupgrade') {
-            addParam('path', s.path);
-            addParam('host', s.host);
-        } else if (net === 'xhttp') {
-            addParam('path', s.path);
-            addParam('host', s.host);
-            addParam('xmode', s.xhttpMode);
-        }
-        if (s.headerType === 'http') {
-            qp.set('headerType', 'http');
-            addParam('path', s.path);
-            addParam('host', s.host);
-        }
-    };
-    switch (bean.proto) {
-        case 'vless': {
-            addTlsAndReality();
-            addTransport();
-            if (bean.auth?.flow) qp.set('flow', bean.auth.flow);
-            qp.set('encryption', 'none');
-            {
-                const net0 = (s.network || 'tcp').toLowerCase();
-                const net = (net0 === 'h2') ? 'http' : net0;
-                qp.set('type', net);
-            }
-            addCommonFlags();
-            const user = encodeURIComponent(bean.auth?.uuid || '');
-            return `vless://${user}@${bean.host}:${bean.port}?${qp.toString()}${namePart}`;
-        }
-        case 'vmess': {
-            const obj = {
-                add: bean.host,
-                port: bean.port,
-                id: bean.auth?.uuid || '',
-                ps: bean.name || '',
-                scy: bean.auth?.security || 'auto',
-                net: (s.network || 'tcp'),
-                alpn: Array.isArray(s.alpn) && s.alpn.length ? s.alpn.join(',') : '',
-                host: s.host || '',
-                path: s.path || '',
-                type: s.headerType || '',
-                fp: s.fp || '',
-                pac_enc: s.packet_encoding || ''
-            };
-            if (s.reality && s.reality.pbk) {
-                obj.tls = 'reality';
-                obj.pbk = s.reality.pbk;
-                if (s.reality.sid) obj.sid = s.reality.sid;
-                if (s.reality.spx) obj.spx = s.reality.spx;
-            } else {
-                obj.tls = (s.security === 'tls') ? 'tls' : '';
-            }
-            if (s.sni) obj.sni = s.sni;
-            const b64 = btoa(JSON.stringify(obj));
-            return `vmess://${b64}`;
-        }
-        case 'trojan': {
-            addTlsAndReality();
-            addTransport();
-            {
-                const net0 = (s.network || 'tcp').toLowerCase();
-                const net = (net0 === 'h2') ? 'http' : net0;
-                qp.set('type', net);
-            }
-            addCommonFlags();
-            const user = encodeURIComponent(bean.auth?.password || '');
-            return `trojan://${user}@${bean.host}:${bean.port}?${qp.toString()}${namePart}`;
-        }
-        case 'http': {
-            addTlsAndReality();
-            addCommonFlags();
-            const scheme = (s.security === 'tls') ? 'https' : 'http';
-            const user = encodeURIComponent(bean.socks?.username || '');
-            const pass = encodeURIComponent(bean.socks?.password || '');
-            const auth = (user || pass) ? `${user}:${pass}@` : '';
-            return `${scheme}://${auth}${bean.host}:${bean.port}${qp.toString() ? ('?' + qp.toString()) : ''}${namePart}`;
-        }
-        case 'socks': {
-            addTlsAndReality();
-            addTransport();
-            addCommonFlags();
-            const ver = (bean.socks?.type === 'socks4') ? 'socks4' : 'socks5';
-            const user = encodeURIComponent(bean.socks?.username || '');
-            const pass = encodeURIComponent(bean.socks?.password || '');
-            const auth = (user || pass) ? `${user}:${pass}@` : '';
-            return `${ver}://${auth}${bean.host}:${bean.port}${qp.toString() ? ('?' + qp.toString()) : ''}${namePart}`;
-        }
-        default:
-            throw new Error('Unknown protocol: ' + bean.proto);
-    }
-}
-
-function beansToLinks(beans) {
-    const links = [];
-    for (const b of beans) {
-        validateBean(b);
-        links.push(buildLinkFromBean(b));
-    }
-    return links.join('\n');
-}
-
-function parseSingBoxConfigToBeans(conf) {
-    const beans = [];
-    const obs = Array.isArray(conf?.outbounds) ? conf.outbounds : [];
-    for (const ob of obs) {
-        const t = (ob?.type || '').toLowerCase();
-        const supported = ['vmess', 'vless', 'trojan', 'shadowsocks', 'socks', 'http', 'hysteria2', 'tuic', 'mieru'];
-        if (!supported.includes(t)) continue;
-        const s = {network: 'tcp', security: '', sni: '', alpn: [], allowInsecure: false, fp: '', reality: {}};
-        if (ob?.tls && (ob.tls.enabled || ob.tls.reality)) {
-            s.security = 'tls';
-            if (ob.tls.server_name) s.sni = ob.tls.server_name;
-            if (Array.isArray(ob.tls.alpn)) s.alpn = ob.tls.alpn;
-            if (ob.tls.utls && ob.tls.utls.fingerprint) s.fp = ob.tls.utls.fingerprint;
-            if (ob.tls.reality && (ob.tls.reality.public_key || ob.tls.reality.short_id)) {
-                s.reality = {pbk: ob.tls.reality.public_key || '', sid: ob.tls.reality.short_id || ''};
-                if (ob.tls.reality.spider_x) s.reality.spx = ob.tls.reality.spider_x;
-            }
-        }
-        if (ob?.transport && ob.transport.type) {
-            const tt = ob.transport.type;
-            if (tt === 'http') {
-                if (t === 'vmess' || t === 'vless') {
-                    s.network = 'http';
-                    if (ob.transport.path) s.path = ob.transport.path;
-                    if (ob.transport.host) s.host = Array.isArray(ob.transport.host) ? ob.transport.host.join(',') : ob.transport.host;
-                } else {
-                    s.network = 'http';
-                }
-            } else if (tt === 'ws') {
-                s.network = 'ws';
-                if (ob.transport.path) s.path = ob.transport.path;
-                if (ob.transport.headers && ob.transport.headers.Host) s.host = ob.transport.headers.Host;
-                if (typeof ob.transport.max_early_data === 'number' && ob.transport.max_early_data > 0) {
-                    s.wsEarlyData = {
-                        max_early_data: ob.transport.max_early_data,
-                        early_data_header_name: ob.transport.early_data_header_name || 'Sec-WebSocket-Protocol'
-                    };
-                }
-            } else if (tt === 'grpc') {
-                s.network = 'grpc';
-                if (ob.transport.service_name) s.path = ob.transport.service_name;
-            } else if (tt === 'httpupgrade') {
-                s.network = 'httpupgrade';
-                if (ob.transport.path) s.path = ob.transport.path;
-                if (ob.transport.host) s.host = ob.transport.host;
-            } else if (tt === 'xhttp') {
-                s.network = 'xhttp';
-                if (ob.transport.path) s.path = ob.transport.path;
-                if (ob.transport.host) s.host = ob.transport.host;
-                if (ob.transport.mode) s.xhttpMode = ob.transport.mode;
-            }
-        } else if (ob?.transport === undefined && ob?.type && (ob.type === 'vless' || ob.type === 'vmess') && ob?.packet_encoding) {
-            s.packet_encoding = ob.packet_encoding;
-        }
-        if (t === 'vmess') {
-            beans.push({
-                proto: 'vmess',
-                host: ob.server,
-                port: ob.server_port,
-                name: ob.tag || 'vmess',
-                auth: {uuid: ob.uuid, security: ob.security || 'auto'},
-                stream: s
-            });
-        } else if (t === 'vless') {
-            const bean = {
-                proto: 'vless',
-                host: ob.server,
-                port: ob.server_port,
-                name: ob.tag || 'vless',
-                auth: {uuid: ob.uuid},
-                stream: s
-            };
-            if (ob.flow) bean.auth.flow = ob.flow;
-            if (ob.packet_encoding) s.packet_encoding = ob.packet_encoding;
-            beans.push(bean);
-        } else if (t === 'trojan') {
-            beans.push({
-                proto: 'trojan',
-                host: ob.server,
-                port: ob.server_port,
-                name: ob.tag || 'trojan',
-                auth: {password: ob.password},
-                stream: s
-            });
-        } else if (t === 'shadowsocks') {
-            beans.push({
-                proto: 'ss',
-                host: ob.server,
-                port: ob.server_port,
-                name: ob.tag || 'ss',
-                ss: {method: ob.method, password: ob.password},
-                stream: {network: 'tcp', security: ''}
-            });
-        } else if (t === 'socks' || t === 'http') {
-            const sock = {};
-            if (ob.username) sock.username = ob.username;
-            if (ob.password) sock.password = ob.password;
-            if (ob.version === '4') sock.type = 'socks4';
-            beans.push({proto: t, host: ob.server, port: ob.server_port, name: ob.tag || t, socks: sock, stream: s});
-        } else if (t === 'hysteria2') {
-            const hy = {alpn: Array.isArray(s.alpn) ? s.alpn.join(',') : '', sni: s.sni || '', allowInsecure: false};
-            if (ob.obfs && ob.obfs.type === 'salamander' && ob.obfs.password) hy.obfsPassword = ob.obfs.password;
-            if (ob.hop_ports) hy.hopPort = ob.hop_ports;
-            if (ob.hop_interval) hy.hopInterval = ob.hop_interval;
-            beans.push({
-                proto: 'hy2',
-                host: ob.server,
-                port: ob.server_port,
-                name: ob.tag || 'hy2',
-                auth: {password: ob.password},
-                hysteria2: hy,
-                stream: s
-            });
-        } else if (t === 'tuic') {
-            const tu = {};
-            if (ob.congestion_control) tu.congestion_control = ob.congestion_control;
-            if (ob.udp_over_stream) tu.udp_over_stream = true; else if (ob.udp_relay_mode) tu.udp_relay_mode = ob.udp_relay_mode;
-            if (ob.zero_rtt_handshake) tu.zero_rtt_handshake = true;
-            if (ob.heartbeat) tu.heartbeat = ob.heartbeat;
-            const auth = {uuid: ob.uuid || '', password: ob.password || ''};
-            if (ob.token) tu.token = ob.token;
-            beans.push({
-                proto: 'tuic',
-                host: ob.server,
-                port: ob.server_port,
-                name: ob.tag || 'tuic',
-                auth,
-                tuic: tu,
-                stream: s
-            });
-        } else if (t === 'mieru') {
-            const m = {};
-            if (ob.server_ports) m.server_ports = ob.server_ports;
-            if (ob.transport) m.transport = ob.transport;
-            if (ob.username) m.username = ob.username;
-            if (ob.password) m.password = ob.password;
-            if (ob.multiplexing) m.multiplexing = ob.multiplexing;
-            beans.push({proto: 'mieru', host: ob.server, port: ob.server_port, name: ob.tag || 'mieru', mieru: m});
-        }
-    }
-    return beans;
-}
-
-function parseXrayConfigToBeans(conf) {
-    const beans = [];
-    const obs = Array.isArray(conf?.outbounds) ? conf.outbounds : [];
-    for (const ob of obs) {
-        const p = (ob?.protocol || '').toLowerCase();
-        const supported = ['vmess', 'vless', 'trojan', 'shadowsocks', 'socks', 'http'];
-        if (!supported.includes(p)) continue;
-        const s = {
-            network: 'tcp',
-            security: '',
-            sni: '',
-            alpn: [],
-            allowInsecure: false,
-            fp: '',
-            reality: {},
-            headerType: '',
-            host: '',
-            path: ''
-        };
-        const ss = ob.streamSettings || {};
-        const net = (ss.network || 'tcp').toLowerCase();
-        if (net === 'xhttp') s.network = 'xhttp'; else s.network = net;
-        if (ss.tlsSettings) {
-            s.security = 'tls';
-            if (ss.tlsSettings.serverName) s.sni = ss.tlsSettings.serverName;
-            if (Array.isArray(ss.tlsSettings.alpn)) s.alpn = ss.tlsSettings.alpn;
-            if (ss.tlsSettings.fingerprint) s.fp = ss.tlsSettings.fingerprint;
-            if (ss.tlsSettings.allowInsecure) s.allowInsecure = true;
-        }
-        if (ss.security === 'reality' || ss.realitySettings) {
-            s.security = 'tls';
-            const r = ss.realitySettings || {};
-            s.reality = {pbk: r.publicKey || '', sid: r.shortId || ''};
-            if (r.fingerprint) s.fp = r.fingerprint;
-            if (r.serverName) s.sni = r.serverName;
-        }
-        if (s.network === 'xhttp') {
-            const xh = ss.xhttpSettings || {};
-            if (xh.host) s.host = xh.host;
-            if (xh.path) s.path = xh.path;
-            if (xh.mode) s.xhttpMode = xh.mode;
-        } else if (s.network === 'tcp' && ss.tcpSettings && ss.tcpSettings.header && ss.tcpSettings.header.type === 'http') {
-            s.headerType = 'http';
-            const req = ss.tcpSettings.header.request || {};
-            if (Array.isArray(req.path) && req.path.length) s.path = req.path[0];
-            if (req.headers && req.headers.Host) s.host = req.headers.Host;
-        }
-        if (p === 'vmess') {
-            const vn = ob.settings?.vnext?.[0];
-            const user = vn?.users?.[0] || {};
-            beans.push({
-                proto: 'vmess',
-                host: vn?.address || '',
-                port: vn?.port || 0,
-                name: ob.tag || 'vmess',
-                auth: {uuid: user.id || '', security: user.security || 'auto'},
-                stream: s
-            });
-        } else if (p === 'vless') {
-            const vn = ob.settings?.vnext?.[0];
-            const user = vn?.users?.[0] || {};
-            const bean = {
-                proto: 'vless',
-                host: vn?.address || '',
-                port: vn?.port || 0,
-                name: ob.tag || 'vless',
-                auth: {uuid: user.id || ''},
-                stream: s
-            };
-            if (user.flow) bean.auth.flow = user.flow;
-            beans.push(bean);
-        } else if (p === 'trojan') {
-            const sv = ob.settings?.servers?.[0];
-            beans.push({
-                proto: 'trojan',
-                host: sv?.address || '',
-                port: sv?.port || 0,
-                name: ob.tag || 'trojan',
-                auth: {password: sv?.password || ''},
-                stream: s
-            });
-        } else if (p === 'shadowsocks') {
-            const sv = ob.settings?.servers?.[0];
-            beans.push({
-                proto: 'ss',
-                host: sv?.address || '',
-                port: sv?.port || 0,
-                name: ob.tag || 'ss',
-                ss: {method: sv?.method || '', password: sv?.password || ''},
-                stream: {network: 'tcp', security: ''}
-            });
-        } else if (p === 'socks' || p === 'http') {
-            const sv = ob.settings?.servers?.[0];
-            const sock = {};
-            if (sv?.users && sv.users[0]) {
-                sock.username = sv.users[0].user || '';
-                sock.password = sv.users[0].pass || '';
-            }
-            beans.push({
-                proto: p,
-                host: sv?.address || '',
-                port: sv?.port || 0,
-                name: ob.tag || p,
-                socks: sock,
-                stream: s
-            });
-        }
-    }
-    return beans;
-}
-
-function detectConfigAndConvertToLinks(raw) {
-    const text = (raw || '').trim();
-    if (!text) throw new Error('Empty input');
-    let obj = null;
-    try {
-        obj = JSON.parse(text);
-    } catch {
-        obj = null;
-    }
-    if (!obj) throw new Error('Unsupported or invalid JSON config');
-    let beans = [];
-    if (Array.isArray(obj?.outbounds) && obj.outbounds.length) {
-        if (obj.outbounds[0] && (obj.outbounds[0].type || obj.outbounds[0].server)) {
-            beans = parseSingBoxConfigToBeans(obj);
-        } else if (obj.outbounds[0] && (obj.outbounds[0].protocol || obj.outbounds[0].settings)) {
-            beans = parseXrayConfigToBeans(obj);
-        }
-    }
-    if (!beans.length) throw new Error('No supported outbounds found in config');
-    return beansToLinks(beans);
 }
 
 try {
@@ -2263,10 +1985,10 @@ try {
             buildXrayOutbound,
             buildXrayConfig,
             buildMihomoConfig,
-            buildMihomoYaml: function (proxies, groups, providers, rules) {
-                return overlayMihomoYaml(MIHOMO_DEFAULT_TEMPLATE, proxies, groups, providers, rules);
+            buildMihomoSubscriptionConfig,
+            buildMihomoYaml: function (proxies, groups, providers, rules, listeners) {
+                return overlayMihomoYaml(MIHOMO_DEFAULT_TEMPLATE, proxies, groups, providers, rules, listeners);
             },
-            reverseConvert: detectConfigAndConvertToLinks,
             fetchSubscription
         });
     }

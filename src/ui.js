@@ -17,19 +17,27 @@ const el = {
     cbExtended: document.getElementById('cbExtended'),
     cbClashSecret: document.getElementById('cbClashSecret'),
     cbMihomoSub: document.getElementById('cbMihomoSub'),
+    cbMihomoPerProxyPort: document.getElementById('cbMihomoPerProxyPort'),
+    cbDetour: document.getElementById('cbDetour'),
     lblMihomoSub: document.getElementById('lblMihomoSub'),
+    lblMihomoPerProxyPort: document.getElementById('lblMihomoPerProxyPort'),
     cbXrayBalancer: document.getElementById('cbXrayBalancer'),
     lblXrayBalancer: document.getElementById('lblXrayBalancer'),
     cbPerTunMixed: document.getElementById('cbPerTunMixed'),
     lblPerTunMixed: document.getElementById('lblPerTunMixed'),
-    out: document.getElementById('out')
+    cbAndroidMode: document.getElementById('cbAndroidMode'),
+    lblAndroidMode: document.getElementById('lblAndroidMode'),
+    lblDetour: document.getElementById('lblDetour'),
+    out: document.getElementById('out'),
+    btnSettings: document.getElementById('btnSettings'),
+    settingsPanel: document.getElementById('settingsPanel')
 };
 
 const state = {
     core: 'singbox'
 };
 
-const MSG_SUB_URL = 'Provide a single HTTP(S) URL for Mihomo subscription';
+const MSG_SUB_URL = 'Provide one or more HTTP(S) URLs for Mihomo subscription (one per line)';
 const MSG_SUB_EMPTY = 'Subscription returned no valid links';
 const MSG_SUB_FETCH = (m) => 'Failed to fetch subscription: ' + (m || '');
 const MSG_NO_LINKS = 'No valid links or profiles provided';
@@ -45,7 +53,13 @@ const setError = (msg) => {
     el.errorText.textContent = msg || '';
 };
 const setGenerateEnabled = (enabled) => {
-    if (el.gen) el.gen.disabled = !enabled;
+    if (!el.gen) return;
+    el.gen.disabled = !enabled;
+    toggleHidden(el.gen, !enabled);
+};
+const setInputLoading = (loading) => {
+    if (!el.links) return;
+    el.links.classList.toggle('input-loading', !!loading);
 };
 const renderOutput = (text, isYaml) => {
     el.out.value = text || '';
@@ -83,14 +97,17 @@ function setCore(core) {
     toggleHidden(cbSocksLabel, hideSing);
     toggleHidden(cbClashSecretLabel, hideSing);
     toggleHidden(cbExtendedLabel, hideSing);
-    toggleHidden(el.tunName, hideSing);
+    toggleHidden(el.tunName?.parentElement || el.tunName, hideSing);
     toggleHidden(el.lblMihomoSub, core !== 'mihomo');
+    toggleHidden(el.lblMihomoPerProxyPort, core !== 'mihomo');
     toggleHidden(el.lblPerTunMixed, hideSing);
-    toggleHidden(el.lblXrayBalancer, true);
+    toggleHidden(el.lblAndroidMode, hideSing);
+    toggleHidden(el.lblDetour, hideSing);
+    toggleHidden(el.lblXrayBalancer, core !== 'xray');
 }
 
 function isMihomoSubscriptionMode() {
-    return getCore() === 'mihomo' && !!document.getElementById('cbMihomoSub')?.checked;
+    return getCore() === 'mihomo' && !!el.cbMihomoSub?.checked;
 }
 
 document.addEventListener('keydown', function (e) {
@@ -116,31 +133,12 @@ el.lblMihomo.addEventListener('click', (e) => {
     validateField(false);
 });
 
-let dragging = false, startX = 0, moved = false, suppressClick = false;
-el.coreToggle.addEventListener('mousedown', (e) => {
-    dragging = true;
-    moved = false;
-    startX = e.clientX;
-});
-window.addEventListener('mouseup', () => {
-    if (dragging && moved) {
-        suppressClick = true;
-        setTimeout(() => suppressClick = false, 0);
-    }
-    dragging = false;
-});
-window.addEventListener('mousemove', (e) => {
-    if (!dragging) return;
-    const dx = e.clientX - startX;
-    if (dx > 10) {
-        setCore('xray');
-        moved = true;
-    }
-    if (dx < -10) {
-        setCore('singbox');
-        moved = true;
-    }
-});
+if (el.btnSettings && el.settingsPanel) {
+    el.btnSettings.addEventListener('click', () => {
+        const collapsed = el.settingsPanel.classList.toggle('settings-panel--collapsed');
+        el.btnSettings.setAttribute('aria-expanded', String(!collapsed));
+    });
+}
 
 function setupCheckboxValidation() {
     if (!el.cbTun || !el.cbSocks) return;
@@ -150,22 +148,27 @@ function setupCheckboxValidation() {
     el.cbSocks.addEventListener('change', () => {
         if (!el.cbTun.checked && !el.cbSocks.checked) el.cbTun.checked = true;
     });
-    el.cbExtended?.addEventListener('change', () => {
-        validateField(false);
-    });
-    el.cbMihomoSub?.addEventListener('change', () => {
-        validateField(false);
-    });
-    el.cbPerTunMixed?.addEventListener('change', () => {
-        validateField(false);
-    });
-    el.cbXrayBalancer?.addEventListener('change', () => {
-        validateField(false);
+
+    const revalidateOnChange = [
+        el.cbExtended,
+        el.cbDetour,
+        el.cbMihomoSub,
+        el.cbMihomoPerProxyPort,
+        el.cbPerTunMixed,
+        el.cbAndroidMode,
+        el.cbXrayBalancer,
+    ];
+
+    revalidateOnChange.forEach(cb => {
+        cb?.addEventListener('change', () => {
+            validateField(false);
+        });
     });
 }
 
 function validateField(showOutput) {
     const raw = el.links.value;
+    const hasText = !!raw.trim();
     const tunName = el.tunName.value.trim();
     const addTun = !!el.cbTun?.checked;
     const addSocks = !!el.cbSocks?.checked;
@@ -173,7 +176,7 @@ function validateField(showOutput) {
     const useExtended = !!el.cbExtended?.checked;
     const subMihomo = isMihomoSubscriptionMode();
     try {
-        if (!raw.trim()) {
+        if (!hasText) {
             setGenerateEnabled(false);
             setError('');
             hideOutput();
@@ -182,18 +185,20 @@ function validateField(showOutput) {
         }
         if (subMihomo) {
             const lines = raw.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
-            const validSingleHttp = lines.length === 1 && /^https?:\/\//i.test(lines[0]) && !/@/.test(lines[0]);
+            const validHttpUrls = lines.length > 0 && lines.every(line => /^https?:\/\//i.test(line) && !/@/.test(line));
             if (!showOutput) {
-                setError(validSingleHttp ? '' : MSG_SUB_URL);
-                setGenerateEnabled(validSingleHttp);
-                el.links.classList.toggle('input-error', !validSingleHttp);
-                if (!validSingleHttp) hideOutput();
-                return validSingleHttp ? {subUrl: lines[0]} : false;
+                setError(validHttpUrls ? '' : MSG_SUB_URL);
+                setGenerateEnabled(validHttpUrls);
+                el.links.classList.toggle('input-error', !validHttpUrls);
+                if (!validHttpUrls) hideOutput();
+                return validHttpUrls ? {subUrls: lines} : false;
             }
-            if (!validSingleHttp) throw new Error(MSG_SUB_URL);
-            const providers = {my_subscription: {type: 'http', url: lines[0], interval: 3600}};
-            const groups = [{name: 'PROXY', type: 'select', use: ['my_subscription']}];
-            const yaml = (globalThis.web4core?.buildMihomoYaml || (() => ''))([], groups, providers, ['MATCH,PROXY']);
+            if (!validHttpUrls) throw new Error(MSG_SUB_URL);
+
+            const config = globalThis.web4core?.buildMihomoSubscriptionConfig(lines);
+            if (!config) throw new Error('Failed to build subscription config');
+
+            const yaml = (globalThis.web4core?.buildMihomoYaml || (() => ''))([], config.groups, config.providers, config.rules, null);
             renderOutput(yaml, true);
             setGenerateEnabled(true);
             el.links.classList.remove('input-error');
@@ -217,14 +222,15 @@ function validateField(showOutput) {
             setGenerateEnabled(true);
             el.links.classList.remove('input-error');
             const perTunMixed = !!el.cbPerTunMixed?.checked;
-            const showBalancer = (getCore() === 'xray' && Array.isArray(beans) && beans.length >= 2);
-            toggleHidden(el.lblXrayBalancer, !showBalancer);
-            return {beans, tunName, addTun, addSocks, perTunMixed, genClashSecret, useExtended};
+            const androidMode = !!el.cbAndroidMode?.checked;
+            return {beans, tunName, addTun, addSocks, perTunMixed, genClashSecret, useExtended, androidMode};
         }
 
         if (getCore() === 'singbox') {
             const perTunMixed = !!el.cbPerTunMixed?.checked;
-            const opts = {addTun, addSocks, perTunMixed, tunName, genClashSecret, useExtended};
+            const useDetour = !!el.cbDetour?.checked;
+            const androidMode = !!el.cbAndroidMode?.checked;
+            const opts = {addTun, addSocks, perTunMixed, tunName, genClashSecret, useExtended, androidMode};
             const used = new Set();
             const dnsBeans = useExtended ? beans.filter(b => b.proto === 'sdns') : [];
             const outboundBeans = beans.filter(b => b.proto !== 'sdns');
@@ -234,6 +240,12 @@ function validateField(showOutput) {
                 const tag = globalThis.web4core.computeTag(b, used);
                 return Object.assign({tag}, ob);
             });
+            if (useDetour && outbounds.length > 1) {
+                const mainTag = outbounds[0].tag;
+                for (let i = 1; i < outbounds.length; i++) {
+                    outbounds[i].detour = mainTag;
+                }
+            }
             opts.dnsBeans = dnsBeans;
             const finalConfig = globalThis.web4core.buildSingBoxConfig(outbounds, opts);
             renderOutput(JSON.stringify(finalConfig, null, 2), false);
@@ -243,8 +255,6 @@ function validateField(showOutput) {
         }
 
         if (getCore() === 'xray') {
-            const showBalancer = (Array.isArray(beans) && beans.length >= 2);
-            toggleHidden(el.lblXrayBalancer, !showBalancer);
             let finalConfig;
             if (beans.length === 1) finalConfig = globalThis.web4core.buildXrayConfig(globalThis.web4core.buildXrayOutbound(beans[0]), {});
             else {
@@ -265,8 +275,9 @@ function validateField(showOutput) {
 
         if (getCore() === 'mihomo') {
             const outBeans = beans.filter(b => !['mieru', 'sdns'].includes(b.proto));
-            const yamlObj = globalThis.web4core.buildMihomoConfig(outBeans);
-            const yaml = globalThis.web4core.buildMihomoYaml(yamlObj.proxies, yamlObj['proxy-groups']);
+            const perProxyPort = !!el.cbMihomoPerProxyPort?.checked;
+            const yamlObj = globalThis.web4core.buildMihomoConfig(outBeans, {perProxyPort, basePort: 7890});
+            const yaml = globalThis.web4core.buildMihomoYaml(yamlObj.proxies, yamlObj['proxy-groups'], null, null, yamlObj.listeners);
             renderOutput(yaml, true);
             setGenerateEnabled(true);
             el.links.classList.remove('input-error');
@@ -302,28 +313,44 @@ function assertNoProtocols(beans, list, label) {
 
 function detectSubscriptionUrl(raw) {
     const lines = (raw || '').split(/\r?\n/).map(s => s.trim()).filter(Boolean);
-    if (lines.length !== 1) return {isSub: false, url: ''};
-    const u = lines[0];
-    if (!/^https?:\/\//i.test(u) || /@/.test(u)) return {isSub: false, url: ''};
-    try {
-        const p = new URL(u).pathname || '';
-        return {isSub: (p && p !== '/'), url: u};
-    } catch {
-        return {isSub: false, url: ''};
+    const subUrls = [];
+    const others = [];
+    for (const line of lines) {
+        if (!line) continue;
+        if (!/^https?:\/\//i.test(line) || /@/.test(line)) {
+            others.push(line);
+            continue;
+        }
+        try {
+            const p = new URL(line).pathname || '';
+            if (p && p !== '/') subUrls.push(line);
+            else others.push(line);
+        } catch {
+            others.push(line);
+        }
     }
+    return {subUrls, others};
 }
 
 el.gen.addEventListener('click', () => {
     const raw = (el.links?.value || '').trim();
     const det = detectSubscriptionUrl(raw);
-    const shouldTreatAsSub = det.isSub;
+    const hasSub = Array.isArray(det.subUrls) && det.subUrls.length > 0;
     const skipBecauseMihomoProvider = isMihomoSubscriptionMode();
-    if (shouldTreatAsSub && !skipBecauseMihomoProvider && globalThis.web4core?.fetchSubscription) {
+    if (hasSub && !skipBecauseMihomoProvider && globalThis.web4core?.fetchSubscription) {
         setGenerateEnabled(false);
+        setInputLoading(true);
         setError('');
-        globalThis.web4core.fetchSubscription(det.url).then(text => {
-            if (!text) throw new Error(MSG_SUB_EMPTY);
-            el.links.value = text;
+        const subPromises = det.subUrls.map(u => globalThis.web4core.fetchSubscription(u));
+        Promise.all(subPromises).then(texts => {
+            const merged = [];
+            for (const text of texts) {
+                if (!text) throw new Error(MSG_SUB_EMPTY);
+                merged.push(...text.split(/\r?\n/).map(s => s.trim()).filter(Boolean));
+            }
+            const combined = [...det.others, ...merged].join('\n');
+            if (!combined.trim()) throw new Error(MSG_SUB_EMPTY);
+            el.links.value = combined;
             validateField(true);
             scrollOutIntoView();
         }).catch((e) => {
@@ -333,6 +360,7 @@ el.gen.addEventListener('click', () => {
             el.links.classList.add('input-error');
         }).finally(() => {
             setGenerateEnabled(true);
+            setInputLoading(false);
         });
         return;
     }
@@ -364,29 +392,30 @@ el.btnDownload.addEventListener('click', () => {
 });
 
 setupCheckboxValidation();
-setGenerateEnabled(true);
 setCore(state.core);
+validateField(false);
 
-function looksLikeJsonConfig(text) {
+function parseOutboundsJson(text) {
     const t = (text || '').trim();
-    if (!t || (t[0] !== '{' && t[0] !== '[')) return false;
+    if (!t || (t[0] !== '{' && t[0] !== '[')) return null;
     try {
         const obj = JSON.parse(t);
-        return obj && typeof obj === 'object' && Array.isArray(obj.outbounds) && obj.outbounds.length > 0;
+        if (!obj || typeof obj !== 'object' || !Array.isArray(obj.outbounds) || obj.outbounds.length === 0) {
+            return null;
+        }
+        return obj;
     } catch {
-        return false;
+        return null;
     }
 }
 
+function looksLikeJsonConfig(text) {
+    return !!parseOutboundsJson(text);
+}
+
 function isReverseOnlyJson(text) {
-    const t = (text || '').trim();
-    if (!t || (t[0] !== '{' && t[0] !== '[')) return false;
-    try {
-        const obj = JSON.parse(t);
-        return !!(obj && typeof obj === 'object' && Array.isArray(obj.outbounds) && obj.outbounds.length > 0 && !obj.profiles);
-    } catch {
-        return false;
-    }
+    const obj = parseOutboundsJson(text);
+    return !!(obj && !obj.profiles);
 }
 
 function toggleReverseVisibility() {
@@ -405,8 +434,8 @@ if (el.links) {
     const handleJsonMode = () => {
         const raw = (el.links.value || '').trim();
         const reverseOnly = isReverseOnlyJson(raw);
-        setGenerateEnabled(!(reverseOnly || !raw));
         if (reverseOnly) {
+            setGenerateEnabled(false);
             setError('');
             hideOutput();
             el.links.classList.remove('input-error');
@@ -426,31 +455,8 @@ if (el.links) {
     });
     updateJsonUiState();
 }
-if (el.btnReverse) {
-    toggleReverseVisibility();
-    el.btnReverse.addEventListener('click', () => {
-        const raw = (el.links?.value || '').trim();
-        try {
-            const rev = globalThis.web4core?.reverseConvert;
-            if (!rev) throw new Error(MSG_REVERSE_UNAVAILABLE);
-            const text = rev(raw);
-            if (!text) throw new Error(MSG_REVERSE_EMPTY);
-            renderOutput(text, false);
-            el.links.classList.remove('input-error');
-            scrollOutIntoView();
-        } catch (e) {
-            setError((e && e.message) ? e.message : MSG_REVERSE_FAILED);
-            hideOutput();
-            el.links.classList.add('input-error');
-        }
-    });
-}
 
 const header = document.getElementById('asciiHeader');
 if (header) header.addEventListener('click', function () {
     location.reload();
 });
-
-if (!state.core) setCore('singbox');
-
-

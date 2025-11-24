@@ -32,9 +32,14 @@
     <symbol id="check-mark-small" viewBox="0 0 16 16" fill="currentColor">
         <path d="M6.173 12.414l-3.89-3.89 1.414-1.414 2.476 2.475 6.364-6.364 1.414 1.414-7.778 7.778z"/>
     </symbol>
+    <symbol id="settings" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3"></circle>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 8.4 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4 15.4a1.65 1.65 0 0 0-1.51-1H2.4a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4 8.4a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 8.4 4a1.65 1.65 0 0 0 1-1.51V2.4a2 2 0 1 1 4 0v.09A1.65 1.65 0 0 0 15.6 4a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 8.4a1.65 1.65 0 0 0 1.51 1h.09a2 2 0 1 1 0 4h-.09A1.65 1.65 0 0 0 19.4 15z"></path>
+    </symbol>
 </svg>
 <main class="container container--stretch">
-    <div class="row row--left gap-12">
+    <div class="row row--left gap-12 toolbar">
         <div id="coreToggle" class="core-toggle" data-core="singbox" aria-label="Core selector" role="switch"
              aria-checked="true" tabindex="0">
             <div class="knob"></div>
@@ -44,47 +49,76 @@
                 <span id="lblMihomo">Mihomo</span>
             </div>
         </div>
-        <label class="custom-checkbox">
-            <input type="checkbox" id="cbTun" checked/>
-            <div class="checkmark"></div>
-            <span>TUN</span>
-        </label>
-        <label class="custom-checkbox">
-            <input type="checkbox" id="cbSocks" checked/>
-            <div class="checkmark"></div>
-            <span>SOCKS5</span>
-        </label>
-        <label class="custom-checkbox" id="lblPerTunMixed">
-            <input type="checkbox" id="cbPerTunMixed"/>
-            <div class="checkmark"></div>
-            <span title="Expose per-TUN proxy inbounds when multiple TUNs">Per‑TUN proxy</span>
-        </label>
-        <label class="custom-checkbox">
-            <input type="checkbox" id="cbClashSecret"/>
-            <div class="checkmark"></div>
-            <span title="Clash API Secret">Clash Secret</span>
-        </label>
-        <label class="custom-checkbox">
-            <input type="checkbox" id="cbExtended"/>
-            <div class="checkmark"></div>
-            <span title="Extended features: XHTTP, XUDP, SDNS, Unified delay from github.com/shtorm-7/sing-box-extended">Extended</span>
-        </label>
-        <label class="custom-checkbox is-hidden" id="lblXrayBalancer">
-            <input type="checkbox" id="cbXrayBalancer"/>
-            <div class="checkmark"></div>
-            <span title="Xray routing balancer over all proxies">Balancer</span>
-        </label>
-        <label class="custom-checkbox is-hidden" id="lblMihomoSub">
-            <input type="checkbox" id="cbMihomoSub"/>
-            <div class="checkmark"></div>
-            <span title="Use Mihomo proxy-provider with an HTTP(S) URL">Subscription</span>
-        </label>
-        <input class="input" type="text" id="tunName" placeholder="Interface(s): (tun0,tun1 or tun0:select,tun1:auto)"/>
+        <button id="btnSettings" class="settings-toggle" type="button" aria-label="Settings"
+                aria-expanded="false" aria-controls="settingsPanel">
+            <svg width="18" height="18" aria-hidden="true">
+                <use href="#settings"></use>
+            </svg>
+        </button>
+    </div>
+
+    <div id="settingsPanel" class="settings-panel settings-panel--collapsed">
+        <div class="settings-panel__chips">
+            <label class="custom-checkbox chip">
+                <input type="checkbox" id="cbTun" checked/>
+                <div class="checkmark"></div>
+                <span>TUN</span>
+            </label>
+            <label class="custom-checkbox chip">
+                <input type="checkbox" id="cbSocks" checked/>
+                <div class="checkmark"></div>
+                <span>SOCKS5</span>
+            </label>
+            <label class="custom-checkbox chip" id="lblPerTunMixed">
+                <input type="checkbox" id="cbPerTunMixed"/>
+                <div class="checkmark"></div>
+                <span title="Expose per-TUN proxy inbounds when multiple TUNs">Per‑TUN proxy</span>
+            </label>
+            <label class="custom-checkbox chip">
+                <input type="checkbox" id="cbClashSecret"/>
+                <div class="checkmark"></div>
+                <span title="Clash API Secret">Clash Secret</span>
+            </label>
+            <label class="custom-checkbox chip" id="lblDetour">
+                <input type="checkbox" id="cbDetour"/>
+                <div class="checkmark"></div>
+                <span title="Use first proxy as detour target for others">Detour</span>
+            </label>
+            <label class="custom-checkbox chip" id="lblAndroidMode">
+                <input type="checkbox" id="cbAndroidMode"/>
+                <div class="checkmark"></div>
+                <span title="Android mode: route system traffic into sing-box TUN">Android</span>
+            </label>
+            <label class="custom-checkbox chip">
+                <input type="checkbox" id="cbExtended"/>
+                <div class="checkmark"></div>
+                <span title="Extended features: XHTTP, XUDP, SDNS, Unified delay from github.com/shtorm-7/sing-box-extended">Extended</span>
+            </label>
+            <label class="custom-checkbox chip" id="lblXrayBalancer">
+                <input type="checkbox" id="cbXrayBalancer"/>
+                <div class="checkmark"></div>
+                <span title="Xray routing balancer over all proxies">Balancer</span>
+            </label>
+            <label class="custom-checkbox chip is-hidden" id="lblMihomoSub">
+                <input type="checkbox" id="cbMihomoSub"/>
+                <div class="checkmark"></div>
+                <span title="Use Mihomo proxy-provider with an HTTP(S) URL">Subscription</span>
+            </label>
+            <label class="custom-checkbox chip is-hidden" id="lblMihomoPerProxyPort">
+                <input type="checkbox" id="cbMihomoPerProxyPort"/>
+                <div class="checkmark"></div>
+                <span title="">Per-Proxy Port</span>
+            </label>
+        </div>
+        <div class="settings-panel__field">
+            <input class="input" type="text" id="tunName"
+                   placeholder="Interface(s): (tun0,tun1 or tun0:select,tun1:auto)"/>
+        </div>
     </div>
 
     <div class="full">
         <textarea id="links" class="input full"
-                  placeholder="subscription link&#10;vless://...&#10;vmess://...&#10;trojan://...&#10;ss://...&#10;socks://...&#10;http://user:pass@host:port&#10;hy2://...&#10;tuic://...&#10;mieru://... (or json)&#10;sdns://...&#10"></textarea>
+                  placeholder="subscription links&#10;vless://...&#10;vmess://...&#10;trojan://...&#10;ss://...&#10;socks://...&#10;http://user:pass@host:port&#10;hy2://...&#10;tuic://...&#10;mieru://... (or json)&#10;sdns://...&#10"></textarea>
     </div>
 
     <div id="errorBlock" class="row row--left" role="status" aria-live="polite">
@@ -92,7 +126,7 @@
     </div>
 
     <div class="button-row">
-        <input type="submit" id="gen" value="Generate"/>
+        <input type="submit" id="gen" value="Generate" class="is-hidden"/>
         <button id="btnReverse" class="btn-primary is-hidden" aria-label="Reverse">Reverse</button>
     </div>
 
@@ -112,6 +146,7 @@
         </div>
     </div>
 </main>
+<script src="parseuri.min.js"></script>
 <script src="main.js"></script>
 <script src="ui.js"></script>
 </body>
