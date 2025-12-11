@@ -168,6 +168,14 @@ label {
     color: var(--muted);
 }
 
+.file-input-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+}
+
 #asciiHeader {
     cursor: pointer;
 }
@@ -441,6 +449,16 @@ input[type="submit"][disabled] {
 }
 
 .settings-panel__chips .custom-checkbox:has(input[type="checkbox"]:checked) span {
+    color: #ffffff;
+}
+
+.settings-panel__chips .custom-checkbox.is-active {
+    background: var(--primary);
+    border-color: var(--primary);
+    box-shadow: 0 0 0 2px rgba(55, 157, 216, 0.3);
+}
+
+.settings-panel__chips .custom-checkbox.is-active span {
     color: #ffffff;
 }
 

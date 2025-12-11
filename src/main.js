@@ -286,6 +286,16 @@ function validateBean(bean) {
     const requirePort = () => {
         if (!Number.isFinite(bean.port) || bean.port <= 0) throw new Error(p + ': invalid port');
     };
+    const checkReserved = (val, label) => {
+        if (val === undefined) return;
+        if (typeof val === 'string') {
+            if (val.trim()) return;
+        } else if (Array.isArray(val)) {
+            const ok = val.length === 3 && val.every(x => Number.isInteger(x) && x >= 0 && x <= 255);
+            if (ok) return;
+        }
+        throw new Error(label + ': reserved must be 3 bytes or a non-empty base64 string');
+    };
     switch (p) {
         case 'mieru':
             requireHost();
@@ -337,6 +347,30 @@ function validateBean(bean) {
         case 'sdns':
             if (!bean.sdns?.stamp) throw new Error('sdns: missing stamp');
             break;
+        case 'wireguard': {
+            requireHost();
+            requirePort();
+            const wg = bean.wireguard || {};
+            if (!wg.privateKey) throw new Error('wireguard: missing PrivateKey');
+            if (!wg.ip && !wg.ipv6) throw new Error('wireguard: missing Address');
+            const peers = Array.isArray(wg.peers) ? wg.peers : [];
+            const hasPeers = peers.length > 0;
+            if (hasPeers) {
+                for (let i = 0; i < peers.length; i++) {
+                    const peer = peers[i] || {};
+                    if (!peer.server) throw new Error(`wireguard: peers[${i}]: missing server`);
+                    if (!Number.isFinite(peer.port) || peer.port <= 0) throw new Error(`wireguard: peers[${i}]: invalid port`);
+                    if (!peer.publicKey) throw new Error(`wireguard: peers[${i}]: missing PublicKey`);
+                    if (!Array.isArray(peer.allowedIPs) || peer.allowedIPs.length === 0) throw new Error(`wireguard: peers[${i}]: missing AllowedIPs`);
+                    checkReserved(peer.reserved, `wireguard: peers[${i}]`);
+                }
+            } else {
+                if (!wg.publicKey) throw new Error('wireguard: missing PublicKey');
+                if (!Array.isArray(wg.allowedIPs) || wg.allowedIPs.length === 0) throw new Error('wireguard: missing AllowedIPs');
+                checkReserved(wg.reserved, 'wireguard');
+            }
+            break;
+        }
         default:
             throw new Error('Unknown protocol: ' + p);
     }
@@ -393,6 +427,188 @@ function parseLink(input) {
     if (scheme === 'tuic') return parseTUIC(trimmed);
     if (scheme === 'sdns') return parseSDNS(trimmed);
     throw new Error('Unknown link: ' + scheme);
+}
+
+function parseWireGuardConf(confText, nameHint) {
+    const text = String(confText || '').replace(/\r\n/g, '\n');
+    const lines = text.split('\n');
+    let section = '';
+    const iface = {};
+    const peers = [];
+    let curPeer = null;
+
+    const cleanLine = (ln) => {
+        let s = (ln || '').trim();
+        if (!s) return '';
+        const hash = s.indexOf('#');
+        const semi = s.indexOf(';');
+        const cut = (hash === -1) ? semi : (semi === -1 ? hash : Math.min(hash, semi));
+        if (cut !== -1) s = s.slice(0, cut).trim();
+        return s;
+    };
+    const splitKV = (ln) => {
+        const i = ln.indexOf('=');
+        if (i === -1) return null;
+        const k = ln.slice(0, i).trim();
+        const v = ln.slice(i + 1).trim();
+        if (!k) return null;
+        return {k, v};
+    };
+    const parseCsv = (v) => String(v || '').split(',').map(x => x.trim()).filter(Boolean);
+    const parseAddrList = (v) => parseCsv(v).map(x => x.replace(/\s+/g, '')).filter(Boolean);
+
+    const setAwgOpt = (target, key, value) => {
+        const k = String(key || '').trim().toLowerCase();
+        const map = {
+            jc: 'jc',
+            jmin: 'jmin',
+            jmax: 'jmax',
+            s1: 's1',
+            s2: 's2',
+            s3: 's3',
+            s4: 's4',
+            h1: 'h1',
+            h2: 'h2',
+            h3: 'h3',
+            h4: 'h4',
+            i1: 'i1',
+            i2: 'i2',
+            i3: 'i3',
+            i4: 'i4',
+            i5: 'i5',
+            j1: 'j1',
+            j2: 'j2',
+            j3: 'j3',
+            itime: 'itime',
+        };
+        if (!map[k]) return false;
+        if (!target['amnezia-wg-option']) target['amnezia-wg-option'] = {};
+        const outKey = map[k];
+        const raw = String(value || '').trim();
+        const numericKeys = new Set(['jc', 'jmin', 'jmax', 's1', 's2', 's3', 's4', 'itime']);
+        if (numericKeys.has(outKey) && /^-?\d+$/.test(raw)) {
+            target['amnezia-wg-option'][outKey] = parseInt(raw, 10);
+        } else {
+            target['amnezia-wg-option'][outKey] = raw;
+        }
+        return true;
+    };
+
+    const parseReserved = (v) => {
+        const s = String(v || '').trim();
+        if (!s) return undefined;
+        if (s.includes(',')) {
+            const parts = parseCsv(s);
+            const nums = parts
+                .map(x => (/^\d+$/.test(x) ? parseInt(x, 10) : NaN))
+                .filter(n => Number.isInteger(n) && n >= 0 && n <= 255);
+            return nums.length ? nums : undefined;
+        }
+        return s;
+    };
+
+    for (const rawLine of lines) {
+        const ln = cleanLine(rawLine);
+        if (!ln) continue;
+        const secMatch = ln.match(/^\[([^\]]+)\]$/);
+        if (secMatch) {
+            section = (secMatch[1] || '').trim().toLowerCase();
+            if (section === 'peer') {
+                curPeer = {};
+                peers.push(curPeer);
+            } else {
+                curPeer = null;
+            }
+            continue;
+        }
+        const kv = splitKV(ln);
+        if (!kv) continue;
+        const key = kv.k.trim();
+        const value = kv.v;
+        const keyLower = key.toLowerCase();
+
+        if (setAwgOpt(iface, key, value)) continue;
+
+        if (section === 'interface') {
+            if (keyLower === 'privatekey') iface.privateKey = value;
+            else if (keyLower === 'address') iface.addresses = parseAddrList(value);
+            else if (keyLower === 'dns') iface.dns = parseCsv(value);
+            else if (keyLower === 'mtu') iface.mtu = /^\d+$/.test(value) ? parseInt(value, 10) : undefined;
+            else if (keyLower === 'name') iface.name = value;
+        } else if (section === 'peer' && curPeer) {
+            if (keyLower === 'publickey') curPeer.publicKey = value;
+            else if (keyLower === 'presharedkey') curPeer.preSharedKey = value;
+            else if (keyLower === 'allowedips') curPeer.allowedIPs = parseAddrList(value);
+            else if (keyLower === 'endpoint') curPeer.endpoint = value;
+            else if (keyLower === 'persistentkeepalive') curPeer.persistentKeepalive = /^\d+$/.test(value) ? parseInt(value, 10) : undefined;
+            else if (keyLower === 'reserved') {
+                curPeer.reserved = parseReserved(value);
+            } else {
+                setAwgOpt(iface, key, value);
+            }
+        }
+    }
+
+    const chosenPeer = peers[0] || {};
+    const {host, port} = parseAddrHostPort(chosenPeer.endpoint || '', 51820);
+    const addrs = Array.isArray(iface.addresses) ? iface.addresses : [];
+    const ipv4Raw = addrs.find(a => /^(\d{1,3}\.){3}\d{1,3}(\/\d+)?$/.test(a));
+    const ipv6Raw = addrs.find(a => /:/.test(a));
+    const ipv4 = ipv4Raw ? ipv4Raw.split('/')[0] : '';
+    const ipv6 = ipv6Raw ? ipv6Raw.split('/')[0] : '';
+
+    const nameBase = (iface.name || nameHint || 'WireGuard').toString().trim();
+    const name = nameBase ? nameBase.replace(/\.(conf|wg|awg)$/i, '') : 'WireGuard';
+
+    const wgPeers = peers.map(p => {
+        const ap = parseAddrHostPort(p.endpoint || '', 51820);
+        return {
+            server: ap.host,
+            port: ap.port,
+            publicKey: p.publicKey || '',
+            preSharedKey: p.preSharedKey || '',
+            allowedIPs: Array.isArray(p.allowedIPs) ? p.allowedIPs : [],
+            reserved: p.reserved
+        };
+    }).filter(p => p.server && p.port);
+
+    const keepalive = peers.map(p => p.persistentKeepalive).find(v => Number.isFinite(v));
+
+    const hasIpv6 = !!ipv6;
+    const peer0 = wgPeers[0] || {};
+    const allowed0 = Array.isArray(peer0.allowedIPs) ? peer0.allowedIPs.slice() : [];
+    const allowedFiltered0 = hasIpv6 ? allowed0 : allowed0.filter(x => !String(x || '').includes(':'));
+    const peersFiltered = wgPeers.map(peer => {
+        const a = Array.isArray(peer.allowedIPs) ? peer.allowedIPs : [];
+        const allowedFiltered = hasIpv6 ? a : a.filter(x => !String(x || '').includes(':'));
+        return Object.assign({}, peer, {allowedIPs: allowedFiltered});
+    });
+
+    const bean = {
+        proto: 'wireguard',
+        name,
+        host: peer0.server || host,
+        port: peer0.port || port,
+        ipVersion: hasIpv6 ? '' : 'ipv4',
+        wireguard: {
+            ip: ipv4 || '',
+            ipv6: ipv6 || '',
+            privateKey: iface.privateKey || '',
+            publicKey: peer0.publicKey || (chosenPeer.publicKey || ''),
+            preSharedKey: peer0.preSharedKey || (chosenPeer.preSharedKey || ''),
+            allowedIPs: allowedFiltered0.length ? allowedFiltered0 : (chosenPeer.allowedIPs || []),
+            reserved: peer0.reserved !== undefined ? peer0.reserved : chosenPeer.reserved,
+            peers: peersFiltered.length >= 2 ? peersFiltered : undefined,
+            dns: Array.isArray(iface.dns) && iface.dns.length ? iface.dns : [],
+            remoteDnsResolve: Array.isArray(iface.dns) && iface.dns.length ? true : false,
+            mtu: iface.mtu,
+            persistentKeepalive: keepalive
+        }
+    };
+    if (iface['amnezia-wg-option']) {
+        bean.wireguard['amnezia-wg-option'] = iface['amnezia-wg-option'];
+    }
+    return bean;
 }
 
 function parseSocksHttp(urlStr) {
@@ -1668,6 +1884,42 @@ function buildMihomoProxy(bean) {
         applyCommon(p);
         return p;
     }
+    if (bean.proto === 'wireguard') {
+        const wg = bean.wireguard || {};
+        const peers = Array.isArray(wg.peers) ? wg.peers : [];
+        const hasPeers = peers.length > 0;
+        const mapPeer = (peer) => {
+            if (!peer || typeof peer !== 'object') return null;
+            const out = {server: peer.server, port: peer.port};
+            if (peer.publicKey) out['public-key'] = peer.publicKey;
+            if (peer.preSharedKey) out['pre-shared-key'] = peer.preSharedKey;
+            if (Array.isArray(peer.allowedIPs) && peer.allowedIPs.length) out['allowed-ips'] = peer.allowedIPs;
+            if (peer.reserved !== undefined) out.reserved = peer.reserved;
+            return out;
+        };
+        const p = {
+            name: bean.name || computeTag(bean, new Set()),
+            type: 'wireguard',
+            server: bean.host,
+            port: bean.port,
+            'private-key': wg.privateKey,
+            udp: true,
+        };
+        if (wg.ip) p.ip = wg.ip;
+        if (wg.ipv6) p.ipv6 = wg.ipv6;
+        if (wg.publicKey) p['public-key'] = wg.publicKey;
+        if (wg.preSharedKey) p['pre-shared-key'] = wg.preSharedKey;
+        if (Array.isArray(wg.allowedIPs) && wg.allowedIPs.length) p['allowed-ips'] = wg.allowedIPs;
+        if (Number.isFinite(wg.mtu)) p.mtu = wg.mtu;
+        if (Number.isFinite(wg.persistentKeepalive) && wg.persistentKeepalive > 0) p['persistent-keepalive'] = wg.persistentKeepalive;
+        if (wg.reserved !== undefined) p.reserved = wg.reserved;
+        if (hasPeers) p.peers = peers.map(mapPeer).filter(Boolean);
+        if (wg['amnezia-wg-option'] && typeof wg['amnezia-wg-option'] === 'object') {
+            p['amnezia-wg-option'] = wg['amnezia-wg-option'];
+        }
+        applyCommon(p);
+        return p;
+    }
     throw new Error('Not supported by Mihomo: ' + bean.proto);
 }
 
@@ -1680,7 +1932,27 @@ function deduplicateProxies(beans) {
         const flow = b.auth?.flow || '';
         const pqv = b.stream?.reality?.pqv || '';
         const pqvKey = pqv ? pqv.substring(0, 50) : '';
-        const key = `${b.proto}|${b.host}|${b.port}|${auth}|${network}|${security}|${flow}|${pqvKey}`;
+        let extra = '';
+        if (b.proto === 'wireguard') {
+            const wg = b.wireguard || {};
+            const peers = Array.isArray(wg.peers) ? wg.peers : [];
+            extra = JSON.stringify({
+                pk: wg.privateKey || '',
+                pub: wg.publicKey || '',
+                ip: wg.ip || '',
+                ipv6: wg.ipv6 || '',
+                res: wg.reserved || '',
+                awg: wg['amnezia-wg-option'] || {},
+                peers: peers.map(p => ({
+                    s: p.server || '',
+                    port: p.port || '',
+                    pub: p.publicKey || '',
+                    res: p.reserved || '',
+                    ips: Array.isArray(p.allowedIPs) ? p.allowedIPs : []
+                }))
+            });
+        }
+        const key = `${b.proto}|${b.host}|${b.port}|${auth}|${network}|${security}|${flow}|${pqvKey}|${extra}`;
         if (seen.has(key)) return false;
         seen.add(key);
         return true;
@@ -1730,7 +2002,8 @@ function buildMihomoConfig(beans, opts) {
                 name: `mixed-${proxies[i].name}`,
                 type: 'mixed',
                 port: port,
-                proxy: proxies[i].name
+                proxy: proxies[i].name,
+                udp: true
             });
         }
     }
@@ -1750,7 +2023,7 @@ function buildMihomoConfig(beans, opts) {
     return config;
 }
 
-function buildMihomoSubscriptionConfig(subscriptionUrls) {
+function buildMihomoSubscriptionConfig(subscriptionUrls, extraBeans) {
     if (!Array.isArray(subscriptionUrls) || subscriptionUrls.length === 0) {
         throw new Error('At least one subscription URL is required');
     }
@@ -1773,8 +2046,9 @@ function buildMihomoSubscriptionConfig(subscriptionUrls) {
         providerNames.push(providerName);
     });
 
+    const fastestGroupName = '⚡️ Fastest';
     const groups = [{
-        name: '⚡️ Fastest',
+        name: fastestGroupName,
         type: 'url-test',
         use: providerNames,
         url: URLTEST,
@@ -1782,9 +2056,23 @@ function buildMihomoSubscriptionConfig(subscriptionUrls) {
         tolerance: 50
     }];
 
-    const rules = ['MATCH,⚡️ Fastest'];
+    const extraProxies = [];
+    if (Array.isArray(extraBeans) && extraBeans.length > 0) {
+        extraBeans.forEach(bean => {
+            validateBean(bean);
+            const p = buildMihomoProxy(bean);
+            extraProxies.push(p);
+            const fastest = groups.find(x => x && x.name === fastestGroupName && x.type === 'url-test');
+            if (fastest) {
+                if (!Array.isArray(fastest.proxies)) fastest.proxies = [];
+                if (!fastest.proxies.includes(p.name)) fastest.proxies.push(p.name);
+            }
+        });
+    }
 
-    return {providers, groups, rules};
+    const rules = [`MATCH,${fastestGroupName}`];
+
+    return {providers, groups, rules, proxies: extraProxies};
 }
 
 function overlayMihomoYaml(baseYamlText, proxies, groups, providers, rules, listeners) {
@@ -1984,11 +2272,13 @@ try {
             buildSingBoxConfig,
             buildXrayOutbound,
             buildXrayConfig,
+            buildMihomoProxy,
             buildMihomoConfig,
             buildMihomoSubscriptionConfig,
             buildMihomoYaml: function (proxies, groups, providers, rules, listeners) {
                 return overlayMihomoYaml(MIHOMO_DEFAULT_TEMPLATE, proxies, groups, providers, rules, listeners);
             },
+            parseWireGuardConf,
             fetchSubscription
         });
     }
