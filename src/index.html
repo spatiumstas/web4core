@@ -40,13 +40,12 @@
 </svg>
 <main class="container container--stretch">
     <div class="row row--left gap-12 toolbar">
-        <div id="coreToggle" class="core-toggle" data-core="singbox" aria-label="Core selector" role="switch"
-             aria-checked="true" tabindex="0">
+        <div id="coreToggle" class="core-toggle" data-core="singbox" aria-label="Core selector" role="radiogroup">
             <div class="knob"></div>
             <div class="labels">
-                <span id="lblSing">sing-box</span>
-                <span id="lblXray">Xray</span>
-                <span id="lblMihomo">Mihomo</span>
+                <span id="lblSing" role="radio" aria-checked="true" tabindex="0">sing-box</span>
+                <span id="lblXray" role="radio" aria-checked="false" tabindex="-1">Xray</span>
+                <span id="lblMihomo" role="radio" aria-checked="false" tabindex="-1">Mihomo</span>
             </div>
         </div>
         <button id="btnSettings" class="settings-toggle" type="button" aria-label="Settings"
@@ -109,6 +108,11 @@
                 <div class="checkmark"></div>
                 <span title="">Per-Proxy Port</span>
             </label>
+            <button id="btnWgUpload" class="custom-checkbox chip is-hidden" type="button"
+                    title="WireGuard/AmneziaWG (.conf/.awg)">
+                <span>WireGuard</span>
+            </button>
+            <input type="file" id="wgFile" class="file-input-hidden" accept=".conf,.wg,.awg,text/plain" multiple/>
         </div>
         <div class="settings-panel__field">
             <input class="input" type="text" id="tunName"
@@ -148,6 +152,12 @@
 </main>
 <script src="parseuri.min.js"></script>
 <script src="main.js"></script>
+<script src="core/singbox.js"></script>
+<script src="core/xray.js"></script>
+<script src="core/mihomo.js"></script>
+<script src="core/yaml.js"></script>
+<script src="core/wireguard.js"></script>
+<script src="core/subscription.js"></script>
 <script src="ui.js"></script>
 </body>
 </html>

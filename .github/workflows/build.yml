@@ -46,6 +46,7 @@ jobs:
           
           // Read main.js content
           const mainJs = fs.readFileSync('src/main.js', 'utf8');
+          const singboxJs = fs.readFileSync('src/core/singbox.js', 'utf8');
           
           // Create sandbox with required globals
           const sandbox = {
@@ -69,6 +70,7 @@ jobs:
           // Execute main.js in sandbox
           vm.createContext(sandbox);
           vm.runInContext(mainJs, sandbox);
+          vm.runInContext(singboxJs, sandbox);
           
           // Read test configs
           const testLinksContent = process.env.CONFIGS;
@@ -142,11 +144,6 @@ jobs:
               try {
                 const cfgObj = JSON.parse(fs.readFileSync(configFile, 'utf8'));
                 cfgObj.inbounds = [{ tag: 'mixed-in', type: 'mixed', listen: '127.0.0.1', listen_port: 2080 }];
-                // CI smoke-test should not depend on network downloads (e.g. clash-api external UI).
-                if (cfgObj.experimental && cfgObj.experimental.clash_api) {
-                  delete cfgObj.experimental.clash_api;
-                  if (Object.keys(cfgObj.experimental).length === 0) delete cfgObj.experimental;
-                }
                 // route final:
                 // - prefer existing selector if present
                 // - otherwise keep existing final if set
@@ -156,7 +153,7 @@ jobs:
                 cfgObj.route.final = firstSelector || cfgObj.route.final || 'direct';
                 const runFile = `run_singbox_${i}.json`;
                 fs.writeFileSync(runFile, JSON.stringify(cfgObj, null, 2));
-                const cmd = `bash -lc 'tmp=$(mktemp); sing-box run -c ${runFile} >$tmp 2>&1 & pid=$!; sleep 3; kill $pid || true; cat $tmp; rm -f $tmp'`;
+                const cmd = `bash -lc 'tmp=$(mktemp); sing-box run -c ${runFile} >$tmp 2>&1 & pid=$!; sleep 2; kill $pid || true; cat $tmp; rm -f $tmp'`;
                 const out = execSync(cmd, { stdio: 'pipe', encoding: 'utf8' });
                 if (!/(sing-box started|tcp server started at 127\\.0\\.0\\.1:2080)/.test(out)) {
                   throw new Error(`sing-box did not report start\n--- LOG START ---\n${out}\n--- LOG END ---`);
@@ -206,11 +203,6 @@ jobs:
             // Smoke run (SOCKS-only)
             const cfgObj = JSON.parse(fs.readFileSync(multiFile, 'utf8'));
             cfgObj.inbounds = [{ tag: 'mixed-in', type: 'mixed', listen: '127.0.0.1', listen_port: 2080 }];
-            // CI smoke-test should not depend on network downloads (e.g. clash-api external UI).
-            if (cfgObj.experimental && cfgObj.experimental.clash_api) {
-              delete cfgObj.experimental.clash_api;
-              if (Object.keys(cfgObj.experimental).length === 0) delete cfgObj.experimental;
-            }
             if (cfgObj.outbounds && cfgObj.outbounds.length) {
               const firstSelector = cfgObj.outbounds.find(o => o.type === 'selector')?.tag;
               cfgObj.route = cfgObj.route || {};
@@ -218,7 +210,7 @@ jobs:
             }
             const runFile = `run_singbox_multi_all.json`;
             fs.writeFileSync(runFile, JSON.stringify(cfgObj, null, 2));
-            const cmd = `bash -lc 'tmp=$(mktemp); sing-box run -c ${runFile} >$tmp 2>&1 & pid=$!; sleep 3; kill $pid || true; cat $tmp; rm -f $tmp'`;
+            const cmd = `bash -lc 'tmp=$(mktemp); sing-box run -c ${runFile} >$tmp 2>&1 & pid=$!; sleep 2; kill $pid || true; cat $tmp; rm -f $tmp'`;
             const out = execSync(cmd, { stdio: 'pipe', encoding: 'utf8' });
             if (!/(sing-box started|tcp server started at 127\\.0\\.0\\.1:2080)/.test(out)) {
               throw new Error(`sing-box did not report start (multi-all)\n--- LOG START ---\n${out}\n--- LOG END ---`);
@@ -286,6 +278,7 @@ jobs:
           const { execSync } = require('child_process');
           
           const mainJs = fs.readFileSync('src/main.js', 'utf8');
+          const singboxJs = fs.readFileSync('src/core/singbox.js', 'utf8');
           const sandbox = {
             console: console,
             require: require,
@@ -305,6 +298,7 @@ jobs:
           
           vm.createContext(sandbox);
           vm.runInContext(mainJs, sandbox);
+          vm.runInContext(singboxJs, sandbox);
           
           const testLinksContent = process.env.CONFIGS;
           const testLinks = testLinksContent
@@ -330,16 +324,11 @@ jobs:
               const bean = sandbox.parseLink(link);
               const outbound = sandbox.buildSingBoxOutbound(bean);
               const config = sandbox.buildSingBoxConfig([{tag: 'test', ...outbound}], {useExtended: true});
-              // CI smoke-test should not depend on network downloads (e.g. clash-api external UI).
-              if (config.experimental && config.experimental.clash_api) {
-                delete config.experimental.clash_api;
-                if (Object.keys(config.experimental).length === 0) delete config.experimental;
-              }
           
               const configFile = \`test_extended_\${i}.json\`;
               fs.writeFileSync(configFile, JSON.stringify(config, null, 2));
           
-              const cmd = \`bash -lc 'tmp=\$(mktemp); /usr/local/bin/sing-box-extended run -c \${configFile} >\$tmp 2>&1 & pid=\$!; sleep 3; kill \$pid || true; cat \$tmp; rm -f \$tmp'\`;
+              const cmd = \`bash -lc 'tmp=\$(mktemp); /usr/local/bin/sing-box-extended run -c \${configFile} >\$tmp 2>&1 & pid=\$!; sleep 2; kill \$pid || true; cat \$tmp; rm -f \$tmp'\`;
               const out = execSync(cmd, { stdio: 'pipe', encoding: 'utf8' });
               if (!/(sing-box started|inbound\\/.*server started)/.test(out)) {
                 throw new Error('sing-box-extended did not report start');
@@ -370,6 +359,7 @@ jobs:
           const vm = require('vm');
           
           const mainJs = fs.readFileSync('src/main.js', 'utf8');
+          const singboxJs = fs.readFileSync('src/core/singbox.js', 'utf8');
           const sandbox = {
             console: console,
             require: require,
@@ -389,6 +379,7 @@ jobs:
           
           vm.createContext(sandbox);
           vm.runInContext(mainJs, sandbox);
+          vm.runInContext(singboxJs, sandbox);
           
           const beans = sandbox.buildBeansFromInput(process.env.MIERU_JSON);
           const outbounds = beans.map(b => {
@@ -396,15 +387,10 @@ jobs:
             return {tag: 'test', ...outbound};
           });
           const config = sandbox.buildSingBoxConfig(outbounds, {useExtended: true});
-          // CI smoke-test should not depend on network downloads (e.g. clash-api external UI).
-          if (config.experimental && config.experimental.clash_api) {
-            delete config.experimental.clash_api;
-            if (Object.keys(config.experimental).length === 0) delete config.experimental;
-          }
           fs.writeFileSync('/tmp/mieru-config.json', JSON.stringify(config, null, 2));
           "
           
-          cmd="bash -lc 'tmp=\$(mktemp); /usr/local/bin/sing-box-extended run -c /tmp/mieru-config.json >\$tmp 2>&1 & pid=\$!; sleep 3; kill \$pid || true; cat \$tmp; rm -f \$tmp'"
+          cmd="bash -lc 'tmp=\$(mktemp); /usr/local/bin/sing-box-extended run -c /tmp/mieru-config.json >\$tmp 2>&1 & pid=\$!; sleep 2; kill \$pid || true; cat \$tmp; rm -f \$tmp'"
           out=$(eval $cmd)
           if ! echo "$out" | grep -Eq "sing-box started|server started"; then
             echo "❌ Mieru config failed to start"
@@ -420,6 +406,7 @@ jobs:
           const vm = require('vm');
           
           const mainJs = fs.readFileSync('src/main.js', 'utf8');
+          const singboxJs = fs.readFileSync('src/core/singbox.js', 'utf8');
           const sandbox = {
             console: console,
             require: require,
@@ -439,18 +426,14 @@ jobs:
           
           vm.createContext(sandbox);
           vm.runInContext(mainJs, sandbox);
+          vm.runInContext(singboxJs, sandbox);
           
           const beans = sandbox.buildBeansFromInput(process.env.SDNS_LINK);
           const config = sandbox.buildSingBoxConfig([], {useExtended: true, dnsBeans: beans});
-          // CI smoke-test should not depend on network downloads (e.g. clash-api external UI).
-          if (config.experimental && config.experimental.clash_api) {
-            delete config.experimental.clash_api;
-            if (Object.keys(config.experimental).length === 0) delete config.experimental;
-          }
           fs.writeFileSync('/tmp/sdns-config.json', JSON.stringify(config, null, 2));
           "
           
-          cmd="bash -lc 'tmp=\$(mktemp); /usr/local/bin/sing-box-extended run -c /tmp/sdns-config.json >\$tmp 2>&1 & pid=\$!; sleep 3; kill \$pid || true; cat \$tmp; rm -f \$tmp'"
+          cmd="bash -lc 'tmp=\$(mktemp); /usr/local/bin/sing-box-extended run -c /tmp/sdns-config.json >\$tmp 2>&1 & pid=\$!; sleep 2; kill \$pid || true; cat \$tmp; rm -f \$tmp'"
           out=$(eval $cmd)
           if ! echo "$out" | grep -Eq "sing-box started|server started"; then
             echo "❌ SDNS config failed to start"
@@ -466,6 +449,7 @@ jobs:
           const vm = require('vm');
           
           const mainJs = fs.readFileSync('src/main.js', 'utf8');
+          const singboxJs = fs.readFileSync('src/core/singbox.js', 'utf8');
           const sandbox = {
             console: console,
             require: require,
@@ -485,6 +469,7 @@ jobs:
           
           vm.createContext(sandbox);
           vm.runInContext(mainJs, sandbox);
+          vm.runInContext(singboxJs, sandbox);
           
           const beans = sandbox.buildBeansFromInput(process.env.XHTTP_LINK);
           const outbounds = beans.map(b => {
@@ -492,15 +477,10 @@ jobs:
             return {tag: 'test', ...outbound};
           });
           const config = sandbox.buildSingBoxConfig(outbounds, {useExtended: true});
-          // CI smoke-test should not depend on network downloads (e.g. clash-api external UI).
-          if (config.experimental && config.experimental.clash_api) {
-            delete config.experimental.clash_api;
-            if (Object.keys(config.experimental).length === 0) delete config.experimental;
-          }
           fs.writeFileSync('/tmp/xhttp-config.json', JSON.stringify(config, null, 2));
           "
           
-          cmd="bash -lc 'tmp=\$(mktemp); /usr/local/bin/sing-box-extended run -c /tmp/xhttp-config.json >\$tmp 2>&1 & pid=\$!; sleep 3; kill \$pid || true; cat \$tmp; rm -f \$tmp'"
+          cmd="bash -lc 'tmp=\$(mktemp); /usr/local/bin/sing-box-extended run -c /tmp/xhttp-config.json >\$tmp 2>&1 & pid=\$!; sleep 2; kill \$pid || true; cat \$tmp; rm -f \$tmp'"
           out=$(eval $cmd)
           if ! echo "$out" | grep -Eq "sing-box started|server started"; then
             echo "❌ XHTTP config failed to start"
@@ -548,6 +528,7 @@ jobs:
           
           // Read main.js content
           const mainJs = fs.readFileSync('src/main.js', 'utf8');
+          const xrayJs = fs.readFileSync('src/core/xray.js', 'utf8');
           
           // Create sandbox with required globals
           const sandbox = {
@@ -571,6 +552,7 @@ jobs:
           // Execute main.js in sandbox
           vm.createContext(sandbox);
           vm.runInContext(mainJs, sandbox);
+          vm.runInContext(xrayJs, sandbox);
           
           // Read test links
           const testLinksContent = process.env.CONFIGS;
@@ -720,6 +702,7 @@ jobs:
       - name: Generate and validate Mihomo configs
         env:
           CONFIGS: ${{ secrets.CONFIGS }}
+          WG_CONF: ${{ secrets.WG_CONF }}
         run: |
           # Create test script
           cat > test_mihomo.js << 'EOF'
@@ -727,6 +710,9 @@ jobs:
           const vm = require('vm');
           const { execSync } = require('child_process');
           const mainJs = fs.readFileSync('src/main.js', 'utf8');
+          const mihomoJs = fs.readFileSync('src/core/mihomo.js', 'utf8');
+          const yamlJs = fs.readFileSync('src/core/yaml.js', 'utf8');
+          const wireguardJs = fs.readFileSync('src/core/wireguard.js', 'utf8');
           const sandbox = {
             console, require, module: {exports:{}}, exports: {}, global, process, Buffer,
             URL: require('url').URL,
@@ -735,6 +721,9 @@ jobs:
           };
           vm.createContext(sandbox);
           vm.runInContext(mainJs, sandbox);
+          vm.runInContext(mihomoJs, sandbox);
+          vm.runInContext(yamlJs, sandbox);
+          vm.runInContext(wireguardJs, sandbox);
 
           const raw = process.env.CONFIGS || '';
           const links = raw.split('\n').map(s=>s.trim()).filter(s=>s && !s.startsWith('#') && s.includes('://'));
@@ -750,7 +739,7 @@ jobs:
             try{
               const bean = beans[i];
               const cfgObj = sandbox.buildMihomoConfig([bean]);
-              const yaml = sandbox.overlayMihomoYaml(sandbox.MIHOMO_DEFAULT_TEMPLATE, cfgObj.proxies, cfgObj['proxy-groups']);
+              const yaml = sandbox.buildMihomoYaml(cfgObj.proxies, cfgObj['proxy-groups'], null, null, cfgObj.listeners);
               const f = `mihomo_${i}.yaml`;
               fs.writeFileSync(f, yaml);
               console.log(`Testing Mihomo config ${i+1}/${beans.length}: ${cfgObj.proxies[0].name || 'unnamed'}`);
@@ -769,7 +758,7 @@ jobs:
           // Multi-config
           try{
             const cfgObj = sandbox.buildMihomoConfig(beans);
-            const yaml = sandbox.overlayMihomoYaml(sandbox.MIHOMO_DEFAULT_TEMPLATE, cfgObj.proxies, cfgObj['proxy-groups']);
+            const yaml = sandbox.buildMihomoYaml(cfgObj.proxies, cfgObj['proxy-groups'], null, null, cfgObj.listeners);
             fs.writeFileSync('mihomo_all.yaml', yaml);
             execSync('mihomo -t -f mihomo_all.yaml', {stdio:'pipe', encoding:'utf8'});
             console.log('✅ Mihomo multi-config valid');
@@ -783,6 +772,27 @@ jobs:
             process.exit(1);
           } else {
             console.log(`✅ All ${ok} Mihomo configs passed`);
+          }
+
+          // Optional WireGuard/AmneziaWG config check (plain .conf provided via WG_CONF secret)
+          const wgConf = process.env.WG_CONF || '';
+          if (wgConf.trim()) {
+            try {
+              const bean = sandbox.parseWireGuardConf(wgConf, 'wg-ci.conf');
+              sandbox.validateBean(bean);
+              const cfgObj = sandbox.buildMihomoConfig([bean]);
+              const yaml = sandbox.buildMihomoYaml(cfgObj.proxies, cfgObj['proxy-groups'], null, null, cfgObj.listeners);
+              fs.writeFileSync('mihomo_wg.yaml', yaml);
+              execSync('mihomo -t -f mihomo_wg.yaml', {stdio:'pipe', encoding:'utf8'});
+              console.log('✅ Mihomo WireGuard config valid');
+            } catch (e) {
+              console.log('❌ Mihomo WireGuard config failed:', e.message);
+              if (e.stdout) console.log('   Stdout:', e.stdout.toString());
+              if (e.stderr) console.log('   Stderr:', e.stderr.toString());
+              process.exit(1);
+            }
+          } else {
+            console.log('ℹ️ No WG_CONF provided; skipping WireGuard test');
           }
           EOF
 

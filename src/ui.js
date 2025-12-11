@@ -30,13 +30,17 @@ const el = {
     lblDetour: document.getElementById('lblDetour'),
     out: document.getElementById('out'),
     btnSettings: document.getElementById('btnSettings'),
-    settingsPanel: document.getElementById('settingsPanel')
+    settingsPanel: document.getElementById('settingsPanel'),
+    btnWgUpload: document.getElementById('btnWgUpload'),
+    wgFile: document.getElementById('wgFile'),
 };
 
 const state = {
-    core: 'singbox'
+    core: 'singbox',
+    wgBeans: []
 };
 
+const header = document.getElementById('asciiHeader');
 const MSG_SUB_URL = 'Provide one or more HTTP(S) URLs for Mihomo subscription (one per line)';
 const MSG_SUB_EMPTY = 'Subscription returned no valid links';
 const MSG_SUB_FETCH = (m) => 'Failed to fetch subscription: ' + (m || '');
@@ -80,6 +84,13 @@ const scrollOutIntoView = () => {
     }
 };
 
+const updateWgButtonState = (count) => {
+    if (!el.btnWgUpload) return;
+    const span = el.btnWgUpload.querySelector('span');
+    if (span) span.textContent = count > 0 ? `WireGuard (${count})` : 'WireGuard';
+    el.btnWgUpload.classList.toggle('is-active', count > 0);
+};
+
 function getCore() {
     return state.core;
 }
@@ -100,10 +111,23 @@ function setCore(core) {
     toggleHidden(el.tunName?.parentElement || el.tunName, hideSing);
     toggleHidden(el.lblMihomoSub, core !== 'mihomo');
     toggleHidden(el.lblMihomoPerProxyPort, core !== 'mihomo');
+    toggleHidden(el.btnWgUpload, core !== 'mihomo');
     toggleHidden(el.lblPerTunMixed, hideSing);
     toggleHidden(el.lblAndroidMode, hideSing);
     toggleHidden(el.lblDetour, hideSing);
     toggleHidden(el.lblXrayBalancer, core !== 'xray');
+
+    if (core !== 'mihomo') {
+        state.wgBeans = [];
+        if (el.wgFile) el.wgFile.value = '';
+        updateWgButtonState(0);
+    }
+    updateWgButtonState(Array.isArray(state.wgBeans) ? state.wgBeans.length : 0);
+
+    try {
+        localStorage.setItem('core', core);
+    } catch (e) {
+    }
 }
 
 function isMihomoSubscriptionMode() {
@@ -134,9 +158,27 @@ el.lblMihomo.addEventListener('click', (e) => {
 });
 
 if (el.btnSettings && el.settingsPanel) {
+    const STORAGE_KEY = 'settings_expanded';
+
+    try {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved === 'true') {
+            el.settingsPanel.classList.remove('settings-panel--collapsed');
+            el.btnSettings.setAttribute('aria-expanded', 'true');
+        } else {
+            el.settingsPanel.classList.add('settings-panel--collapsed');
+            el.btnSettings.setAttribute('aria-expanded', 'false');
+        }
+    } catch (e) {
+    }
+
     el.btnSettings.addEventListener('click', () => {
         const collapsed = el.settingsPanel.classList.toggle('settings-panel--collapsed');
         el.btnSettings.setAttribute('aria-expanded', String(!collapsed));
+        try {
+            localStorage.setItem(STORAGE_KEY, String(!collapsed));
+        } catch (e) {
+        }
     });
 }
 
@@ -176,7 +218,8 @@ function validateField(showOutput) {
     const useExtended = !!el.cbExtended?.checked;
     const subMihomo = isMihomoSubscriptionMode();
     try {
-        if (!hasText) {
+        const wgBeans = Array.isArray(state.wgBeans) ? state.wgBeans : [];
+        if (!hasText && wgBeans.length === 0) {
             setGenerateEnabled(false);
             setError('');
             hideOutput();
@@ -195,17 +238,19 @@ function validateField(showOutput) {
             }
             if (!validHttpUrls) throw new Error(MSG_SUB_URL);
 
-            const config = globalThis.web4core?.buildMihomoSubscriptionConfig(lines);
+            const extraBeans = wgBeans.slice();
+            const config = globalThis.web4core?.buildMihomoSubscriptionConfig(lines, extraBeans);
             if (!config) throw new Error('Failed to build subscription config');
 
-            const yaml = (globalThis.web4core?.buildMihomoYaml || (() => ''))([], config.groups, config.providers, config.rules, null);
+            const yaml = (globalThis.web4core?.buildMihomoYaml || (() => ''))(config.proxies || [], config.groups, config.providers, config.rules, null);
             renderOutput(yaml, true);
             setGenerateEnabled(true);
             el.links.classList.remove('input-error');
             return true;
         }
 
-        const beans = globalThis.web4core.buildBeansFromInput(raw);
+        const beans = hasText ? globalThis.web4core.buildBeansFromInput(raw) : [];
+        if (wgBeans.length) beans.push(...wgBeans);
         if (!beans.length) throw new Error(MSG_NO_LINKS);
         beans.forEach(globalThis.web4core.validateBean);
 
@@ -235,8 +280,7 @@ function validateField(showOutput) {
             const dnsBeans = useExtended ? beans.filter(b => b.proto === 'sdns') : [];
             const outboundBeans = beans.filter(b => b.proto !== 'sdns');
             const outbounds = outboundBeans.map(b => {
-                b._useExtended = !!useExtended;
-                const ob = globalThis.web4core.buildSingBoxOutbound(b);
+                const ob = globalThis.web4core.buildSingBoxOutbound(b, {useExtended: !!useExtended});
                 const tag = globalThis.web4core.computeTag(b, used);
                 return Object.assign({tag}, ob);
             });
@@ -300,6 +344,40 @@ function debounce(fn, wait) {
         clearTimeout(t);
         t = setTimeout(() => fn(...args), wait);
     };
+}
+
+if (el.wgFile) {
+    el.wgFile.addEventListener('change', async () => {
+        const files = Array.from(el.wgFile.files || []);
+        if (files.length === 0) {
+            state.wgBeans = [];
+            updateWgButtonState(0);
+            validateField(false);
+            return;
+        }
+        try {
+            const beans = await Promise.all(files.map(async (file) => {
+                const text = await file.text();
+                const bean = globalThis.web4core?.parseWireGuardConf?.(text, file.name);
+                if (!bean) throw new Error(`Failed to parse WireGuard file: ${file.name}`);
+                return bean;
+            }));
+            state.wgBeans = beans;
+            updateWgButtonState(beans.length);
+            validateField(false);
+        } catch (e) {
+            state.wgBeans = [];
+            updateWgButtonState(0);
+            setError((e && e.message) ? e.message : 'Failed to load WireGuard file');
+            validateField(false);
+        }
+    });
+}
+
+if (el.btnWgUpload && el.wgFile) {
+    el.btnWgUpload.addEventListener('click', () => {
+        el.wgFile.click();
+    });
 }
 
 function assertNoProtocols(beans, list, label) {
@@ -392,6 +470,13 @@ el.btnDownload.addEventListener('click', () => {
 });
 
 setupCheckboxValidation();
+try {
+    const savedCore = localStorage.getItem('core');
+    if (savedCore === 'singbox' || savedCore === 'xray' || savedCore === 'mihomo') {
+        state.core = savedCore;
+    }
+} catch (e) {
+}
 setCore(state.core);
 validateField(false);
 
@@ -456,7 +541,7 @@ if (el.links) {
     updateJsonUiState();
 }
 
-const header = document.getElementById('asciiHeader');
 if (header) header.addEventListener('click', function () {
-    location.reload();
+    localStorage.clear();
+    setTimeout(() => location.reload(), 0);
 });
