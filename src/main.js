@@ -79,7 +79,7 @@ const SUPPORTED_SCHEMES = [
 ];
 const MAX_SUB_REDIRECTS = 2;
 const SUB_FETCH_TIMEOUT = 15000;
-const SUB_FETCH_INTERVAL = 300;
+const SUB_FETCH_INTERVAL = 600;
 const SUB_FALLBACK_RETRIES = 2;
 const URLTEST = 'https://www.gstatic.com/generate_204';
 const URLTEST_INTERVAL = '3m';

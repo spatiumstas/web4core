@@ -1,3 +1,5 @@
+const FASTEST_GROUP_NAME = '⚡ Fastest';
+
 function buildMihomoProxy(bean) {
     const s = bean.stream || {};
     const base = {name: bean.name || computeTag(bean, new Set()), type: '', server: bean.host, port: bean.port};
@@ -280,7 +282,7 @@ function buildMihomoConfig(beans, opts) {
     const groups = [];
     if (names.length > 1) {
         groups.push({
-            name: '⚡️ Fastest',
+            name: FASTEST_GROUP_NAME,
             type: 'url-test',
             proxies: names,
             url: URLTEST,
@@ -289,7 +291,7 @@ function buildMihomoConfig(beans, opts) {
         groups.push({
             name: 'PROXY',
             type: 'select',
-            proxies: ['⚡️ Fastest', ...names]
+            proxies: [FASTEST_GROUP_NAME, ...names]
         });
     } else {
         groups.push({name: 'PROXY', type: 'select', proxies: names});
@@ -348,9 +350,8 @@ function buildMihomoSubscriptionConfig(subscriptionUrls, extraBeans) {
         providerNames.push(providerName);
     });
 
-    const fastestGroupName = '⚡️ Fastest';
     const groups = [{
-        name: fastestGroupName,
+        name: FASTEST_GROUP_NAME,
         type: 'url-test',
         use: providerNames,
         url: URLTEST,
@@ -364,7 +365,7 @@ function buildMihomoSubscriptionConfig(subscriptionUrls, extraBeans) {
             validateBean(bean);
             const p = buildMihomoProxy(bean);
             extraProxies.push(p);
-            const fastest = groups.find(x => x && x.name === fastestGroupName && x.type === 'url-test');
+            const fastest = groups.find(x => x && x.name === FASTEST_GROUP_NAME && x.type === 'url-test');
             if (fastest) {
                 if (!Array.isArray(fastest.proxies)) fastest.proxies = [];
                 if (!fastest.proxies.includes(p.name)) fastest.proxies.push(p.name);
@@ -372,8 +373,7 @@ function buildMihomoSubscriptionConfig(subscriptionUrls, extraBeans) {
         });
     }
 
-    const rules = [`MATCH,${fastestGroupName}`];
-
+    const rules = [`MATCH,${FASTEST_GROUP_NAME}`];
     return {providers, groups, rules, proxies: extraProxies};
 }
 

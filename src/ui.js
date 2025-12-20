@@ -18,9 +18,11 @@ const el = {
     cbClashSecret: document.getElementById('cbClashSecret'),
     cbMihomoSub: document.getElementById('cbMihomoSub'),
     cbMihomoPerProxyPort: document.getElementById('cbMihomoPerProxyPort'),
+    cbMihomoWebUI: document.getElementById('cbMihomoWebUI'),
     cbDetour: document.getElementById('cbDetour'),
     lblMihomoSub: document.getElementById('lblMihomoSub'),
     lblMihomoPerProxyPort: document.getElementById('lblMihomoPerProxyPort'),
+    lblMihomoWebUI: document.getElementById('lblMihomoWebUI'),
     cbXrayBalancer: document.getElementById('cbXrayBalancer'),
     lblXrayBalancer: document.getElementById('lblXrayBalancer'),
     cbPerTunMixed: document.getElementById('cbPerTunMixed'),
@@ -111,6 +113,7 @@ function setCore(core) {
     toggleHidden(el.tunName?.parentElement || el.tunName, hideSing);
     toggleHidden(el.lblMihomoSub, core !== 'mihomo');
     toggleHidden(el.lblMihomoPerProxyPort, core !== 'mihomo');
+    toggleHidden(el.lblMihomoWebUI, core !== 'mihomo');
     toggleHidden(el.btnWgUpload, core !== 'mihomo');
     toggleHidden(el.lblPerTunMixed, hideSing);
     toggleHidden(el.lblAndroidMode, hideSing);
@@ -196,6 +199,7 @@ function setupCheckboxValidation() {
         el.cbDetour,
         el.cbMihomoSub,
         el.cbMihomoPerProxyPort,
+        el.cbMihomoWebUI,
         el.cbPerTunMixed,
         el.cbAndroidMode,
         el.cbXrayBalancer,
@@ -208,6 +212,34 @@ function setupCheckboxValidation() {
     });
 }
 
+function splitMihomoSubscriptionInput(raw) {
+    const lines = String(raw || '').split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+    const subUrls = [];
+    const proxyLines = [];
+    for (const line of lines) {
+        if (/^https?:\/\//i.test(line)) {
+            try {
+                const u = new URL(line);
+                const hasCreds = !!(u.username || u.password);
+                (hasCreds ? proxyLines : subUrls).push(line);
+            } catch {
+                proxyLines.push(line);
+            }
+        } else {
+            proxyLines.push(line);
+        }
+    }
+    return {subUrls, proxyText: proxyLines.join('\n')};
+}
+
+function parseAndValidateProxyText(proxyText) {
+    const text = String(proxyText || '').trim();
+    if (!text) return [];
+    const proxyBeans = globalThis.web4core.buildBeansFromInput(text);
+    proxyBeans.forEach(globalThis.web4core.validateBean);
+    return proxyBeans;
+}
+
 function validateField(showOutput) {
     const raw = el.links.value;
     const hasText = !!raw.trim();
@@ -217,6 +249,7 @@ function validateField(showOutput) {
     const genClashSecret = !!el.cbClashSecret?.checked;
     const useExtended = !!el.cbExtended?.checked;
     const subMihomo = isMihomoSubscriptionMode();
+    const webUI = getCore() === 'mihomo' ? !!el.cbMihomoWebUI?.checked : false;
     try {
         const wgBeans = Array.isArray(state.wgBeans) ? state.wgBeans : [];
         if (!hasText && wgBeans.length === 0) {
@@ -227,22 +260,38 @@ function validateField(showOutput) {
             return false;
         }
         if (subMihomo) {
-            const lines = raw.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
-            const validHttpUrls = lines.length > 0 && lines.every(line => /^https?:\/\//i.test(line) && !/@/.test(line));
+            const {subUrls, proxyText} = splitMihomoSubscriptionInput(raw);
+            const validHttpUrls = subUrls.length > 0;
             if (!showOutput) {
                 setError(validHttpUrls ? '' : MSG_SUB_URL);
+                if (validHttpUrls && proxyText) {
+                    try {
+                        const proxyBeans = parseAndValidateProxyText(proxyText);
+                        setGenerateEnabled(true);
+                        el.links.classList.remove('input-error');
+                        return {subUrls, proxyBeans};
+                    } catch (e) {
+                        setError(e && e.message ? e.message : String(e));
+                        setGenerateEnabled(false);
+                        el.links.classList.add('input-error');
+                        hideOutput();
+                        return false;
+                    }
+                }
                 setGenerateEnabled(validHttpUrls);
                 el.links.classList.toggle('input-error', !validHttpUrls);
                 if (!validHttpUrls) hideOutput();
-                return validHttpUrls ? {subUrls: lines} : false;
+                return validHttpUrls ? {subUrls} : false;
             }
             if (!validHttpUrls) throw new Error(MSG_SUB_URL);
 
             const extraBeans = wgBeans.slice();
-            const config = globalThis.web4core?.buildMihomoSubscriptionConfig(lines, extraBeans);
+            extraBeans.push(...parseAndValidateProxyText(proxyText));
+
+            const config = globalThis.web4core?.buildMihomoSubscriptionConfig(subUrls, extraBeans);
             if (!config) throw new Error('Failed to build subscription config');
 
-            const yaml = (globalThis.web4core?.buildMihomoYaml || (() => ''))(config.proxies || [], config.groups, config.providers, config.rules, null);
+            const yaml = (globalThis.web4core?.buildMihomoYaml || (() => ''))(config.proxies || [], config.groups, config.providers, config.rules, null, {webUI});
             renderOutput(yaml, true);
             setGenerateEnabled(true);
             el.links.classList.remove('input-error');
@@ -321,7 +370,7 @@ function validateField(showOutput) {
             const outBeans = beans.filter(b => !['mieru', 'sdns'].includes(b.proto));
             const perProxyPort = !!el.cbMihomoPerProxyPort?.checked;
             const yamlObj = globalThis.web4core.buildMihomoConfig(outBeans, {perProxyPort, basePort: 7890});
-            const yaml = globalThis.web4core.buildMihomoYaml(yamlObj.proxies, yamlObj['proxy-groups'], null, null, yamlObj.listeners);
+            const yaml = globalThis.web4core.buildMihomoYaml(yamlObj.proxies, yamlObj['proxy-groups'], null, null, yamlObj.listeners, {webUI});
             renderOutput(yaml, true);
             setGenerateEnabled(true);
             el.links.classList.remove('input-error');
@@ -446,9 +495,23 @@ el.gen.addEventListener('click', () => {
     if (ok) scrollOutIntoView();
 });
 
-el.btnCopy.addEventListener('click', async () => {
+el.btnCopy.addEventListener('click', () => {
     try {
-        await navigator.clipboard.writeText(el.out.value || '');
+        const text = el.out.value || '';
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.setAttribute('readonly', '');
+        textarea.style.position = 'fixed';
+        textarea.style.top = '0';
+        textarea.style.left = '-9999px';
+        textarea.style.opacity = '0';
+        textarea.style.pointerEvents = 'none';
+        document.body.appendChild(textarea);
+        textarea.select();
+        textarea.setSelectionRange(0, textarea.value.length);
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+
         const useEl = el.btnCopy.querySelector('use');
         useEl.setAttribute('href', '#check-mark-small');
         setTimeout(() => {
@@ -460,13 +523,11 @@ el.btnCopy.addEventListener('click', async () => {
 
 el.btnDownload.addEventListener('click', () => {
     const isYaml = getCore() === 'mihomo';
-    const blob = new Blob([el.out.value || ''], {type: isYaml ? 'text/yaml' : 'application/json'});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = (getCore() === 'singbox' ? 'singbox_config.json' : (getCore() === 'xray' ? 'xray_config.json' : 'mihomo_config.yaml'));
+    const text = el.out.value || '';
+    const blob = new Blob([typeof TextEncoder !== 'undefined' ? new TextEncoder().encode(text) : text], {type: (isYaml ? 'text/yaml' : 'application/json') + ';charset=utf-8'});
+    const a = Object.assign(document.createElement('a'), {href: URL.createObjectURL(blob), download: getCore() === 'singbox' ? 'singbox_config.json' : (getCore() === 'xray' ? 'xray_config.json' : 'mihomo_config.yaml')});
     a.click();
-    URL.revokeObjectURL(url);
+    URL.revokeObjectURL(a.href);
 });
 
 setupCheckboxValidation();

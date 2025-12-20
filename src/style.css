@@ -472,9 +472,12 @@ input[type="submit"][disabled] {
 
 #errorText {
     line-height: 24px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    max-width: 100%;
 }
 
 @media (hover: hover) and (pointer: fine) {

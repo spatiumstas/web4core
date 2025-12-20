@@ -90,10 +90,6 @@ const MIHOMO_DEFAULT_TEMPLATE = [
     'mode: rule',
     'log-level: info',
     'ipv6: false',
-    'external-controller: 0.0.0.0:9090',
-    'external-ui: ui',
-    'external-ui-url: https://github.com/MetaCubeX/metacubexd/releases/latest/download/compressed-dist.tgz',
-    'secret: ',
     'unified-delay: true',
     'profile:',
     '  store-selected: true',
@@ -105,13 +101,24 @@ const MIHOMO_DEFAULT_TEMPLATE = [
     '  - "MATCH,PROXY"'
 ].join('\n');
 
-try {
-    if (typeof globalThis !== 'undefined') globalThis.MIHOMO_DEFAULT_TEMPLATE = MIHOMO_DEFAULT_TEMPLATE;
-} catch {
-}
-
-function buildMihomoYaml(proxies, groups, providers, rules, listeners) {
-    return overlayMihomoYaml(MIHOMO_DEFAULT_TEMPLATE, proxies, groups, providers, rules, listeners);
+function buildMihomoYaml(proxies, groups, providers, rules, listeners, opts) {
+    opts = opts || {};
+    const webUI = opts.webUI === true;
+    let template = MIHOMO_DEFAULT_TEMPLATE;
+    if (webUI) {
+        const lines = template.split('\n');
+        const ipv6Index = lines.findIndex(l => /^ipv6\s*:/i.test(l));
+        if (ipv6Index !== -1) {
+            lines.splice(ipv6Index + 1, 0,
+                'external-controller: 0.0.0.0:9090',
+                'external-ui: ui',
+                'external-ui-url: https://github.com/MetaCubeX/metacubexd/releases/latest/download/compressed-dist.tgz',
+                'secret: '
+            );
+            template = lines.join('\n');
+        }
+    }
+    return overlayMihomoYaml(template, proxies, groups, providers, rules, listeners);
 }
 
 try {
