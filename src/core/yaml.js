@@ -62,11 +62,16 @@ function overlayMihomoYaml(baseYamlText, proxies, groups, providers, rules, list
     };
     const replaceSection = (key, sectionYaml) => {
         const {start, end} = findSection(key);
-        const inject = (key + ':\n' + toYAML(sectionYaml, 1));
+        const inject = Array.isArray(sectionYaml) && sectionYaml.length === 0
+            ? (key + ': []')
+            : (key + ':\n' + toYAML(sectionYaml, 1));
+        const injectLines = inject.split('\n');
+        if (injectLines[injectLines.length - 1] !== '') injectLines.push('');
         if (start === -1) {
-            lines.push('', inject);
+            if (lines.length && lines[lines.length - 1] !== '') lines.push('');
+            lines.push(...injectLines);
         } else {
-            lines.splice(start, end - start, ...inject.split('\n'));
+            lines.splice(start, end - start, ...injectLines);
         }
     };
     replaceSection('proxies', proxies);
@@ -75,9 +80,12 @@ function overlayMihomoYaml(baseYamlText, proxies, groups, providers, rules, list
     if (rules) replaceSection('rules', rules);
     if (listeners && listeners.length > 0) {
         replaceSection('listeners', listeners);
-        const mixedPortIndex = lines.findIndex(l => /^mixed-port\s*:/i.test(l));
-        if (mixedPortIndex !== -1) {
-            lines.splice(mixedPortIndex, 1);
+        const hasMixedListener = listeners.some(l => (l && typeof l === 'object') && String(l.type || '').toLowerCase() === 'mixed');
+        if (hasMixedListener) {
+            const mixedPortIndex = lines.findIndex(l => /^mixed-port\s*:/i.test(l));
+            if (mixedPortIndex !== -1) {
+                lines.splice(mixedPortIndex, 1);
+            }
         }
     }
     return lines.join('\n');
@@ -104,6 +112,7 @@ const MIHOMO_DEFAULT_TEMPLATE = [
 function buildMihomoYaml(proxies, groups, providers, rules, listeners, opts) {
     opts = opts || {};
     const webUI = opts.webUI === true;
+    const tunOpt = opts.tun;
     let template = MIHOMO_DEFAULT_TEMPLATE;
     if (webUI) {
         const lines = template.split('\n');
@@ -115,6 +124,73 @@ function buildMihomoYaml(proxies, groups, providers, rules, listeners, opts) {
                 'external-ui-url: https://github.com/MetaCubeX/metacubexd/releases/latest/download/compressed-dist.tgz',
                 'secret: '
             );
+            template = lines.join('\n');
+        }
+    }
+    if (tunOpt) {
+        const lines = template.split('\n');
+        const proxiesIndex = lines.findIndex(l => /^proxies\s*:/i.test(l));
+        const mode = (tunOpt && typeof tunOpt === 'object' && tunOpt.mode) ? String(tunOpt.mode) : 'tun';
+        if (mode === 'listeners') {
+            const buildTunListener = (idx, proxyName) => {
+                const base = 19819;
+                const offset = idx * 4 + 1;
+                const oct3 = Math.floor(offset / 256);
+                const oct4 = offset % 256;
+                const inet4 = `198.${base % 256}.${oct3}.${oct4}/30`;
+                const out = {
+                    name: idx === 0 ? 'mihomo-tun' : `mihomo-tun-${idx}`,
+                    type: 'tun',
+                    device: `mitun${idx}`,
+                    stack: 'gvisor',
+                    'auto-route': false,
+                    'auto-detect-interface': false,
+                    'inet4-address': [inet4],
+                };
+                if (proxyName) out.proxy = proxyName;
+                return out;
+            };
+
+            const tunListeners = [];
+            const proxyList = Array.isArray(proxies) ? proxies : [];
+            const providerKeys = (providers && typeof providers === 'object') ? Object.keys(providers) : [];
+            let idx = 0;
+            
+            if (providerKeys.length > 0) {
+                if (providerKeys.length > 1) {
+                    providerKeys.forEach(pn => pn && tunListeners.push(buildTunListener(idx++, `SUB-${pn}`)));
+                } else {
+                    const fastestGroup = Array.isArray(groups) ? groups.find(g => g?.type === 'url-test' && Array.isArray(g.use)) : null;
+                    tunListeners.push(buildTunListener(idx++, fastestGroup?.name || ''));
+                }
+                proxyList.forEach(p => p?.name && tunListeners.push(buildTunListener(idx++, p.name)));
+            } else {
+                tunListeners.push(buildTunListener(0, ''));
+                if (proxyList.length > 1) {
+                    proxyList.forEach((p, i) => p?.name && tunListeners.push(buildTunListener(i + 1, p.name)));
+                }
+            }
+            const merged = (Array.isArray(listeners) ? listeners.slice() : []);
+            merged.push(...tunListeners);
+            listeners = merged;
+        } else {
+            const tun = {
+                enable: true,
+                stack: 'gvisor',
+                'auto-route': false,
+                'auto-detect-interface': true,
+                'device': 'mitun0',
+            };
+            const inject = [
+                'tun:',
+                ...toYAML(tun, 1).split('\n'),
+                ''
+            ];
+            if (proxiesIndex !== -1) {
+                lines.splice(proxiesIndex, 0, ...inject);
+            } else {
+                lines.push(...inject);
+            }
             template = lines.join('\n');
         }
     }

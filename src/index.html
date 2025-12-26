@@ -1,7 +1,8 @@
 <!DOCTYPE html>
 <html lang="ru">
+
 <head>
-    <meta charset="UTF-8"/>
+    <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
     <link rel="stylesheet" href="style.css">
     <link rel="icon" type="image/png" href="https://img.icons8.com/fluency/240/security-configuration.png">
@@ -9,160 +10,175 @@
     <link rel="apple-touch-icon" href="https://img.icons8.com/fluency/240/security-configuration.png">
     <title>web4core</title>
 </head>
+
 <body>
-<header id="asciiHeader">
-    <pre>
+    <header id="asciiHeader">
+        <pre>
                 __    __ __                     
  _      _____  / /_  / // / _________  ________ 
 | | /| / / _ \/ __ \/ // /_/ ___/ __ \/ ___/ _ \
 | |/ |/ /  __/ /_/ /__  __/ /__/ /_/ / /  /  __/
 |__/|__/\___/_.___/  /_/  \___/\____/_/   \___/ 
     </pre>
-</header>
-<svg xmlns="http://www.w3.org/2000/svg" style="display:none">
-    <symbol id="copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+    </header>
+    <svg xmlns="http://www.w3.org/2000/svg" style="display:none">
+        <symbol id="copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
             stroke-linejoin="round">
-        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
-    </symbol>
-    <symbol id="download-file" viewBox="0 0 16 16" fill="none">
-        <path d="M11.727 9.2a.8.8 0 0 0-1.054-1.204L8.8 9.635V1.798a.8.8 0 0 0-1.6 0v7.837l-1.873-1.64A.8.8 0 0 0 4.273 9.2l3.2 2.8a.8.8 0 0 0 1.054 0l3.2-2.8ZM1.6 11.398a.8.8 0 0 0-1.6 0v2.4a1.6 1.6 0 0 0 1.6 1.6h12.8a1.6 1.6 0 0 0 1.6-1.6v-2.4a.8.8 0 0 0-1.6 0v2.4H1.6v-2.4Z"
-              fill="currentColor"/>
-    </symbol>
-    <symbol id="check-mark-small" viewBox="0 0 16 16" fill="currentColor">
-        <path d="M6.173 12.414l-3.89-3.89 1.414-1.414 2.476 2.475 6.364-6.364 1.414 1.414-7.778 7.778z"/>
-    </symbol>
-    <symbol id="settings" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="12" cy="12" r="3"></circle>
-        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 8.4 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4 15.4a1.65 1.65 0 0 0-1.51-1H2.4a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4 8.4a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 8.4 4a1.65 1.65 0 0 0 1-1.51V2.4a2 2 0 1 1 4 0v.09A1.65 1.65 0 0 0 15.6 4a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 8.4a1.65 1.65 0 0 0 1.51 1h.09a2 2 0 1 1 0 4h-.09A1.65 1.65 0 0 0 19.4 15z"></path>
-    </symbol>
-</svg>
-<main class="container container--stretch">
-    <div class="row row--left gap-12 toolbar">
-        <div id="coreToggle" class="core-toggle" data-core="singbox" aria-label="Core selector" role="radiogroup">
-            <div class="knob"></div>
-            <div class="labels">
-                <span id="lblSing" role="radio" aria-checked="true" tabindex="0">sing-box</span>
-                <span id="lblXray" role="radio" aria-checked="false" tabindex="-1">Xray</span>
-                <span id="lblMihomo" role="radio" aria-checked="false" tabindex="-1">Mihomo</span>
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+        </symbol>
+        <symbol id="download-file" viewBox="0 0 16 16" fill="none">
+            <path
+                d="M11.727 9.2a.8.8 0 0 0-1.054-1.204L8.8 9.635V1.798a.8.8 0 0 0-1.6 0v7.837l-1.873-1.64A.8.8 0 0 0 4.273 9.2l3.2 2.8a.8.8 0 0 0 1.054 0l3.2-2.8ZM1.6 11.398a.8.8 0 0 0-1.6 0v2.4a1.6 1.6 0 0 0 1.6 1.6h12.8a1.6 1.6 0 0 0 1.6-1.6v-2.4a.8.8 0 0 0-1.6 0v2.4H1.6v-2.4Z"
+                fill="currentColor" />
+        </symbol>
+        <symbol id="check-mark-small" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M6.173 12.414l-3.89-3.89 1.414-1.414 2.476 2.475 6.364-6.364 1.414 1.414-7.778 7.778z" />
+        </symbol>
+        <symbol id="settings" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path
+                d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 8.4 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4 15.4a1.65 1.65 0 0 0-1.51-1H2.4a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4 8.4a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 8.4 4a1.65 1.65 0 0 0 1-1.51V2.4a2 2 0 1 1 4 0v.09A1.65 1.65 0 0 0 15.6 4a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 8.4a1.65 1.65 0 0 0 1.51 1h.09a2 2 0 1 1 0 4h-.09A1.65 1.65 0 0 0 19.4 15z">
+            </path>
+        </symbol>
+    </svg>
+    <main class="container container--stretch">
+        <div class="row row--left gap-12 toolbar">
+            <div id="coreToggle" class="core-toggle" data-core="singbox" aria-label="Core selector" role="radiogroup">
+                <div class="knob"></div>
+                <div class="labels">
+                    <span id="lblSing" role="radio" aria-checked="true" tabindex="0">sing-box</span>
+                    <span id="lblXray" role="radio" aria-checked="false" tabindex="-1">Xray</span>
+                    <span id="lblMihomo" role="radio" aria-checked="false" tabindex="-1">Mihomo</span>
+                </div>
+            </div>
+            <button id="btnSettings" class="settings-toggle" type="button" aria-label="Settings" aria-expanded="false"
+                aria-controls="settingsPanel">
+                <svg width="18" height="18" aria-hidden="true">
+                    <use href="#settings"></use>
+                </svg>
+            </button>
+        </div>
+
+        <div id="settingsPanel" class="settings-panel settings-panel--collapsed">
+            <div class="settings-panel__chips">
+                <label class="custom-checkbox chip">
+                    <input type="checkbox" id="cbTun" checked />
+                    <div class="checkmark"></div>
+                    <span>TUN</span>
+                </label>
+                <label class="custom-checkbox chip">
+                    <input type="checkbox" id="cbSocks" checked />
+                    <div class="checkmark"></div>
+                    <span>SOCKS5</span>
+                </label>
+                <label class="custom-checkbox chip" id="lblPerTunMixed">
+                    <input type="checkbox" id="cbPerTunMixed" />
+                    <div class="checkmark"></div>
+                    <span title="Expose per-TUN proxy inbounds when multiple TUNs">Per‑TUN proxy</span>
+                </label>
+                <label class="custom-checkbox chip">
+                    <input type="checkbox" id="cbClashSecret" />
+                    <div class="checkmark"></div>
+                    <span title="Clash API Secret">Clash Secret</span>
+                </label>
+                <label class="custom-checkbox chip" id="lblDetour">
+                    <input type="checkbox" id="cbDetour" />
+                    <div class="checkmark"></div>
+                    <span title="Use first proxy as detour target for others">Detour</span>
+                </label>
+                <label class="custom-checkbox chip" id="lblAndroidMode">
+                    <input type="checkbox" id="cbAndroidMode" />
+                    <div class="checkmark"></div>
+                    <span title="Android mode: route system traffic into sing-box TUN">Android</span>
+                </label>
+                <label class="custom-checkbox chip">
+                    <input type="checkbox" id="cbExtended" />
+                    <div class="checkmark"></div>
+                    <span
+                        title="Extended features: XHTTP, XUDP, SDNS, Unified delay from github.com/shtorm-7/sing-box-extended">Extended</span>
+                </label>
+                <label class="custom-checkbox chip" id="lblXrayBalancer">
+                    <input type="checkbox" id="cbXrayBalancer" />
+                    <div class="checkmark"></div>
+                    <span title="Xray routing balancer over all proxies">Balancer</span>
+                </label>
+                <label class="custom-checkbox chip is-hidden" id="lblMihomoSub">
+                    <input type="checkbox" id="cbMihomoSub" />
+                    <div class="checkmark"></div>
+                    <span title="Use Mihomo proxy-provider with an HTTP(S) URL">Subscription</span>
+                </label>
+                <label class="custom-checkbox chip is-hidden" id="lblMihomoTun">
+                    <input type="checkbox" id="cbMihomoTun" />
+                    <div class="checkmark"></div>
+                    <span>TUN</span>
+                </label>
+                <label class="custom-checkbox chip is-hidden" id="lblMihomoPerProxyTun">
+                    <input type="checkbox" id="cbMihomoPerProxyTun" />
+                    <div class="checkmark"></div>
+                    <span title="Multiple TUN interfaces per proxy">Per‑Proxy TUN</span>
+                </label>
+                <label class="custom-checkbox chip is-hidden" id="lblMihomoPerProxyPort">
+                    <input type="checkbox" id="cbMihomoPerProxyPort" />
+                    <div class="checkmark"></div>
+                    <span>Per-Proxy Port</span>
+                </label>
+                <label class="custom-checkbox chip is-hidden" id="lblMihomoWebUI">
+                    <input type="checkbox" id="cbMihomoWebUI" checked />
+                    <div class="checkmark"></div>
+                    <span>Web UI</span>
+                </label>
+                <button id="btnWgUpload" class="custom-checkbox chip is-hidden" type="button"
+                    title="WireGuard/AmneziaWG (.conf/.awg)">
+                    <span>WireGuard</span>
+                </button>
+                <input type="file" id="wgFile" class="file-input-hidden" accept=".conf,.wg,.awg,text/plain" multiple />
+            </div>
+            <div class="settings-panel__field">
+                <input class="input" type="text" id="tunName"
+                    placeholder="Interface(s): (tun0,tun1 or tun0:select,tun1:auto)" />
             </div>
         </div>
-        <button id="btnSettings" class="settings-toggle" type="button" aria-label="Settings"
-                aria-expanded="false" aria-controls="settingsPanel">
-            <svg width="18" height="18" aria-hidden="true">
-                <use href="#settings"></use>
-            </svg>
-        </button>
-    </div>
 
-    <div id="settingsPanel" class="settings-panel settings-panel--collapsed">
-        <div class="settings-panel__chips">
-            <label class="custom-checkbox chip">
-                <input type="checkbox" id="cbTun" checked/>
-                <div class="checkmark"></div>
-                <span>TUN</span>
-            </label>
-            <label class="custom-checkbox chip">
-                <input type="checkbox" id="cbSocks" checked/>
-                <div class="checkmark"></div>
-                <span>SOCKS5</span>
-            </label>
-            <label class="custom-checkbox chip" id="lblPerTunMixed">
-                <input type="checkbox" id="cbPerTunMixed"/>
-                <div class="checkmark"></div>
-                <span title="Expose per-TUN proxy inbounds when multiple TUNs">Per‑TUN proxy</span>
-            </label>
-            <label class="custom-checkbox chip">
-                <input type="checkbox" id="cbClashSecret"/>
-                <div class="checkmark"></div>
-                <span title="Clash API Secret">Clash Secret</span>
-            </label>
-            <label class="custom-checkbox chip" id="lblDetour">
-                <input type="checkbox" id="cbDetour"/>
-                <div class="checkmark"></div>
-                <span title="Use first proxy as detour target for others">Detour</span>
-            </label>
-            <label class="custom-checkbox chip" id="lblAndroidMode">
-                <input type="checkbox" id="cbAndroidMode"/>
-                <div class="checkmark"></div>
-                <span title="Android mode: route system traffic into sing-box TUN">Android</span>
-            </label>
-            <label class="custom-checkbox chip">
-                <input type="checkbox" id="cbExtended"/>
-                <div class="checkmark"></div>
-                <span title="Extended features: XHTTP, XUDP, SDNS, Unified delay from github.com/shtorm-7/sing-box-extended">Extended</span>
-            </label>
-            <label class="custom-checkbox chip" id="lblXrayBalancer">
-                <input type="checkbox" id="cbXrayBalancer"/>
-                <div class="checkmark"></div>
-                <span title="Xray routing balancer over all proxies">Balancer</span>
-            </label>
-            <label class="custom-checkbox chip is-hidden" id="lblMihomoSub">
-                <input type="checkbox" id="cbMihomoSub"/>
-                <div class="checkmark"></div>
-                <span title="Use Mihomo proxy-provider with an HTTP(S) URL">Subscription</span>
-            </label>
-            <label class="custom-checkbox chip is-hidden" id="lblMihomoPerProxyPort">
-                <input type="checkbox" id="cbMihomoPerProxyPort"/>
-                <div class="checkmark"></div>
-                <span>Per-Proxy Port</span>
-            </label>
-            <label class="custom-checkbox chip is-hidden" id="lblMihomoWebUI">
-                <input type="checkbox" id="cbMihomoWebUI" checked/>
-                <div class="checkmark"></div>
-                <span>Web UI</span>
-            </label>
-            <button id="btnWgUpload" class="custom-checkbox chip is-hidden" type="button"
-                    title="WireGuard/AmneziaWG (.conf/.awg)">
-                <span>WireGuard</span>
-            </button>
-            <input type="file" id="wgFile" class="file-input-hidden" accept=".conf,.wg,.awg,text/plain" multiple/>
+        <div class="full">
+            <textarea id="links" class="input full"
+                placeholder="subscription links&#10;vless://...&#10;vmess://...&#10;trojan://...&#10;ss://...&#10;socks://...&#10;http://user:pass@host:port&#10;hy2://...&#10;tuic://...&#10;mieru://... (or json)&#10;sdns://...&#10"></textarea>
         </div>
-        <div class="settings-panel__field">
-            <input class="input" type="text" id="tunName"
-                   placeholder="Interface(s): (tun0,tun1 or tun0:select,tun1:auto)"/>
+
+        <div id="errorBlock" class="row row--left" role="status" aria-live="polite">
+            <div id="errorText"></div>
         </div>
-    </div>
 
-    <div class="full">
-        <textarea id="links" class="input full"
-                  placeholder="subscription links&#10;vless://...&#10;vmess://...&#10;trojan://...&#10;ss://...&#10;socks://...&#10;http://user:pass@host:port&#10;hy2://...&#10;tuic://...&#10;mieru://... (or json)&#10;sdns://...&#10"></textarea>
-    </div>
-
-    <div id="errorBlock" class="row row--left" role="status" aria-live="polite">
-        <div id="errorText"></div>
-    </div>
-
-    <div class="button-row">
-        <input type="submit" id="gen" value="Generate" class="is-hidden"/>
-        <button id="btnReverse" class="btn-primary is-hidden" aria-label="Reverse">Reverse</button>
-    </div>
-
-    <div id="outBlock" class="hidden full">
-        <textarea id="out" class="input full" readonly></textarea>
-        <div class="button-row mt-8 full">
-            <button id="btnCopy" class="circle-btn" title="Copy" aria-label="Copy">
-                <svg width="22" height="22" aria-hidden="true">
-                    <use href="#copy"></use>
-                </svg>
-            </button>
-            <button id="btnDownload" class="circle-btn" title="Download" aria-label="Download">
-                <svg width="22" height="22" aria-hidden="true">
-                    <use href="#download-file"></use>
-                </svg>
-            </button>
+        <div class="button-row">
+            <input type="submit" id="gen" value="Generate" class="is-hidden" />
         </div>
-    </div>
-</main>
-<script src="parseuri.min.js"></script>
-<script src="main.js"></script>
-<script src="core/singbox.js"></script>
-<script src="core/xray.js"></script>
-<script src="core/mihomo.js"></script>
-<script src="core/yaml.js"></script>
-<script src="core/wireguard.js"></script>
-<script src="core/subscription.js"></script>
-<script src="ui.js"></script>
+
+        <div id="outBlock" class="hidden full">
+            <textarea id="out" class="input full" readonly></textarea>
+            <div class="button-row mt-8 full">
+                <button id="btnCopy" class="circle-btn" title="Copy" aria-label="Copy">
+                    <svg width="22" height="22" aria-hidden="true">
+                        <use href="#copy"></use>
+                    </svg>
+                </button>
+                <button id="btnDownload" class="circle-btn" title="Download" aria-label="Download">
+                    <svg width="22" height="22" aria-hidden="true">
+                        <use href="#download-file"></use>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </main>
+    <script src="parseuri.min.js"></script>
+    <script src="main.js"></script>
+    <script src="core/singbox.js"></script>
+    <script src="core/xray.js"></script>
+    <script src="core/mihomo.js"></script>
+    <script src="core/yaml.js"></script>
+    <script src="core/wireguard.js"></script>
+    <script src="core/subscription.js"></script>
+    <script src="ui.js"></script>
 </body>
+
 </html>

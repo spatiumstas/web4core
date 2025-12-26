@@ -2,7 +2,7 @@ const FASTEST_GROUP_NAME = '⚡ Fastest';
 
 function buildMihomoProxy(bean) {
     const s = bean.stream || {};
-    const base = {name: bean.name || computeTag(bean, new Set()), type: '', server: bean.host, port: bean.port};
+    const base = { name: bean.name || computeTag(bean, new Set()), type: '', server: bean.host, port: bean.port };
     const applyCommon = (obj) => {
         if (bean.udp === true) obj.udp = true;
         if (bean.udpOverTcp === true) obj['udp-over-tcp'] = true;
@@ -21,7 +21,7 @@ function buildMihomoProxy(bean) {
             if (s.allowInsecure) obj['skip-cert-verify'] = true;
             if (s.fp) obj['client-fingerprint'] = s.fp;
             if (s.reality && s.reality.pbk) {
-                const ro = {'public-key': s.reality.pbk};
+                const ro = { 'public-key': s.reality.pbk };
                 if (s.reality.sid) ro['short-id'] = s.reality.sid;
                 if (s.reality.spx) ro['spider-x'] = s.reality.spx;
                 if (s.reality.pqv) ro.pqv = s.reality.pqv;
@@ -34,7 +34,7 @@ function buildMihomoProxy(bean) {
             obj.network = 'ws';
             obj['ws-opts'] = {};
             if (s.path) obj['ws-opts'].path = s.path;
-            if (s.host) obj['ws-opts'].headers = {Host: s.host};
+            if (s.host) obj['ws-opts'].headers = { Host: s.host };
             if (s.wsEarlyData && s.wsEarlyData.max_early_data) {
                 obj['ws-opts']['max-early-data'] = s.wsEarlyData.max_early_data;
                 if (s.wsEarlyData.early_data_header_name) obj['ws-opts']['early-data-header-name'] = s.wsEarlyData.early_data_header_name;
@@ -53,22 +53,23 @@ function buildMihomoProxy(bean) {
             obj.network = 'grpc';
             obj['grpc-opts'] = {};
             if (s.path) obj['grpc-opts']['grpc-service-name'] = s.path;
+            if (s.authority) obj['grpc-opts'].authority = s.authority;
         } else if (s.network === 'tcp' && s.headerType === 'http') {
             obj.network = 'tcp';
-            obj['http-opts'] = {headers: {Host: s.host}, path: [s.path].filter(Boolean)};
+            obj['http-opts'] = { headers: { Host: s.host }, path: [s.path].filter(Boolean) };
         } else {
             obj.network = 'tcp';
         }
     };
     if (bean.proto === 'vmess') {
-        const p = {...base, type: 'vmess', uuid: bean.auth.uuid, cipher: bean.auth.security || 'auto', alterId: 0};
+        const p = { ...base, type: 'vmess', uuid: bean.auth.uuid, cipher: bean.auth.security || 'auto', alterId: 0 };
         applyTls(p);
         applyNetwork(p);
         applyCommon(p);
         return p;
     }
     if (bean.proto === 'vless') {
-        const p = {...base, type: 'vless', uuid: bean.auth.uuid, encryption: 'none'};
+        const p = { ...base, type: 'vless', uuid: bean.auth.uuid, encryption: 'none' };
         if (bean.auth.flow) p.flow = bean.auth.flow;
         applyTls(p);
         applyNetwork(p);
@@ -76,14 +77,14 @@ function buildMihomoProxy(bean) {
         return p;
     }
     if (bean.proto === 'trojan') {
-        const p = {...base, type: 'trojan', password: bean.auth.password};
+        const p = { ...base, type: 'trojan', password: bean.auth.password };
         applyTls(p);
         applyNetwork(p);
         applyCommon(p);
         return p;
     }
     if (bean.proto === 'ss') {
-        const p = {...base, type: 'ss', cipher: bean.ss.method, password: bean.ss.password};
+        const p = { ...base, type: 'ss', cipher: bean.ss.method, password: bean.ss.password };
         if (bean.ss.plugin) {
             p.plugin = bean.ss.plugin;
             if (bean.ss.pluginOpts && typeof bean.ss.pluginOpts === 'object') {
@@ -97,7 +98,7 @@ function buildMihomoProxy(bean) {
         return p;
     }
     if (bean.proto === 'http') {
-        const p = {...base, type: 'http'};
+        const p = { ...base, type: 'http' };
         if (bean.socks?.username) p.username = bean.socks.username;
         if (bean.socks?.password) p.password = bean.socks.password;
         applyTls(p);
@@ -108,14 +109,14 @@ function buildMihomoProxy(bean) {
         if (bean.socks?.type === 'socks4') {
             throw new Error('Mihomo does not support: socks4');
         }
-        const p = {...base, type: 'socks5'};
+        const p = { ...base, type: 'socks5' };
         if (bean.socks?.username) p.username = bean.socks.username;
         if (bean.socks?.password) p.password = bean.socks.password;
         applyCommon(p);
         return p;
     }
     if (bean.proto === 'hy2') {
-        const p = {...base, type: 'hysteria2', password: bean.auth.password};
+        const p = { ...base, type: 'hysteria2', password: bean.auth.password };
         if (bean.hysteria2?.alpn) p.alpn = bean.hysteria2.alpn.split(',').filter(Boolean);
         if (bean.hysteria2?.sni) p.sni = bean.hysteria2.sni;
         if (bean.hysteria2?.allowInsecure) p['skip-cert-verify'] = true;
@@ -134,7 +135,7 @@ function buildMihomoProxy(bean) {
         return p;
     }
     if (bean.proto === 'tuic') {
-        const p = {...base, type: 'tuic'};
+        const p = { ...base, type: 'tuic' };
         if (bean.tuic?.token) {
             p.token = bean.tuic.token;
         } else {
@@ -165,7 +166,7 @@ function buildMihomoProxy(bean) {
         const hasPeers = peers.length > 0;
         const mapPeer = (peer) => {
             if (!peer || typeof peer !== 'object') return null;
-            const out = {server: peer.server, port: peer.port};
+            const out = { server: peer.server, port: peer.port };
             if (peer.publicKey) out['public-key'] = peer.publicKey;
             if (peer.preSharedKey) out['pre-shared-key'] = peer.preSharedKey;
             if (Array.isArray(peer.allowedIPs) && peer.allowedIPs.length) out['allowed-ips'] = peer.allowedIPs;
@@ -294,7 +295,7 @@ function buildMihomoConfig(beans, opts) {
             proxies: [FASTEST_GROUP_NAME, ...names]
         });
     } else {
-        groups.push({name: 'PROXY', type: 'select', proxies: names});
+        groups.push({ name: 'PROXY', type: 'select', proxies: names });
     }
     const usePerProxyPort = !!(opts && opts.perProxyPort);
     const basePort = (opts && opts.basePort) || 7890;
@@ -327,7 +328,7 @@ function buildMihomoConfig(beans, opts) {
     return config;
 }
 
-function buildMihomoSubscriptionConfig(subscriptionUrls, extraBeans) {
+function buildMihomoSubscriptionConfig(subscriptionUrls, extraBeans, opts) {
     if (!Array.isArray(subscriptionUrls) || subscriptionUrls.length === 0) {
         throw new Error('At least one subscription URL is required');
     }
@@ -359,22 +360,57 @@ function buildMihomoSubscriptionConfig(subscriptionUrls, extraBeans) {
         tolerance: 50
     }];
 
+    if (providerNames.length > 1) {
+        providerNames.forEach((providerName) => {
+            groups.push({
+                name: `SUB-${providerName}`,
+                type: 'select',
+                use: [providerName]
+            });
+        });
+    }
+
+    const usePerProxyPort = !!(opts && opts.perProxyPort);
+    const fastestGroup = groups.find(g => g && g.name === FASTEST_GROUP_NAME && g.type === 'url-test');
     const extraProxies = [];
     if (Array.isArray(extraBeans) && extraBeans.length > 0) {
         extraBeans.forEach(bean => {
             validateBean(bean);
             const p = buildMihomoProxy(bean);
             extraProxies.push(p);
-            const fastest = groups.find(x => x && x.name === FASTEST_GROUP_NAME && x.type === 'url-test');
-            if (fastest) {
-                if (!Array.isArray(fastest.proxies)) fastest.proxies = [];
-                if (!fastest.proxies.includes(p.name)) fastest.proxies.push(p.name);
+            if (!usePerProxyPort) {
+                if (fastestGroup) {
+                    if (!Array.isArray(fastestGroup.proxies)) fastestGroup.proxies = [];
+                    if (!fastestGroup.proxies.includes(p.name)) fastestGroup.proxies.push(p.name);
+                }
             }
+        });
+    }
+    const basePort = (opts && opts.basePort) || 7890;
+    const listeners = [];
+    if (usePerProxyPort) {
+        const buildMixedListener = (name, proxy, port) => ({
+            name: `mixed-${name}`,
+            type: 'mixed',
+            port,
+            proxy,
+            udp: true
+        });
+        let portIdx = 0;
+        if (providerNames.length > 1) {
+            providerNames.forEach(providerName => {
+                listeners.push(buildMixedListener(`SUB-${providerName}`, `SUB-${providerName}`, basePort + portIdx++));
+            });
+        } else {
+            listeners.push(buildMixedListener(FASTEST_GROUP_NAME, FASTEST_GROUP_NAME, basePort + portIdx++));
+        }
+        extraProxies.forEach(p => {
+            listeners.push(buildMixedListener(p.name, p.name, basePort + portIdx++));
         });
     }
 
     const rules = [`MATCH,${FASTEST_GROUP_NAME}`];
-    return {providers, groups, rules, proxies: extraProxies};
+    return { providers, groups, rules, proxies: extraProxies, listeners };
 }
 
 try {

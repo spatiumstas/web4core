@@ -87,7 +87,7 @@ const FETCH_INIT = {
     method: 'GET',
     cache: 'no-store',
     credentials: 'omit',
-    headers: {'Accept': 'text/plain, */*'},
+    headers: { 'Accept': 'text/plain, */*' },
     redirect: 'follow'
 };
 const PUBLIC_CORS_FALLBACKS = [
@@ -156,7 +156,7 @@ function parseAddrHostPort(addr, defaultPort) {
     let host = '';
     let port = defaultPort;
     const a = (addr || '').trim();
-    if (!a) return {host, port};
+    if (!a) return { host, port };
     if (a.startsWith('[')) {
         const ix = a.indexOf(']');
         if (ix !== -1) {
@@ -175,7 +175,7 @@ function parseAddrHostPort(addr, defaultPort) {
             host = a;
         }
     }
-    return {host, port};
+    return { host, port };
 }
 
 function decodeAuthorityAndExtract(authority, defaultPort) {
@@ -185,8 +185,8 @@ function decodeAuthorityAndExtract(authority, defaultPort) {
     const cred = dec.slice(0, i);
     const addr = dec.slice(i + 1);
     const uuid = findUuidToken(cred);
-    const {host, port} = parseAddrHostPort(addr, defaultPort);
-    return {uuid, host, port};
+    const { host, port } = parseAddrHostPort(addr, defaultPort);
+    return { uuid, host, port };
 }
 
 function decodeSSFullAuthority(raw, defaultPort) {
@@ -202,7 +202,7 @@ function decodeSSFullAuthority(raw, defaultPort) {
         password = cred.slice(i + 1);
     }
     const ap = parseAddrHostPort(addr, defaultPort);
-    return {method, password, host: ap.host, port: ap.port};
+    return { method, password, host: ap.host, port: ap.port };
 }
 
 function validateBean(bean) {
@@ -264,13 +264,13 @@ function validateBean(bean) {
         case 'tuic':
             requireHost();
             requirePort();
-        {
-            const hasToken = !!(bean.tuic && bean.tuic.token);
-            if (!hasToken) {
-                if (!bean.auth?.uuid || !isValidUuid(bean.auth.uuid)) throw new Error('tuic: invalid UUID');
-                if (!bean.auth?.password) throw new Error('tuic: missing password');
+            {
+                const hasToken = !!(bean.tuic && bean.tuic.token);
+                if (!hasToken) {
+                    if (!bean.auth?.uuid || !isValidUuid(bean.auth.uuid)) throw new Error('tuic: invalid UUID');
+                    if (!bean.auth?.password) throw new Error('tuic: missing password');
+                }
             }
-        }
             break;
         case 'sdns':
             if (!bean.sdns?.stamp) throw new Error('sdns: missing stamp');
@@ -336,7 +336,7 @@ function parseTunSpec(tunSpec) {
             const name = (namePart || '').trim();
             const m = (modePart || '').trim().toLowerCase();
             const mode = (m === 'auto' || m === 'select') ? m : 'select';
-            return {name, mode};
+            return { name, mode };
         })
         .filter(x => x.name);
 }
@@ -411,7 +411,7 @@ function parseTrojan(urlStr) {
         host: u.hostname,
         port: asInt(u.port, 443),
         name: decodeURIComponent(u.hash.replace('#', '')),
-        auth: {password: decodeURIComponent(u.username || '')},
+        auth: { password: decodeURIComponent(u.username || '') },
         stream: buildStreamFromQuery(q, true),
         udp: q.get('udp') === '1' || q.get('udp') === 'true',
         udpOverTcp: q.get('udp-over-tcp') === '1' || q.get('udp-over-tcp') === 'true',
@@ -511,14 +511,14 @@ function parseVMess(urlStr) {
             allowInsecure: false,
             fp: obj.fp || '',
             packet_encoding: obj.pac_enc || '',
-            reality: {pbk: obj.pbk || '', sid: obj.sid || '', spx: obj.spx || ''}
+            reality: { pbk: obj.pbk || '', sid: obj.sid || '', spx: obj.spx || '' }
         };
         const bean = {
             proto: 'vmess',
             host: obj.add || 'localhost',
             port: asInt(obj.port, 443),
             name: obj.ps || '',
-            auth: {uuid: obj.id, security: obj.scy || 'auto'},
+            auth: { uuid: obj.id, security: obj.scy || 'auto' },
             stream,
             udp: obj.udp === true || obj.udp === 1,
             udpOverTcp: obj['udp-over-tcp'] === true,
@@ -534,7 +534,7 @@ function parseVMess(urlStr) {
         host: u.hostname,
         port: asInt(u.port, 443),
         name: decodeURIComponent(u.hash.replace('#', '')),
-        auth: {uuid: decodeURIComponent(u.username || ''), security: q.get('encryption') || 'auto'},
+        auth: { uuid: decodeURIComponent(u.username || ''), security: q.get('encryption') || 'auto' },
         stream: buildStreamFromQuery(q, false),
         udp: q.get('udp') === '1' || q.get('udp') === 'true',
         udpOverTcp: q.get('udp-over-tcp') === '1' || q.get('udp-over-tcp') === 'true',
@@ -621,7 +621,7 @@ function parseSS(urlStr) {
             pluginOpts: Object.keys(pluginOpts).length ? pluginOpts : '',
             smux: smuxEnabled ? smux : null
         },
-        stream: {network: 'tcp', security: ''},
+        stream: { network: 'tcp', security: '' },
         udp: q.get('udp') === '1' || q.get('udp') === 'true',
         udpOverTcp: q.get('udp-over-tcp') === '1' || q.get('udp-over-tcp') === 'true'
     };
@@ -636,7 +636,7 @@ function parseHysteria2(urlStr) {
         host: u.hostname,
         port: asInt(u.port, 443),
         name: decodeURIComponent(u.hash.replace('#', '')),
-        auth: {password: pwd},
+        auth: { password: pwd },
         hysteria2: {
             obfsPassword: q.get('obfs-password') || '',
             hopPort: q.get('mport') || '',
@@ -783,11 +783,14 @@ function buildBeansFromInput(raw) {
 
 function buildStreamFromQuery(q, isTrojan) {
     let type = (q.get('type') || 'tcp').toLowerCase();
+    const mode = (q.get('mode') || '').toLowerCase();
+    if (mode === 'gun') type = 'grpc';
     if (type === 'h2') type = 'http';
     if (type === 'w' || type === 'websocket') type = 'ws';
     if (type !== 'xhttp' && (q.get('xhttp') === '1' || q.get('xhttp') === 'true')) type = 'xhttp';
     const security = (q.get('security') || (isTrojan ? 'tls' : '')).toLowerCase().replace('reality', 'tls').replace('none', '');
     const sni = q.get('sni') || q.get('peer') || '';
+    const authority = q.get('authority') || '';
     const alpn = splitCSV(q.get('alpn') || '');
     const aiRaw = (q.get('allowInsecure') || q.get('insecure') || '').toLowerCase();
     const allowInsecure = ['1', 'true', 'yes'].includes(aiRaw);
@@ -802,6 +805,7 @@ function buildStreamFromQuery(q, isTrojan) {
         network: type,
         security,
         sni,
+        authority,
         alpn,
         allowInsecure,
         fp,
@@ -819,7 +823,7 @@ function buildStreamFromQuery(q, isTrojan) {
         stream.host = q.get('host') || '';
         const ed = asInt((q.get('ed') || '').toString(), 0);
         if (ed > 0) {
-            stream.wsEarlyData = {max_early_data: ed, early_data_header_name: 'Sec-WebSocket-Protocol'};
+            stream.wsEarlyData = { max_early_data: ed, early_data_header_name: 'Sec-WebSocket-Protocol' };
         }
     } else if (type === 'http') {
         stream.path = q.get('path') || '';
@@ -853,6 +857,7 @@ function buildStreamFromQuery(q, isTrojan) {
         stream.host = q.get('host') || '';
     } else if (type === 'grpc') {
         stream.path = q.get('serviceName') || '';
+        if (!stream.authority) stream.authority = q.get('authority') || '';
     } else if (type === 'tcp') {
         if ((q.get('headerType') || '') === 'http') {
             stream.headerType = 'http';

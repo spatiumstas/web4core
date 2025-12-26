@@ -6,24 +6,24 @@ function buildSingBoxOutbound(bean, opts) {
         const hasTlsHints = !!(s.sni || (s.alpn && s.alpn.length) || s.fp);
         const needTls = s.security === 'tls' || isReality || (['vless', 'vmess'].includes(bean.proto) && hasTlsHints);
         if (!needTls) return undefined;
-        const tls = {enabled: true};
+        const tls = { enabled: true };
         if (s.allowInsecure) tls.insecure = true;
         if (s.sni) tls.server_name = s.sni;
         if (s.alpn && s.alpn.length) tls.alpn = s.alpn;
         if (isReality) {
-            tls.reality = {enabled: true, public_key: s.reality.pbk, short_id: s.reality.sid || ''};
-            if (!s.fp) tls.utls = {enabled: true, fingerprint: 'random'};
+            tls.reality = { enabled: true, public_key: s.reality.pbk, short_id: s.reality.sid || '' };
+            if (!s.fp) tls.utls = { enabled: true, fingerprint: 'random' };
         }
-        if (s.fp) tls.utls = {enabled: true, fingerprint: s.fp};
+        if (s.fp) tls.utls = { enabled: true, fingerprint: s.fp };
         return tls;
     };
 
     function applyTransport(outbound, stream, packetEncoding) {
         if (stream.network !== 'tcp') {
-            const t = {type: stream.network};
+            const t = { type: stream.network };
             if (stream.network === 'ws') {
                 const hostHeader = stream.host || stream.sni || '';
-                if (hostHeader) t.headers = {Host: hostHeader};
+                if (hostHeader) t.headers = { Host: hostHeader };
                 const pathWithoutEd = (stream.path || '').split('?ed=')[0];
                 if (pathWithoutEd) t.path = pathWithoutEd;
                 const ed = stream.wsEarlyData?.max_early_data || 0;
@@ -78,6 +78,7 @@ function buildSingBoxOutbound(bean, opts) {
                 }
             } else if (stream.network === 'grpc') {
                 if (stream.path) t.service_name = stream.path;
+                if (stream.authority) t.authority = stream.authority;
             } else if (stream.network === 'httpupgrade') {
                 if (stream.path) t.path = stream.path;
                 if (stream.host) t.host = stream.host;
@@ -88,7 +89,7 @@ function buildSingBoxOutbound(bean, opts) {
                 type: 'http',
                 method: 'GET',
                 path: stream.path || '',
-                headers: {Host: splitCSV(stream.host)}
+                headers: { Host: splitCSV(stream.host) }
             };
         }
         if (outbound.type === 'vmess' || outbound.type === 'vless') {
@@ -104,7 +105,7 @@ function buildSingBoxOutbound(bean, opts) {
         uuid: bean.auth.uuid,
         security: bean.auth.security || 'auto'
     }; else if (bean.proto === 'vless') {
-        outbound = {type: 'vless', server: bean.host, server_port: bean.port, uuid: bean.auth.uuid};
+        outbound = { type: 'vless', server: bean.host, server_port: bean.port, uuid: bean.auth.uuid };
         if (bean.auth.flow) outbound.flow = bean.auth.flow;
     } else if (bean.proto === 'trojan') outbound = {
         type: 'trojan',
@@ -118,18 +119,18 @@ function buildSingBoxOutbound(bean, opts) {
         method: bean.ss.method,
         password: bean.ss.password
     }; else if (bean.proto === 'socks' || bean.proto === 'http') {
-        outbound = {type: bean.proto, server: bean.host, server_port: bean.port};
+        outbound = { type: bean.proto, server: bean.host, server_port: bean.port };
         if (bean.socks?.type === 'socks4') outbound.version = '4';
         if (bean.socks?.username && bean.socks?.password) {
             outbound.username = bean.socks.username;
             outbound.password = bean.socks.password;
         }
     } else if (bean.proto === 'hy2') {
-        const tls = commonTLS() || {enabled: true, alpn: 'h3'};
-        outbound = {type: 'hysteria2', server: bean.host, server_port: bean.port || 443, tls};
+        const tls = commonTLS() || { enabled: true, alpn: 'h3' };
+        outbound = { type: 'hysteria2', server: bean.host, server_port: bean.port || 443, tls };
         outbound.password = bean.auth.password;
         if (bean.hysteria2?.obfsPassword) {
-            outbound.obfs = {type: 'salamander', password: bean.hysteria2.obfsPassword};
+            outbound.obfs = { type: 'salamander', password: bean.hysteria2.obfsPassword };
         }
         if (bean.hysteria2?.hopPort) outbound.hop_ports = bean.hysteria2.hopPort;
         if (bean.hysteria2?.hopInterval) {
@@ -140,8 +141,8 @@ function buildSingBoxOutbound(bean, opts) {
             outbound.hop_interval = '10s';
         }
     } else if (bean.proto === 'tuic') {
-        const tls = commonTLS() || {enabled: true};
-        outbound = {type: 'tuic', server: bean.host, server_port: bean.port || 443, tls};
+        const tls = commonTLS() || { enabled: true };
+        outbound = { type: 'tuic', server: bean.host, server_port: bean.port || 443, tls };
         if (bean.auth.uuid) outbound.uuid = bean.auth.uuid;
         if (bean.auth.password) outbound.password = bean.auth.password;
         if (bean.tuic.congestion_control) outbound.congestion_control = bean.tuic.congestion_control;
@@ -313,10 +314,10 @@ function buildSingBoxConfig(outboundsWithTags, opts) {
                     idle_timeout: '30m',
                     interrupt_exist_connections: false
                 });
-                routeRules.push({inbound: inboundTagFor(name), outbound: `auto-${name}`});
+                routeRules.push({ inbound: inboundTagFor(name), outbound: `auto-${name}` });
             } else {
                 const onlyTag = tags[0] || 'direct';
-                routeRules.push({inbound: inboundTagFor(name), outbound: onlyTag});
+                routeRules.push({ inbound: inboundTagFor(name), outbound: onlyTag });
             }
         }
         for (const name of selectNames) {
@@ -330,40 +331,40 @@ function buildSingBoxConfig(outboundsWithTags, opts) {
                     default: def,
                     interrupt_exist_connections: false
                 });
-                routeRules.push({inbound: inboundTagFor(name), outbound: `select-${name}`});
+                routeRules.push({ inbound: inboundTagFor(name), outbound: `select-${name}` });
             } else {
                 const onlyTag = tags[0] || 'direct';
-                routeRules.push({inbound: inboundTagFor(name), outbound: onlyTag});
+                routeRules.push({ inbound: inboundTagFor(name), outbound: onlyTag });
             }
         }
 
         if (opts.addSocks && opts.perTunMixed) {
             for (const name of autoNames) {
                 const onlyTag = tags[0] || 'direct';
-                routeRules.push({inbound: mixedInboundTagFor(name), outbound: hasMany ? `auto-${name}` : onlyTag});
+                routeRules.push({ inbound: mixedInboundTagFor(name), outbound: hasMany ? `auto-${name}` : onlyTag });
             }
             for (const name of selectNames) {
                 const onlyTag = tags[0] || 'direct';
-                routeRules.push({inbound: mixedInboundTagFor(name), outbound: hasMany ? `select-${name}` : onlyTag});
+                routeRules.push({ inbound: mixedInboundTagFor(name), outbound: hasMany ? `select-${name}` : onlyTag });
             }
         }
     }
 
     if (opts?.androidMode) {
-        routeRules.unshift({protocol: 'dns', action: 'hijack-dns'});
-        routeRules.unshift({action: 'sniff'});
+        routeRules.unshift({ protocol: 'dns', action: 'hijack-dns' });
+        routeRules.unshift({ action: 'sniff' });
     }
 
-    routeRules.push({ip_version: 6, outbound: 'block'});
+    routeRules.push({ ip_version: 6, outbound: 'block' });
     const outbounds = [
         ...managementOutbounds,
         ...outboundsWithTags,
-        {tag: 'direct', type: 'direct'},
-        {tag: 'block', type: 'block'}
+        { tag: 'direct', type: 'direct' },
+        { tag: 'block', type: 'block' }
     ];
     const experimental = {};
     if (!opts?.androidMode) {
-        experimental.cache_file = {enabled: true};
+        experimental.cache_file = { enabled: true };
         experimental.clash_api = {
             external_controller: '[::]:9090',
             external_ui: 'ui',
@@ -373,10 +374,10 @@ function buildSingBoxConfig(outboundsWithTags, opts) {
         };
     }
     const config = {
-        log: {level: 'info'},
+        log: { level: 'info' },
         inbounds,
         outbounds,
-        route: {rules: routeRules, final: (createdGlobalSelector ? 'select' : 'direct')}
+        route: { rules: routeRules, final: (createdGlobalSelector ? 'select' : 'direct') }
     };
     if (Object.keys(experimental).length > 0) {
         config.experimental = experimental;
@@ -384,7 +385,7 @@ function buildSingBoxConfig(outboundsWithTags, opts) {
 
     const dnsServers = (opts?.useExtended ? buildDNSServers(opts?.dnsBeans || []) : []);
     if (dnsServers.length > 0) {
-        config.dns = {servers: dnsServers};
+        config.dns = { servers: dnsServers };
         config.route.default_domain_resolver = dnsServers[0]?.tag || '';
     } else if (opts?.androidMode) {
         config.dns = {
@@ -406,7 +407,7 @@ function buildSingBoxConfig(outboundsWithTags, opts) {
 
     if (opts?.useExtended) {
         if (!config.experimental) config.experimental = {};
-        config.experimental.unified_delay = {enabled: true};
+        config.experimental.unified_delay = { enabled: true };
     }
 
     return config;

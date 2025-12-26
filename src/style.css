@@ -580,4 +580,34 @@ input[type="submit"][disabled] {
         width: 40px;
         height: 40px;
     }
+
+    .settings-panel__chips {
+        position: relative;
+        justify-content: flex-start;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        overflow-y: hidden;
+        -webkit-overflow-scrolling: touch;
+        margin: 4px 0 8px;
+        gap: 8px;
+        scroll-snap-type: x mandatory;
+        scrollbar-width: none;
+        touch-action: pan-x;
+        overscroll-behavior-x: contain;
+        background:
+            linear-gradient(90deg, var(--bg-dark) 0%, rgba(22, 28, 39, 0) 100%) 0 0 / 18px 100% no-repeat,
+            linear-gradient(270deg, var(--bg-dark) 0%, rgba(22, 28, 39, 0) 100%) 100% 0 / 18px 100% no-repeat;
+        background-attachment: local, local;
+    }
+
+    .settings-panel__chips::-webkit-scrollbar {
+        display: none;
+    }
+
+    .settings-panel__chips .custom-checkbox {
+        flex: 0 0 auto;
+        scroll-snap-align: start;
+        scroll-snap-stop: normal;
+        white-space: nowrap;
+    }
 }

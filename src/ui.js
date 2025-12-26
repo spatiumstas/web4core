@@ -9,7 +9,6 @@ const el = {
     links: document.getElementById('links'),
     tunName: document.getElementById('tunName'),
     gen: document.getElementById('gen'),
-    btnReverse: document.getElementById('btnReverse'),
     btnCopy: document.getElementById('btnCopy'),
     btnDownload: document.getElementById('btnDownload'),
     cbTun: document.getElementById('cbTun'),
@@ -17,10 +16,14 @@ const el = {
     cbExtended: document.getElementById('cbExtended'),
     cbClashSecret: document.getElementById('cbClashSecret'),
     cbMihomoSub: document.getElementById('cbMihomoSub'),
+    cbMihomoTun: document.getElementById('cbMihomoTun'),
+    cbMihomoPerProxyTun: document.getElementById('cbMihomoPerProxyTun'),
     cbMihomoPerProxyPort: document.getElementById('cbMihomoPerProxyPort'),
     cbMihomoWebUI: document.getElementById('cbMihomoWebUI'),
     cbDetour: document.getElementById('cbDetour'),
     lblMihomoSub: document.getElementById('lblMihomoSub'),
+    lblMihomoTun: document.getElementById('lblMihomoTun'),
+    lblMihomoPerProxyTun: document.getElementById('lblMihomoPerProxyTun'),
     lblMihomoPerProxyPort: document.getElementById('lblMihomoPerProxyPort'),
     lblMihomoWebUI: document.getElementById('lblMihomoWebUI'),
     cbXrayBalancer: document.getElementById('cbXrayBalancer'),
@@ -48,12 +51,16 @@ const MSG_SUB_EMPTY = 'Subscription returned no valid links';
 const MSG_SUB_FETCH = (m) => 'Failed to fetch subscription: ' + (m || '');
 const MSG_NO_LINKS = 'No valid links or profiles provided';
 const MSG_EXTENDED_ENABLE = 'Enable Extended to generate Mieru/SDNS configurations';
-const MSG_REVERSE_UNAVAILABLE = 'Reverse converter is not available';
-const MSG_REVERSE_EMPTY = 'No links generated from config';
-const MSG_REVERSE_FAILED = 'Reverse failed';
 
 const toggleHidden = (node, hidden) => {
     if (node) node.classList.toggle('is-hidden', hidden);
+};
+const setMihomoPerProxyTunVisible = (visible) => {
+    const show = !!visible;
+    if (!show && el.cbMihomoPerProxyTun?.checked) {
+        el.cbMihomoPerProxyTun.checked = false;
+    }
+    toggleHidden(el.lblMihomoPerProxyTun, !show);
 };
 const setError = (msg) => {
     el.errorText.textContent = msg || '';
@@ -77,10 +84,10 @@ const hideOutput = () => {
 };
 const scrollOutIntoView = () => {
     const block = el.outBlock;
-    if (block && block.scrollIntoView) block.scrollIntoView({behavior: 'smooth', block: 'center', inline: 'nearest'});
+    if (block && block.scrollIntoView) block.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
     if (el.out && el.out.focus) {
         try {
-            el.out.focus({preventScroll: true});
+            el.out.focus({ preventScroll: true });
         } catch {
         }
     }
@@ -112,6 +119,8 @@ function setCore(core) {
     toggleHidden(cbExtendedLabel, hideSing);
     toggleHidden(el.tunName?.parentElement || el.tunName, hideSing);
     toggleHidden(el.lblMihomoSub, core !== 'mihomo');
+    toggleHidden(el.lblMihomoTun, core !== 'mihomo');
+    setMihomoPerProxyTunVisible(false);
     toggleHidden(el.lblMihomoPerProxyPort, core !== 'mihomo');
     toggleHidden(el.lblMihomoWebUI, core !== 'mihomo');
     toggleHidden(el.btnWgUpload, core !== 'mihomo');
@@ -194,10 +203,22 @@ function setupCheckboxValidation() {
         if (!el.cbTun.checked && !el.cbSocks.checked) el.cbTun.checked = true;
     });
 
+    if (el.cbMihomoTun && el.cbMihomoPerProxyTun) {
+        el.cbMihomoPerProxyTun.addEventListener('change', () => {
+            if (el.cbMihomoPerProxyTun.checked) el.cbMihomoTun.checked = true;
+        });
+        el.cbMihomoTun.addEventListener('change', () => {
+            if (!el.cbMihomoTun.checked) el.cbMihomoPerProxyTun.checked = false;
+            validateField(false);
+        });
+    }
+
     const revalidateOnChange = [
         el.cbExtended,
         el.cbDetour,
         el.cbMihomoSub,
+        el.cbMihomoTun,
+        el.cbMihomoPerProxyTun,
         el.cbMihomoPerProxyPort,
         el.cbMihomoWebUI,
         el.cbPerTunMixed,
@@ -229,7 +250,7 @@ function splitMihomoSubscriptionInput(raw) {
             proxyLines.push(line);
         }
     }
-    return {subUrls, proxyText: proxyLines.join('\n')};
+    return { subUrls, proxyText: proxyLines.join('\n') };
 }
 
 function parseAndValidateProxyText(proxyText) {
@@ -250,6 +271,9 @@ function validateField(showOutput) {
     const useExtended = !!el.cbExtended?.checked;
     const subMihomo = isMihomoSubscriptionMode();
     const webUI = getCore() === 'mihomo' ? !!el.cbMihomoWebUI?.checked : false;
+    const mihomoTunEnabled = getCore() === 'mihomo' ? !!el.cbMihomoTun?.checked : false;
+    const mihomoPerProxyTun = getCore() === 'mihomo' ? !!el.cbMihomoPerProxyTun?.checked : false;
+    const mihomoTunOpts = mihomoTunEnabled ? { mode: (mihomoPerProxyTun ? 'listeners' : 'tun') } : null;
     try {
         const wgBeans = Array.isArray(state.wgBeans) ? state.wgBeans : [];
         if (!hasText && wgBeans.length === 0) {
@@ -260,8 +284,11 @@ function validateField(showOutput) {
             return false;
         }
         if (subMihomo) {
-            const {subUrls, proxyText} = splitMihomoSubscriptionInput(raw);
+            const { subUrls, proxyText } = splitMihomoSubscriptionInput(raw);
             const validHttpUrls = subUrls.length > 0;
+            const hasExtraProxies = wgBeans.length > 0 || !!proxyText?.trim();
+            const shouldShowPerProxyTun = subUrls.length > 1 || (validHttpUrls && hasExtraProxies);
+            setMihomoPerProxyTunVisible(mihomoTunEnabled && shouldShowPerProxyTun);
             if (!showOutput) {
                 setError(validHttpUrls ? '' : MSG_SUB_URL);
                 if (validHttpUrls && proxyText) {
@@ -269,7 +296,7 @@ function validateField(showOutput) {
                         const proxyBeans = parseAndValidateProxyText(proxyText);
                         setGenerateEnabled(true);
                         el.links.classList.remove('input-error');
-                        return {subUrls, proxyBeans};
+                        return { subUrls, proxyBeans };
                     } catch (e) {
                         setError(e && e.message ? e.message : String(e));
                         setGenerateEnabled(false);
@@ -281,17 +308,19 @@ function validateField(showOutput) {
                 setGenerateEnabled(validHttpUrls);
                 el.links.classList.toggle('input-error', !validHttpUrls);
                 if (!validHttpUrls) hideOutput();
-                return validHttpUrls ? {subUrls} : false;
+                return validHttpUrls ? { subUrls } : false;
             }
             if (!validHttpUrls) throw new Error(MSG_SUB_URL);
 
             const extraBeans = wgBeans.slice();
             extraBeans.push(...parseAndValidateProxyText(proxyText));
 
-            const config = globalThis.web4core?.buildMihomoSubscriptionConfig(subUrls, extraBeans);
+            const config = globalThis.web4core?.buildMihomoSubscriptionConfig(subUrls, extraBeans, {
+                perProxyPort: !!el.cbMihomoPerProxyPort?.checked
+            });
             if (!config) throw new Error('Failed to build subscription config');
 
-            const yaml = (globalThis.web4core?.buildMihomoYaml || (() => ''))(config.proxies || [], config.groups, config.providers, config.rules, null, {webUI});
+            const yaml = globalThis.web4core?.buildMihomoYaml(config.proxies, config.groups, config.providers, config.rules, config.listeners, { webUI, tun: mihomoTunOpts });
             renderOutput(yaml, true);
             setGenerateEnabled(true);
             el.links.classList.remove('input-error');
@@ -305,6 +334,12 @@ function validateField(showOutput) {
 
         assertNoProtocols(beans, getCore() === 'xray' ? ['hy2', 'tuic', 'mieru', 'sdns'] : [], 'Xray');
         if (getCore() === 'mihomo') assertNoProtocols(beans, ['mieru', 'sdns'], 'Mihomo');
+        if (getCore() === 'mihomo') {
+            const outBeans = beans.filter(b => !['mieru', 'sdns'].includes(b.proto));
+            setMihomoPerProxyTunVisible(!!mihomoTunEnabled && outBeans.length > 1);
+        } else {
+            setMihomoPerProxyTunVisible(false);
+        }
 
         if (!useExtended && getCore() === 'singbox') {
             const hasExtendedOnly = beans.some(b => b.proto === 'mieru' || b.proto === 'sdns');
@@ -317,21 +352,21 @@ function validateField(showOutput) {
             el.links.classList.remove('input-error');
             const perTunMixed = !!el.cbPerTunMixed?.checked;
             const androidMode = !!el.cbAndroidMode?.checked;
-            return {beans, tunName, addTun, addSocks, perTunMixed, genClashSecret, useExtended, androidMode};
+            return { beans, tunName, addTun, addSocks, perTunMixed, genClashSecret, useExtended, androidMode };
         }
 
         if (getCore() === 'singbox') {
             const perTunMixed = !!el.cbPerTunMixed?.checked;
             const useDetour = !!el.cbDetour?.checked;
             const androidMode = !!el.cbAndroidMode?.checked;
-            const opts = {addTun, addSocks, perTunMixed, tunName, genClashSecret, useExtended, androidMode};
+            const opts = { addTun, addSocks, perTunMixed, tunName, genClashSecret, useExtended, androidMode };
             const used = new Set();
             const dnsBeans = useExtended ? beans.filter(b => b.proto === 'sdns') : [];
             const outboundBeans = beans.filter(b => b.proto !== 'sdns');
             const outbounds = outboundBeans.map(b => {
-                const ob = globalThis.web4core.buildSingBoxOutbound(b, {useExtended: !!useExtended});
+                const ob = globalThis.web4core.buildSingBoxOutbound(b, { useExtended: !!useExtended });
                 const tag = globalThis.web4core.computeTag(b, used);
-                return Object.assign({tag}, ob);
+                return Object.assign({ tag }, ob);
             });
             if (useDetour && outbounds.length > 1) {
                 const mainTag = outbounds[0].tag;
@@ -358,7 +393,7 @@ function validateField(showOutput) {
                     return ob;
                 });
                 const enableBalancer = !!el.cbXrayBalancer?.checked;
-                finalConfig = globalThis.web4core.buildXrayConfig(outbounds, {enableBalancer});
+                finalConfig = globalThis.web4core.buildXrayConfig(outbounds, { enableBalancer });
             }
             renderOutput(JSON.stringify(finalConfig, null, 2), false);
             setGenerateEnabled(true);
@@ -369,8 +404,8 @@ function validateField(showOutput) {
         if (getCore() === 'mihomo') {
             const outBeans = beans.filter(b => !['mieru', 'sdns'].includes(b.proto));
             const perProxyPort = !!el.cbMihomoPerProxyPort?.checked;
-            const yamlObj = globalThis.web4core.buildMihomoConfig(outBeans, {perProxyPort, basePort: 7890});
-            const yaml = globalThis.web4core.buildMihomoYaml(yamlObj.proxies, yamlObj['proxy-groups'], null, null, yamlObj.listeners, {webUI});
+            const yamlObj = globalThis.web4core.buildMihomoConfig(outBeans, { perProxyPort });
+            const yaml = globalThis.web4core.buildMihomoYaml(yamlObj.proxies, yamlObj['proxy-groups'], null, null, yamlObj.listeners, { webUI, tun: mihomoTunOpts });
             renderOutput(yaml, true);
             setGenerateEnabled(true);
             el.links.classList.remove('input-error');
@@ -456,7 +491,7 @@ function detectSubscriptionUrl(raw) {
             others.push(line);
         }
     }
-    return {subUrls, others};
+    return { subUrls, others };
 }
 
 el.gen.addEventListener('click', () => {
@@ -496,36 +531,55 @@ el.gen.addEventListener('click', () => {
 });
 
 el.btnCopy.addEventListener('click', () => {
-    try {
-        const text = el.out.value || '';
-        const textarea = document.createElement('textarea');
-        textarea.value = text;
-        textarea.setAttribute('readonly', '');
-        textarea.style.position = 'fixed';
-        textarea.style.top = '0';
-        textarea.style.left = '-9999px';
-        textarea.style.opacity = '0';
-        textarea.style.pointerEvents = 'none';
-        document.body.appendChild(textarea);
-        textarea.select();
-        textarea.setSelectionRange(0, textarea.value.length);
-        document.execCommand('copy');
-        document.body.removeChild(textarea);
+    const text = el.out.value || '';
+    if (!text) return;
 
+    const copySuccess = () => {
         const useEl = el.btnCopy.querySelector('use');
-        useEl.setAttribute('href', '#check-mark-small');
-        setTimeout(() => {
-            useEl.setAttribute('href', '#copy');
-        }, 3000);
-    } catch {
+        if (useEl) {
+            useEl.setAttribute('href', '#check-mark-small');
+            setTimeout(() => {
+                useEl.setAttribute('href', '#copy');
+            }, 2000);
+        }
+    };
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(copySuccess).catch(err => {
+            console.error('Clipboard write failed:', err);
+            fallbackCopy(text);
+        });
+    } else {
+        fallbackCopy(text);
+    }
+
+    function fallbackCopy(txt) {
+        try {
+            const textarea = document.createElement('textarea');
+            textarea.value = txt;
+            textarea.setAttribute('readonly', '');
+            textarea.style.position = 'fixed';
+            textarea.style.top = '0';
+            textarea.style.left = '-9999px';
+            textarea.style.opacity = '0';
+            textarea.style.pointerEvents = 'none';
+            document.body.appendChild(textarea);
+            textarea.select();
+            textarea.setSelectionRange(0, textarea.value.length);
+            document.execCommand('copy');
+            document.body.removeChild(textarea);
+            copySuccess();
+        } catch (e) {
+            console.error('Fallback copy failed:', e);
+        }
     }
 });
 
 el.btnDownload.addEventListener('click', () => {
     const isYaml = getCore() === 'mihomo';
     const text = el.out.value || '';
-    const blob = new Blob([typeof TextEncoder !== 'undefined' ? new TextEncoder().encode(text) : text], {type: (isYaml ? 'text/yaml' : 'application/json') + ';charset=utf-8'});
-    const a = Object.assign(document.createElement('a'), {href: URL.createObjectURL(blob), download: getCore() === 'singbox' ? 'singbox_config.json' : (getCore() === 'xray' ? 'xray_config.json' : 'mihomo_config.yaml')});
+    const blob = new Blob([typeof TextEncoder !== 'undefined' ? new TextEncoder().encode(text) : text], { type: (isYaml ? 'text/yaml' : 'application/json') + ';charset=utf-8' });
+    const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: getCore() === 'singbox' ? 'singbox_config.json' : (getCore() === 'xray' ? 'xray_config.json' : 'mihomo_config.yaml') });
     a.click();
     URL.revokeObjectURL(a.href);
 });
@@ -541,66 +595,12 @@ try {
 setCore(state.core);
 validateField(false);
 
-function parseOutboundsJson(text) {
-    const t = (text || '').trim();
-    if (!t || (t[0] !== '{' && t[0] !== '[')) return null;
-    try {
-        const obj = JSON.parse(t);
-        if (!obj || typeof obj !== 'object' || !Array.isArray(obj.outbounds) || obj.outbounds.length === 0) {
-            return null;
-        }
-        return obj;
-    } catch {
-        return null;
-    }
-}
-
-function looksLikeJsonConfig(text) {
-    return !!parseOutboundsJson(text);
-}
-
-function isReverseOnlyJson(text) {
-    const obj = parseOutboundsJson(text);
-    return !!(obj && !obj.profiles);
-}
-
-function toggleReverseVisibility() {
-    if (!el.btnReverse) return;
-    const raw = (el.links?.value || '').trim();
-    const show = looksLikeJsonConfig(raw);
-    el.btnReverse.classList.toggle('is-hidden', !show);
-}
-
-const triggerLiveValidation = () => {
-    if (el.links && isReverseOnlyJson(el.links.value)) return;
+el.links.addEventListener('input', debounce(() => {
     validateField(false);
-};
-
-if (el.links) {
-    const handleJsonMode = () => {
-        const raw = (el.links.value || '').trim();
-        const reverseOnly = isReverseOnlyJson(raw);
-        if (reverseOnly) {
-            setGenerateEnabled(false);
-            setError('');
-            hideOutput();
-            el.links.classList.remove('input-error');
-        }
-    };
-    const updateJsonUiState = () => {
-        toggleReverseVisibility();
-        handleJsonMode();
-    };
-    el.links.addEventListener('input', debounce(() => {
-        triggerLiveValidation();
-        updateJsonUiState();
-    }, 150));
-    el.links.addEventListener('blur', () => {
-        triggerLiveValidation();
-        updateJsonUiState();
-    });
-    updateJsonUiState();
-}
+}, 150));
+el.links.addEventListener('blur', () => {
+    validateField(false);
+});
 
 if (header) header.addEventListener('click', function () {
     localStorage.clear();
