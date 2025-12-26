@@ -17,10 +17,14 @@ const el = {
     cbExtended: document.getElementById('cbExtended'),
     cbClashSecret: document.getElementById('cbClashSecret'),
     cbMihomoSub: document.getElementById('cbMihomoSub'),
+    cbMihomoTun: document.getElementById('cbMihomoTun'),
+    cbMihomoPerProxyTun: document.getElementById('cbMihomoPerProxyTun'),
     cbMihomoPerProxyPort: document.getElementById('cbMihomoPerProxyPort'),
     cbMihomoWebUI: document.getElementById('cbMihomoWebUI'),
     cbDetour: document.getElementById('cbDetour'),
     lblMihomoSub: document.getElementById('lblMihomoSub'),
+    lblMihomoTun: document.getElementById('lblMihomoTun'),
+    lblMihomoPerProxyTun: document.getElementById('lblMihomoPerProxyTun'),
     lblMihomoPerProxyPort: document.getElementById('lblMihomoPerProxyPort'),
     lblMihomoWebUI: document.getElementById('lblMihomoWebUI'),
     cbXrayBalancer: document.getElementById('cbXrayBalancer'),
@@ -54,6 +58,13 @@ const MSG_REVERSE_FAILED = 'Reverse failed';
 
 const toggleHidden = (node, hidden) => {
     if (node) node.classList.toggle('is-hidden', hidden);
+};
+const setMihomoPerProxyTunVisible = (visible) => {
+    const show = !!visible;
+    if (!show && el.cbMihomoPerProxyTun?.checked) {
+        el.cbMihomoPerProxyTun.checked = false;
+    }
+    toggleHidden(el.lblMihomoPerProxyTun, !show);
 };
 const setError = (msg) => {
     el.errorText.textContent = msg || '';
@@ -112,6 +123,8 @@ function setCore(core) {
     toggleHidden(cbExtendedLabel, hideSing);
     toggleHidden(el.tunName?.parentElement || el.tunName, hideSing);
     toggleHidden(el.lblMihomoSub, core !== 'mihomo');
+    toggleHidden(el.lblMihomoTun, core !== 'mihomo');
+    setMihomoPerProxyTunVisible(false);
     toggleHidden(el.lblMihomoPerProxyPort, core !== 'mihomo');
     toggleHidden(el.lblMihomoWebUI, core !== 'mihomo');
     toggleHidden(el.btnWgUpload, core !== 'mihomo');
@@ -194,10 +207,22 @@ function setupCheckboxValidation() {
         if (!el.cbTun.checked && !el.cbSocks.checked) el.cbTun.checked = true;
     });
 
+    if (el.cbMihomoTun && el.cbMihomoPerProxyTun) {
+        el.cbMihomoPerProxyTun.addEventListener('change', () => {
+            if (el.cbMihomoPerProxyTun.checked) el.cbMihomoTun.checked = true;
+        });
+        el.cbMihomoTun.addEventListener('change', () => {
+            if (!el.cbMihomoTun.checked) el.cbMihomoPerProxyTun.checked = false;
+            validateField(false);
+        });
+    }
+
     const revalidateOnChange = [
         el.cbExtended,
         el.cbDetour,
         el.cbMihomoSub,
+        el.cbMihomoTun,
+        el.cbMihomoPerProxyTun,
         el.cbMihomoPerProxyPort,
         el.cbMihomoWebUI,
         el.cbPerTunMixed,
@@ -250,6 +275,9 @@ function validateField(showOutput) {
     const useExtended = !!el.cbExtended?.checked;
     const subMihomo = isMihomoSubscriptionMode();
     const webUI = getCore() === 'mihomo' ? !!el.cbMihomoWebUI?.checked : false;
+    const mihomoTunEnabled = getCore() === 'mihomo' ? !!el.cbMihomoTun?.checked : false;
+    const mihomoPerProxyTun = getCore() === 'mihomo' ? !!el.cbMihomoPerProxyTun?.checked : false;
+    const mihomoTunOpts = mihomoTunEnabled ? {mode: (mihomoPerProxyTun ? 'listeners' : 'tun')} : null;
     try {
         const wgBeans = Array.isArray(state.wgBeans) ? state.wgBeans : [];
         if (!hasText && wgBeans.length === 0) {
@@ -261,6 +289,7 @@ function validateField(showOutput) {
         }
         if (subMihomo) {
             const {subUrls, proxyText} = splitMihomoSubscriptionInput(raw);
+            setMihomoPerProxyTunVisible(!!mihomoTunEnabled && subUrls.length > 1);
             const validHttpUrls = subUrls.length > 0;
             if (!showOutput) {
                 setError(validHttpUrls ? '' : MSG_SUB_URL);
@@ -291,7 +320,7 @@ function validateField(showOutput) {
             const config = globalThis.web4core?.buildMihomoSubscriptionConfig(subUrls, extraBeans);
             if (!config) throw new Error('Failed to build subscription config');
 
-            const yaml = (globalThis.web4core?.buildMihomoYaml || (() => ''))(config.proxies || [], config.groups, config.providers, config.rules, null, {webUI});
+            const yaml = (globalThis.web4core?.buildMihomoYaml || (() => ''))(config.proxies || [], config.groups, config.providers, config.rules, null, {webUI, tun: mihomoTunOpts});
             renderOutput(yaml, true);
             setGenerateEnabled(true);
             el.links.classList.remove('input-error');
@@ -305,6 +334,12 @@ function validateField(showOutput) {
 
         assertNoProtocols(beans, getCore() === 'xray' ? ['hy2', 'tuic', 'mieru', 'sdns'] : [], 'Xray');
         if (getCore() === 'mihomo') assertNoProtocols(beans, ['mieru', 'sdns'], 'Mihomo');
+        if (getCore() === 'mihomo') {
+            const outBeans = beans.filter(b => !['mieru', 'sdns'].includes(b.proto));
+            setMihomoPerProxyTunVisible(!!mihomoTunEnabled && outBeans.length > 1);
+        } else {
+            setMihomoPerProxyTunVisible(false);
+        }
 
         if (!useExtended && getCore() === 'singbox') {
             const hasExtendedOnly = beans.some(b => b.proto === 'mieru' || b.proto === 'sdns');
@@ -370,7 +405,7 @@ function validateField(showOutput) {
             const outBeans = beans.filter(b => !['mieru', 'sdns'].includes(b.proto));
             const perProxyPort = !!el.cbMihomoPerProxyPort?.checked;
             const yamlObj = globalThis.web4core.buildMihomoConfig(outBeans, {perProxyPort, basePort: 7890});
-            const yaml = globalThis.web4core.buildMihomoYaml(yamlObj.proxies, yamlObj['proxy-groups'], null, null, yamlObj.listeners, {webUI});
+            const yaml = globalThis.web4core.buildMihomoYaml(yamlObj.proxies, yamlObj['proxy-groups'], null, null, yamlObj.listeners, {webUI, tun: mihomoTunOpts});
             renderOutput(yaml, true);
             setGenerateEnabled(true);
             el.links.classList.remove('input-error');

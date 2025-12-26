@@ -359,6 +359,16 @@ function buildMihomoSubscriptionConfig(subscriptionUrls, extraBeans) {
         tolerance: 50
     }];
 
+    if (providerNames.length > 1) {
+        providerNames.forEach((providerName) => {
+            groups.push({
+                name: `SUB-${providerName}`,
+                type: 'select',
+                use: [providerName]
+            });
+        });
+    }
+
     const extraProxies = [];
     if (Array.isArray(extraBeans) && extraBeans.length > 0) {
         extraBeans.forEach(bean => {
