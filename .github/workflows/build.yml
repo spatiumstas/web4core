@@ -15,6 +15,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install JS deps
+        run: npm ci --no-fund --no-audit
+
+      - name: Build web runtime (web4core.runtime.js)
+        run: npm run build:web
+
       - name: Setup Go
         uses: actions/setup-go@v4
         with:
@@ -44,9 +56,8 @@ jobs:
           const fs = require('fs');
           const vm = require('vm');
           
-          // Read main.js content
-          const mainJs = fs.readFileSync('src/main.js', 'utf8');
-          const singboxJs = fs.readFileSync('src/core/singbox.js', 'utf8');
+          // Read bundled runtime (contains parser + builders)
+          const runtimeJs = fs.readFileSync('src/web4core.runtime.js', 'utf8');
           
           // Create sandbox with required globals
           const sandbox = {
@@ -63,14 +74,16 @@ jobs:
             clearInterval: clearInterval,
             // Browser APIs for Node.js
             URL: require('url').URL,
+            URLSearchParams: require('url').URLSearchParams,
             atob: (str) => Buffer.from(str, 'base64').toString('binary'),
             btoa: (str) => Buffer.from(str, 'binary').toString('base64')
           };
           
-          // Execute main.js in sandbox
+          // Execute runtime in sandbox
           vm.createContext(sandbox);
-          vm.runInContext(mainJs, sandbox);
-          vm.runInContext(singboxJs, sandbox);
+          sandbox.globalThis = sandbox;
+          vm.runInContext(runtimeJs, sandbox);
+          Object.assign(sandbox, sandbox.web4core || {});
           
           // Read test configs
           const testLinksContent = process.env.CONFIGS;
@@ -96,7 +109,7 @@ jobs:
           
             try {
               // Parse link
-              const bean = sandbox.parseLink(link);
+              const bean = (sandbox.buildBeansFromInput(link) || [])[0];
           
               // Generate sing-box config
               const outbound = sandbox.buildSingBoxOutbound(bean);
@@ -185,7 +198,7 @@ jobs:
           
           // Multi-config test: combine ALL links into one config and validate
           try {
-            const selected = testLinks.map(l => sandbox.parseLink(l));
+            const selected = testLinks.map(l => (sandbox.buildBeansFromInput(l) || [])[0]);
             const used = new Set();
             const multiOutbounds = selected.map((b, idx) => {
               const ob = sandbox.buildSingBoxOutbound(b);
@@ -241,6 +254,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install JS deps
+        run: npm ci --no-fund --no-audit
+
+      - name: Build web runtime (web4core.runtime.js)
+        run: npm run build:web
+
       - name: Setup Go
         uses: actions/setup-go@v4
         with:
@@ -277,8 +302,7 @@ jobs:
           const vm = require('vm');
           const { execSync } = require('child_process');
           
-          const mainJs = fs.readFileSync('src/main.js', 'utf8');
-          const singboxJs = fs.readFileSync('src/core/singbox.js', 'utf8');
+          const runtimeJs = fs.readFileSync('src/web4core.runtime.js', 'utf8');
           const sandbox = {
             console: console,
             require: require,
@@ -292,13 +316,15 @@ jobs:
             clearTimeout: clearTimeout,
             clearInterval: clearInterval,
             URL: require('url').URL,
+            URLSearchParams: require('url').URLSearchParams,
             atob: (str) => Buffer.from(str, 'base64').toString('binary'),
             btoa: (str) => Buffer.from(str, 'binary').toString('base64')
           };
           
           vm.createContext(sandbox);
-          vm.runInContext(mainJs, sandbox);
-          vm.runInContext(singboxJs, sandbox);
+          sandbox.globalThis = sandbox;
+          vm.runInContext(runtimeJs, sandbox);
+          Object.assign(sandbox, sandbox.web4core || {});
           
           const testLinksContent = process.env.CONFIGS;
           const testLinks = testLinksContent
@@ -321,7 +347,7 @@ jobs:
             console.log(\`Testing extended config \${i + 1}/\${testLinks.length}: \${linkName}\`);
           
             try {
-              const bean = sandbox.parseLink(link);
+              const bean = (sandbox.buildBeansFromInput(link) || [])[0];
               const outbound = sandbox.buildSingBoxOutbound(bean);
               const config = sandbox.buildSingBoxConfig([{tag: 'test', ...outbound}], {useExtended: true});
           
@@ -358,8 +384,7 @@ jobs:
           const fs = require('fs');
           const vm = require('vm');
           
-          const mainJs = fs.readFileSync('src/main.js', 'utf8');
-          const singboxJs = fs.readFileSync('src/core/singbox.js', 'utf8');
+          const runtimeJs = fs.readFileSync('src/web4core.runtime.js', 'utf8');
           const sandbox = {
             console: console,
             require: require,
@@ -373,13 +398,15 @@ jobs:
             clearTimeout: clearTimeout,
             clearInterval: clearInterval,
             URL: require('url').URL,
+            URLSearchParams: require('url').URLSearchParams,
             atob: (str) => Buffer.from(str, 'base64').toString('binary'),
             btoa: (str) => Buffer.from(str, 'binary').toString('base64')
           };
           
           vm.createContext(sandbox);
-          vm.runInContext(mainJs, sandbox);
-          vm.runInContext(singboxJs, sandbox);
+          sandbox.globalThis = sandbox;
+          vm.runInContext(runtimeJs, sandbox);
+          Object.assign(sandbox, sandbox.web4core || {});
           
           const beans = sandbox.buildBeansFromInput(process.env.MIERU_JSON);
           const outbounds = beans.map(b => {
@@ -405,8 +432,7 @@ jobs:
           const fs = require('fs');
           const vm = require('vm');
           
-          const mainJs = fs.readFileSync('src/main.js', 'utf8');
-          const singboxJs = fs.readFileSync('src/core/singbox.js', 'utf8');
+          const runtimeJs = fs.readFileSync('src/web4core.runtime.js', 'utf8');
           const sandbox = {
             console: console,
             require: require,
@@ -420,13 +446,15 @@ jobs:
             clearTimeout: clearTimeout,
             clearInterval: clearInterval,
             URL: require('url').URL,
+            URLSearchParams: require('url').URLSearchParams,
             atob: (str) => Buffer.from(str, 'base64').toString('binary'),
             btoa: (str) => Buffer.from(str, 'binary').toString('base64')
           };
           
           vm.createContext(sandbox);
-          vm.runInContext(mainJs, sandbox);
-          vm.runInContext(singboxJs, sandbox);
+          sandbox.globalThis = sandbox;
+          vm.runInContext(runtimeJs, sandbox);
+          Object.assign(sandbox, sandbox.web4core || {});
           
           const beans = sandbox.buildBeansFromInput(process.env.SDNS_LINK);
           const config = sandbox.buildSingBoxConfig([], {useExtended: true, dnsBeans: beans});
@@ -448,8 +476,7 @@ jobs:
           const fs = require('fs');
           const vm = require('vm');
           
-          const mainJs = fs.readFileSync('src/main.js', 'utf8');
-          const singboxJs = fs.readFileSync('src/core/singbox.js', 'utf8');
+          const runtimeJs = fs.readFileSync('src/web4core.runtime.js', 'utf8');
           const sandbox = {
             console: console,
             require: require,
@@ -463,13 +490,15 @@ jobs:
             clearTimeout: clearTimeout,
             clearInterval: clearInterval,
             URL: require('url').URL,
+            URLSearchParams: require('url').URLSearchParams,
             atob: (str) => Buffer.from(str, 'base64').toString('binary'),
             btoa: (str) => Buffer.from(str, 'binary').toString('base64')
           };
           
           vm.createContext(sandbox);
-          vm.runInContext(mainJs, sandbox);
-          vm.runInContext(singboxJs, sandbox);
+          sandbox.globalThis = sandbox;
+          vm.runInContext(runtimeJs, sandbox);
+          Object.assign(sandbox, sandbox.web4core || {});
           
           const beans = sandbox.buildBeansFromInput(process.env.XHTTP_LINK);
           const outbounds = beans.map(b => {
@@ -495,6 +524,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install JS deps
+        run: npm ci --no-fund --no-audit
+
+      - name: Build web runtime (web4core.runtime.js)
+        run: npm run build:web
 
       - name: Setup Go
         uses: actions/setup-go@v4
@@ -526,9 +567,8 @@ jobs:
           const fs = require('fs');
           const vm = require('vm');
           
-          // Read main.js content
-          const mainJs = fs.readFileSync('src/main.js', 'utf8');
-          const xrayJs = fs.readFileSync('src/core/xray.js', 'utf8');
+          // Read bundled runtime (contains parser + builders)
+          const runtimeJs = fs.readFileSync('src/web4core.runtime.js', 'utf8');
           
           // Create sandbox with required globals
           const sandbox = {
@@ -545,14 +585,16 @@ jobs:
             clearInterval: clearInterval,
             // Browser APIs for Node.js
             URL: require('url').URL,
+            URLSearchParams: require('url').URLSearchParams,
             atob: (str) => Buffer.from(str, 'base64').toString('binary'),
             btoa: (str) => Buffer.from(str, 'binary').toString('base64')
           };
           
-          // Execute main.js in sandbox
+          // Execute runtime in sandbox
           vm.createContext(sandbox);
-          vm.runInContext(mainJs, sandbox);
-          vm.runInContext(xrayJs, sandbox);
+          sandbox.globalThis = sandbox;
+          vm.runInContext(runtimeJs, sandbox);
+          Object.assign(sandbox, sandbox.web4core || {});
           
           // Read test links
           const testLinksContent = process.env.CONFIGS;
@@ -582,7 +624,7 @@ jobs:
           
             try {
               // Parse link
-              const bean = sandbox.parseLink(link);
+              const bean = (sandbox.buildBeansFromInput(link) || [])[0];
           
               // Generate Xray config
               const outbound = sandbox.buildXrayOutbound(bean);
@@ -613,7 +655,7 @@ jobs:
               try {
               const selected = testLinks
                 .filter(l => !l.startsWith('hy2://') && !l.startsWith('tuic://'))
-                .map(l => sandbox.parseLink(l));
+                .map(l => (sandbox.buildBeansFromInput(l) || [])[0]);
                 const used = new Set();
                 const multiOutbounds = selected.map((b, idx) => {
                   const ob = sandbox.buildXrayOutbound(b);
@@ -676,6 +718,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install JS deps
+        run: npm ci --no-fund --no-audit
+
+      - name: Build web runtime (web4core.runtime.js)
+        run: npm run build:web
+
       - name: Download Mihomo
         run: |
           set -e
@@ -709,26 +763,23 @@ jobs:
           const fs = require('fs');
           const vm = require('vm');
           const { execSync } = require('child_process');
-          const mainJs = fs.readFileSync('src/main.js', 'utf8');
-          const mihomoJs = fs.readFileSync('src/core/mihomo.js', 'utf8');
-          const yamlJs = fs.readFileSync('src/core/yaml.js', 'utf8');
-          const wireguardJs = fs.readFileSync('src/core/wireguard.js', 'utf8');
+          const runtimeJs = fs.readFileSync('src/web4core.runtime.js', 'utf8');
           const sandbox = {
             console, require, module: {exports:{}}, exports: {}, global, process, Buffer,
             URL: require('url').URL,
+            URLSearchParams: require('url').URLSearchParams,
             atob: (s)=>Buffer.from(s,'base64').toString('binary'),
             btoa: (s)=>Buffer.from(s,'binary').toString('base64')
           };
           vm.createContext(sandbox);
-          vm.runInContext(mainJs, sandbox);
-          vm.runInContext(mihomoJs, sandbox);
-          vm.runInContext(yamlJs, sandbox);
-          vm.runInContext(wireguardJs, sandbox);
+          sandbox.globalThis = sandbox;
+          vm.runInContext(runtimeJs, sandbox);
+          Object.assign(sandbox, sandbox.web4core || {});
 
           const raw = process.env.CONFIGS || '';
           const links = raw.split('\n').map(s=>s.trim()).filter(s=>s && !s.startsWith('#') && s.includes('://'));
           const beans = links
-            .map(l => sandbox.parseLink(l))
+            .map(l => (sandbox.buildBeansFromInput(l) || [])[0])
             .filter(b => !['mieru','sdns'].includes(b.proto))
             .filter(b => !(b.proto === 'socks' && b.socks && b.socks.type === 'socks4'));
 
@@ -814,6 +865,8 @@ jobs:
         uses: actions/configure-pages@v5
       - name: Build static site
         run: |
+          npm ci --no-fund --no-audit
+          npm run build:web
           mkdir -p _site
           cp -r src/* _site/
       - name: Upload artifact
@@ -829,3 +882,32 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+  deploy-worker-api:
+    name: Deploy Cloudflare Worker
+    runs-on: ubuntu-latest
+    needs: [ validate-singbox, validate-singbox-extended, validate-xray, validate-mihomo ]
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install JS deps
+        run: npm ci --no-fund --no-audit
+
+      - name: Build worker bundle
+        run: npm run build:worker
+
+      - name: Deploy worker with Wrangler
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: workers/api
+          wranglerVersion: '4.54.0'
+          command: deploy

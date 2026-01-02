@@ -1,0 +1,8 @@
+name = "api"
+main = "dist/worker.mjs"
+compatibility_date = "2025-01-01"
+
+[observability]
+enabled = true
+
+

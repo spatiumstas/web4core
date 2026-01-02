@@ -31,11 +31,9 @@ function toYAML(obj, indent = 0) {
             if (v === undefined) continue;
             if (v && typeof v === 'object') {
                 const child = toYAML(v, indent + 1);
+                lines.push(space + k + ':');
                 if (child) {
-                    lines.push(space + k + ':');
                     lines.push(child);
-                } else {
-                    lines.push(space + k + ': {}');
                 }
             } else {
                 lines.push(space + k + ': ' + toYamlScalar(v, k));
@@ -46,41 +44,61 @@ function toYAML(obj, indent = 0) {
     return space + toYamlScalar(obj, null);
 }
 
-function overlayMihomoYaml(baseYamlText, proxies, groups, providers, rules, listeners) {
-    const text = (baseYamlText || '').replace(/\r\n/g, '\n');
-    const lines = text.split('\n');
-    const findSection = (key) => {
+function upsertSection(lines, key, sectionYaml) {
+    const findSection = () => {
         const start = lines.findIndex(l => new RegExp('^' + key + '\\s*:\\s*$', 'i').test(l));
         if (start === -1) return {start: -1, end: -1};
         let end = start + 1;
         while (end < lines.length) {
-            const ln = lines[end];
-            if (/^[^\s#][^:]*:\s*/.test(ln)) break;
+            if (/^[^\s#][^:]*:\s*/.test(lines[end])) break;
             end++;
         }
         return {start, end};
     };
-    const replaceSection = (key, sectionYaml) => {
-        const {start, end} = findSection(key);
-        const inject = Array.isArray(sectionYaml) && sectionYaml.length === 0
-            ? (key + ': []')
-            : (key + ':\n' + toYAML(sectionYaml, 1));
-        const injectLines = inject.split('\n');
-        if (injectLines[injectLines.length - 1] !== '') injectLines.push('');
-        if (start === -1) {
-            if (lines.length && lines[lines.length - 1] !== '') lines.push('');
-            lines.push(...injectLines);
-        } else {
-            lines.splice(start, end - start, ...injectLines);
-        }
-    };
-    replaceSection('proxies', proxies);
-    replaceSection('proxy-groups', groups);
-    if (providers) replaceSection('proxy-providers', providers);
-    if (rules) replaceSection('rules', rules);
-    if (listeners && listeners.length > 0) {
-        replaceSection('listeners', listeners);
-        const hasMixedListener = listeners.some(l => (l && typeof l === 'object') && String(l.type || '').toLowerCase() === 'mixed');
+
+    const {start, end} = findSection();
+
+    const inject = [
+        key + ':',
+        ...toYAML(sectionYaml, 1).split('\n'),
+        ''
+    ];
+
+    if (start === -1) {
+        if (lines.length && lines.at(-1) !== '') lines.push('');
+        lines.push(...inject);
+    } else {
+        lines.splice(start, end - start, ...inject);
+    }
+}
+
+function overlayMihomoYaml(baseYamlText, proxies, groups, providers, rules, listeners) {
+    const text = (baseYamlText || '').replace(/\r\n/g, '\n');
+    const lines = text.split('\n');
+
+    if (Array.isArray(proxies) && proxies.length > 0) {
+        upsertSection(lines, 'proxies', proxies);
+    }
+
+    if (Array.isArray(groups) && groups.length > 0) {
+        upsertSection(lines, 'proxy-groups', groups);
+    }
+
+    if (providers && typeof providers === 'object' && Object.keys(providers).length > 0) {
+        upsertSection(lines, 'proxy-providers', providers);
+    }
+
+    if (Array.isArray(rules) && rules.length > 0) {
+        upsertSection(lines, 'rules', rules);
+    }
+
+    if (Array.isArray(listeners) && listeners.length > 0) {
+        upsertSection(lines, 'listeners', listeners);
+
+        const hasMixedListener = listeners.some(
+            l => l && typeof l === 'object' && String(l.type || '').toLowerCase() === 'mixed'
+        );
+
         if (hasMixedListener) {
             const mixedPortIndex = lines.findIndex(l => /^mixed-port\s*:/i.test(l));
             if (mixedPortIndex !== -1) {
@@ -103,7 +121,6 @@ const MIHOMO_DEFAULT_TEMPLATE = [
     '  store-selected: true',
     '  store-fake-ip: true',
     '',
-    'proxies:',
     'proxy-groups:',
     'rules:',
     '  - "MATCH,PROXY"'
@@ -129,7 +146,7 @@ function buildMihomoYaml(proxies, groups, providers, rules, listeners, opts) {
     }
     if (tunOpt) {
         const lines = template.split('\n');
-        const proxiesIndex = lines.findIndex(l => /^proxies\s*:/i.test(l));
+        const proxiesIndex = lines.findIndex(l => /^proxy-groups\s*:/i.test(l));
         const mode = (tunOpt && typeof tunOpt === 'object' && tunOpt.mode) ? String(tunOpt.mode) : 'tun';
         if (mode === 'listeners') {
             const buildTunListener = (idx, proxyName) => {
@@ -155,12 +172,14 @@ function buildMihomoYaml(proxies, groups, providers, rules, listeners, opts) {
             const proxyList = Array.isArray(proxies) ? proxies : [];
             const providerKeys = (providers && typeof providers === 'object') ? Object.keys(providers) : [];
             let idx = 0;
-            
+
             if (providerKeys.length > 0) {
                 if (providerKeys.length > 1) {
                     providerKeys.forEach(pn => pn && tunListeners.push(buildTunListener(idx++, `SUB-${pn}`)));
                 } else {
-                    const fastestGroup = Array.isArray(groups) ? groups.find(g => g?.type === 'url-test' && Array.isArray(g.use)) : null;
+                    const fastestGroup = Array.isArray(groups)
+                        ? groups.find(g => g?.type === 'url-test' && Array.isArray(g.use))
+                        : null;
                     tunListeners.push(buildTunListener(idx++, fastestGroup?.name || ''));
                 }
                 proxyList.forEach(p => p?.name && tunListeners.push(buildTunListener(idx++, p.name)));
@@ -170,7 +189,7 @@ function buildMihomoYaml(proxies, groups, providers, rules, listeners, opts) {
                     proxyList.forEach((p, i) => p?.name && tunListeners.push(buildTunListener(i + 1, p.name)));
                 }
             }
-            const merged = (Array.isArray(listeners) ? listeners.slice() : []);
+            const merged = Array.isArray(listeners) ? listeners.slice() : [];
             merged.push(...tunListeners);
             listeners = merged;
         } else {
@@ -179,7 +198,7 @@ function buildMihomoYaml(proxies, groups, providers, rules, listeners, opts) {
                 stack: 'gvisor',
                 'auto-route': false,
                 'auto-detect-interface': true,
-                'device': 'mitun0',
+                device: 'mitun0',
             };
             const inject = [
                 'tun:',
@@ -197,13 +216,6 @@ function buildMihomoYaml(proxies, groups, providers, rules, listeners, opts) {
     return overlayMihomoYaml(template, proxies, groups, providers, rules, listeners);
 }
 
-try {
-    if (typeof globalThis !== 'undefined') {
-        globalThis.web4core = Object.assign({}, globalThis.web4core || {}, {
-            buildMihomoYaml,
-        });
-    }
-} catch {
-}
-
-
+export {
+    buildMihomoYaml,
+};

@@ -1,6 +1,5 @@
 <!DOCTYPE html>
 <html lang="ru">
-
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
@@ -53,12 +52,18 @@
                     <span id="lblMihomo" role="radio" aria-checked="false" tabindex="-1">Mihomo</span>
                 </div>
             </div>
-            <button id="btnSettings" class="settings-toggle" type="button" aria-label="Settings" aria-expanded="false"
-                aria-controls="settingsPanel">
-                <svg width="18" height="18" aria-hidden="true">
-                    <use href="#settings"></use>
-                </svg>
-            </button>
+            <div class="toolbar-actions">
+                <button id="btnSettings" class="settings-toggle" type="button" aria-label="Settings" aria-expanded="false"
+                    aria-controls="settingsPanel">
+                    <svg width="18" height="18" aria-hidden="true">
+                        <use href="#settings"></use>
+                    </svg>
+                </button>
+                <a id="apiLink" class="api-link" href="https://api.web2core.workers.dev/" target="_blank"
+                    rel="noopener noreferrer" title="API docs">
+                    API
+                </a>                
+            </div>
         </div>
 
         <div id="settingsPanel" class="settings-panel settings-panel--collapsed">
@@ -97,7 +102,7 @@
                     <input type="checkbox" id="cbExtended" />
                     <div class="checkmark"></div>
                     <span
-                        title="Extended features: XHTTP, XUDP, SDNS, Unified delay from github.com/shtorm-7/sing-box-extended">Extended</span>
+                        title="XHTTP, XUDP, SDNS, Unified delay from github.com/shtorm-7/sing-box-extended">Extended</span>
                 </label>
                 <label class="custom-checkbox chip" id="lblXrayBalancer">
                     <input type="checkbox" id="cbXrayBalancer" />
@@ -140,20 +145,15 @@
                     placeholder="Interface(s): (tun0,tun1 or tun0:select,tun1:auto)" />
             </div>
         </div>
-
         <div class="full">
-            <textarea id="links" class="input full"
-                placeholder="subscription links&#10;vless://...&#10;vmess://...&#10;trojan://...&#10;ss://...&#10;socks://...&#10;http://user:pass@host:port&#10;hy2://...&#10;tuic://...&#10;mieru://... (or json)&#10;sdns://...&#10"></textarea>
+            <textarea id="links" class="input full"></textarea>
         </div>
-
         <div id="errorBlock" class="row row--left" role="status" aria-live="polite">
             <div id="errorText"></div>
         </div>
-
         <div class="button-row">
             <input type="submit" id="gen" value="Generate" class="is-hidden" />
         </div>
-
         <div id="outBlock" class="hidden full">
             <textarea id="out" class="input full" readonly></textarea>
             <div class="button-row mt-8 full">
@@ -170,15 +170,7 @@
             </div>
         </div>
     </main>
-    <script src="parseuri.min.js"></script>
-    <script src="main.js"></script>
-    <script src="core/singbox.js"></script>
-    <script src="core/xray.js"></script>
-    <script src="core/mihomo.js"></script>
-    <script src="core/yaml.js"></script>
-    <script src="core/wireguard.js"></script>
-    <script src="core/subscription.js"></script>
+    <script src="web4core.runtime.js"></script>
     <script src="ui.js"></script>
 </body>
-
 </html>

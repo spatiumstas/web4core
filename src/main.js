@@ -8,6 +8,16 @@ function decodeBase64Url(input) {
     }
 }
 
+function safeDecodeURIComponent(input) {
+    const s = (input ?? '').toString();
+    if (!s) return '';
+    try {
+        return decodeURIComponent(s);
+    } catch {
+        return s;
+    }
+}
+
 function tryJSON(s) {
     try {
         return JSON.parse(s);
@@ -96,7 +106,7 @@ const PUBLIC_CORS_FALLBACKS = [
 ];
 
 function splitCSV(str) {
-    return (str || '').split(',').map(s => decodeURIComponent(s.trim())).filter(Boolean);
+    return (str || '').split(',').map(s => safeDecodeURIComponent(s.trim())).filter(Boolean);
 }
 
 function getQuery(u) {
@@ -373,11 +383,11 @@ function parseSocksHttp(urlStr) {
         proto: (isHttp || isHttps) ? 'http' : 'socks',
         host: u.hostname,
         port: asInt(u.port, isHttps ? 443 : isHttp ? 80 : 1080),
-        name: decodeURIComponent(u.hash.replace('#', '')),
+        name: safeDecodeURIComponent(u.hash.replace('#', '')),
         socks: {
             type: isHttp || isHttps ? 'http' : (isSocks4 ? 'socks4' : 'socks5'),
-            username: decodeURIComponent(u.username || ''),
-            password: decodeURIComponent(u.password || '')
+            username: safeDecodeURIComponent(u.username || ''),
+            password: safeDecodeURIComponent(u.password || '')
         },
         stream: {
             network: 'tcp',
@@ -410,8 +420,8 @@ function parseTrojan(urlStr) {
         proto: 'trojan',
         host: u.hostname,
         port: asInt(u.port, 443),
-        name: decodeURIComponent(u.hash.replace('#', '')),
-        auth: { password: decodeURIComponent(u.username || '') },
+        name: safeDecodeURIComponent(u.hash.replace('#', '')),
+        auth: { password: safeDecodeURIComponent(u.username || '') },
         stream: buildStreamFromQuery(q, true),
         udp: q.get('udp') === '1' || q.get('udp') === 'true',
         udpOverTcp: q.get('udp-over-tcp') === '1' || q.get('udp-over-tcp') === 'true',
@@ -429,7 +439,7 @@ function parseVLESS(urlStr) {
     const rawAuthority = rawAfterScheme.split(/[?#]/)[0];
     let host = u.hostname;
     let port = asInt(u.port, 443);
-    const rawUser = decodeURIComponent(u.username || '').trim();
+    const rawUser = safeDecodeURIComponent(u.username || '').trim();
     let uuid = rawUser;
     if (!isValidUuid(uuid) && rawUser) {
         const dec = decodeBase64Url(rawUser);
@@ -450,7 +460,7 @@ function parseVLESS(urlStr) {
         }
     }
     if (!uuid) {
-        const pwd = decodeURIComponent(u.password || '').trim();
+        const pwd = safeDecodeURIComponent(u.password || '').trim();
         if (isValidUuid(pwd)) uuid = pwd;
     }
     if (!uuid) {
@@ -478,7 +488,7 @@ function parseVLESS(urlStr) {
         proto: 'vless',
         host,
         port,
-        name: decodeURIComponent(u.hash.replace('#', '')),
+        name: safeDecodeURIComponent(u.hash.replace('#', '')),
         auth: {
             uuid,
             flow: (q.get('flow') || '').replace(/-udp443$/, '').replace(/^none$/, '')
@@ -533,8 +543,8 @@ function parseVMess(urlStr) {
         proto: 'vmess',
         host: u.hostname,
         port: asInt(u.port, 443),
-        name: decodeURIComponent(u.hash.replace('#', '')),
-        auth: { uuid: decodeURIComponent(u.username || ''), security: q.get('encryption') || 'auto' },
+        name: safeDecodeURIComponent(u.hash.replace('#', '')),
+        auth: { uuid: safeDecodeURIComponent(u.username || ''), security: q.get('encryption') || 'auto' },
         stream: buildStreamFromQuery(q, false),
         udp: q.get('udp') === '1' || q.get('udp') === 'true',
         udpOverTcp: q.get('udp-over-tcp') === '1' || q.get('udp-over-tcp') === 'true',
@@ -546,7 +556,7 @@ function parseVMess(urlStr) {
 
 function parseSS(urlStr) {
     const u = parseUrl(urlStr);
-    const name = decodeURIComponent(u.hash.replace('#', ''));
+    const name = safeDecodeURIComponent(u.hash.replace('#', ''));
     let method = u.username, password = u.password;
     let host = u.hostname;
     let port = asInt(u.port, 0);
@@ -630,12 +640,12 @@ function parseSS(urlStr) {
 function parseHysteria2(urlStr) {
     const u = parseUrl(urlStr);
     const q = getQuery(u);
-    const pwd = u.password ? (decodeURIComponent(u.username || '') + ':' + decodeURIComponent(u.password)) : decodeURIComponent(u.username || '');
+    const pwd = u.password ? (safeDecodeURIComponent(u.username || '') + ':' + safeDecodeURIComponent(u.password)) : safeDecodeURIComponent(u.username || '');
     return {
         proto: 'hy2',
         host: u.hostname,
         port: asInt(u.port, 443),
-        name: decodeURIComponent(u.hash.replace('#', '')),
+        name: safeDecodeURIComponent(u.hash.replace('#', '')),
         auth: { password: pwd },
         hysteria2: {
             obfsPassword: q.get('obfs-password') || '',
@@ -655,10 +665,10 @@ function parseTUIC(urlStr) {
         proto: 'tuic',
         host: u.hostname,
         port: asInt(u.port, 443),
-        name: decodeURIComponent(u.hash.replace('#', '')),
+        name: safeDecodeURIComponent(u.hash.replace('#', '')),
         auth: {
-            uuid: decodeURIComponent(u.username || ''),
-            password: decodeURIComponent(u.password || '')
+            uuid: safeDecodeURIComponent(u.username || ''),
+            password: safeDecodeURIComponent(u.password || '')
         },
         tuic: {
             congestion_control: q.get('congestion_control') || 'bbr',
@@ -681,9 +691,9 @@ function parseMieru(urlStr) {
     const u = parseUrl(urlStr);
     if (u.protocol !== 'mieru:') throw new Error('A mieru:// link is required');
     const q = getQuery(u);
-    const username = decodeURIComponent(u.username || '');
-    const password = decodeURIComponent(u.password || '');
-    const name = decodeURIComponent(u.hash.replace('#', ''));
+    const username = safeDecodeURIComponent(u.username || '');
+    const password = safeDecodeURIComponent(u.password || '');
+    const name = safeDecodeURIComponent(u.hash.replace('#', ''));
     const serverPorts = q.get('server_ports') || q.get('ports') || '';
     const transport = (q.get('transport') || 'TCP').toUpperCase();
     const multiplexing = (q.get('multiplexing') || '').toUpperCase();
@@ -751,7 +761,7 @@ function parseSDNS(urlStr) {
     const u = parseUrl(urlStr);
     if (u.protocol !== 'sdns:') throw new Error('A sdns:// link is required');
     const stamp = urlStr;
-    const name = decodeURIComponent(u.hash.replace('#', ''));
+    const name = safeDecodeURIComponent(u.hash.replace('#', ''));
     return {
         proto: 'sdns',
         host: u.hostname,
@@ -868,13 +878,28 @@ function buildStreamFromQuery(q, isTrojan) {
     return stream;
 }
 
-try {
-    if (typeof globalThis !== 'undefined') {
-        globalThis.web4core = Object.assign({}, globalThis.web4core || {}, {
-            buildBeansFromInput,
-            validateBean,
-            computeTag
-        });
-    }
-} catch {
-}
+export {
+    decodeBase64Url,
+    tryJSON,
+    isHttpUrl,
+    parseUrl,
+    splitCSV,
+    getQuery,
+    asInt,
+    sanitizeTag,
+    generateSecretHex32,
+    SUPPORTED_SCHEMES,
+    MAX_SUB_REDIRECTS,
+    SUB_FETCH_TIMEOUT,
+    SUB_FETCH_INTERVAL,
+    SUB_FALLBACK_RETRIES,
+    URLTEST,
+    URLTEST_INTERVAL,
+    FETCH_INIT,
+    PUBLIC_CORS_FALLBACKS,
+    computeTag,
+    validateBean,
+    buildBeansFromInput,
+    parseTunSpec,
+    parseAddrHostPort
+};

@@ -1,3 +1,15 @@
+import {
+    decodeBase64Url,
+    isHttpUrl,
+    parseUrl,
+    SUPPORTED_SCHEMES,
+    MAX_SUB_REDIRECTS,
+    SUB_FETCH_TIMEOUT,
+    SUB_FALLBACK_RETRIES,
+    FETCH_INIT,
+    PUBLIC_CORS_FALLBACKS
+} from '../main.js';
+
 function buildSchemesRegex(flags) {
     const escaped = SUPPORTED_SCHEMES.map(s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
     return new RegExp('(?:' + escaped + ')://', flags || 'i');
@@ -91,6 +103,7 @@ async function fetchSubscription(url) {
 
     const allowedSchemes = new Set(SUPPORTED_SCHEMES.filter(s => s !== 'http' && s !== 'https'));
     const splitLines = (text) => (text || '').split(/\n/).map(s => s.trim()).filter(Boolean);
+    const isBrowser = (typeof window !== 'undefined') && (typeof window.document !== 'undefined');
 
     function hasRealSubscriptionLinks(text) {
         const lines = splitLines(text);
@@ -105,7 +118,16 @@ async function fetchSubscription(url) {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), SUB_FETCH_TIMEOUT);
         try {
-            const resp = await fetch(u, Object.assign({}, FETCH_INIT, {signal: controller.signal}));
+            const headers = new Headers((FETCH_INIT && FETCH_INIT.headers) ? FETCH_INIT.headers : {});
+            if (!headers.has('Accept')) headers.set('Accept', 'text/plain, */*');
+            if (!isBrowser) {
+                headers.set('User-Agent', 'web4core (subscription fetch)');
+                if (/github\.com|raw\.githubusercontent\.com/i.test(u)) {
+                    headers.set('Referer', 'https://github.com/');
+                }
+            }
+
+            const resp = await fetch(u, Object.assign({}, FETCH_INIT, { headers, signal: controller.signal }));
             clearTimeout(timeout);
             if (!resp.ok) {
                 const reason = resp.statusText || httpReason(resp.status) || '';
@@ -122,8 +144,13 @@ async function fetchSubscription(url) {
 
     function classifyError(err) {
         const msg = (err && err.message) ? err.message : '';
-        if (/^HTTP\s+\d+/.test(msg)) {
-            return msg.replace(/^HTTP\s+/, '').trim();
+        const http = msg.match(/^HTTP\s+(\d+)(?:\s+(.+))?/);
+        if (http) {
+            const code = parseInt(http[1], 10);
+            const reason = (http[2] || '').trim();
+            if (code === 403) return '403 Forbidden (upstream blocked subscription fetch; retry usually helps)';
+            if (code === 429) return '429 Too Many Requests (rate-limited; retry later)';
+            return String(code) + (reason ? (' ' + reason) : '');
         }
         if (msg.includes('aborted') || msg.includes('abort') || msg.includes('timeout')) {
             return 'Request timeout (15s)';
@@ -137,63 +164,74 @@ async function fetchSubscription(url) {
     async function fetchWithFallback(u, depth) {
         if (depth > MAX_SUB_REDIRECTS) throw new Error('Too many redirects');
 
-        const attempts = [];
-        const direct = isHttpUrl(u) ? await tryFetch(u) : {error: new Error('not-http')};
+        const handleResponse = async (text) => {
+            if (!text || typeof text !== 'string') return null;
+            let probe = text;
 
-        if (!direct.error && typeof direct.text === 'string') {
-            let probe = direct.text || '';
+            if (isLikelyHtml(probe)) {
+                const redir = parseMetaRefresh(probe);
+                if (redir) return await fetchWithFallback(redir, depth + 1);
+                const extracted = extractLinksFromHtml(probe);
+                if (extracted && extracted.length) return extracted.join('\n');
+            }
+
             const dec = normalizeSubscriptionBody(probe);
             if (dec) probe = dec;
-            const lines = splitLines(probe);
-            const isSingleHttpPointer = lines.length === 1 && isHttpUrl(lines[0]) && !looksLikeLinksList(lines[0]);
-            if (!isSingleHttpPointer && !hasRealSubscriptionLinks(probe)) {
-                direct.error = new Error('Subscription returned no valid links');
+
+            if (isLikelyHtml(probe)) {
+                const redir2 = parseMetaRefresh(probe);
+                if (redir2) return await fetchWithFallback(redir2, depth + 1);
+                const extracted2 = extractLinksFromHtml(probe);
+                if (extracted2 && extracted2.length) return extracted2.join('\n');
             }
+
+            if (hasRealSubscriptionLinks(probe)) return probe;
+
+            return probe;
+        };
+
+        const attempts = [];
+        const direct = isHttpUrl(u) ? await tryFetch(u) : {error: new Error('not-http')};
+        attempts.push(direct);
+
+        if (!direct.error && typeof direct.text === 'string') {
+            const res = await handleResponse(direct.text);
+            if (res) return res;
+            direct.error = new Error('Subscription returned no valid links');
         }
 
-        attempts.push(direct);
+        if (!isBrowser) {
+            throw new Error(classifyError(direct.error || new Error('Fetch failed')));
+        }
+
         if (direct.error) {
+            if (/^HTTP\s+(403|429|5\d\d)/.test(String(direct.error.message || ''))) {
+                await new Promise(resolve => setTimeout(resolve, 350));
+                const retry = await tryFetch(u);
+                attempts.push(retry);
+                if (!retry.error) {
+                    const res = await handleResponse(retry.text);
+                    if (res) return res;
+                }
+            }
+
             for (const makeUrl of PUBLIC_CORS_FALLBACKS) {
-                let fallbackSuccess = false;
-                for (let retry = 0; retry < SUB_FALLBACK_RETRIES; retry++) {
+                const maxRetries = 1;
+                for (let retry = 0; retry <= maxRetries; retry++) {
                     const result = await tryFetch(makeUrl(u));
                     attempts.push(result);
                     if (!result.error) {
-                        fallbackSuccess = true;
-                        break;
+                        const res = await handleResponse(result.text);
+                        if (res) return res;
                     }
-                    if (retry < SUB_FALLBACK_RETRIES - 1) {
+                    if (result.error && retry < maxRetries) {
                         await new Promise(resolve => setTimeout(resolve, 500));
                     }
                 }
-                if (fallbackSuccess) break;
             }
         }
 
-        let lastErr = null;
-        for (const a of attempts) {
-            if (a && !a.error && a.text) {
-                const text = a.text;
-                if (isLikelyHtml(text)) {
-                    const redir = parseMetaRefresh(text);
-                    if (redir) return fetchWithFallback(redir, depth + 1);
-                    const extracted = extractLinksFromHtml(text);
-                    if (extracted && extracted.length) return extracted.join('\n');
-                }
-                let body = normalizeSubscriptionBody(text);
-                if (isLikelyHtml(body)) {
-                    const redir2 = parseMetaRefresh(body);
-                    if (redir2) return fetchWithFallback(redir2, depth + 1);
-                    const extracted2 = extractLinksFromHtml(body);
-                    if (extracted2 && extracted2.length) return extracted2.join('\n');
-                }
-                if (body) return body;
-                lastErr = new Error('Empty response');
-            } else if (a && a.error) {
-                lastErr = a.error;
-            }
-        }
-        throw new Error(classifyError(lastErr));
+        throw new Error(classifyError(direct.error));
     }
 
     let body = await fetchWithFallback(url, 0);
@@ -210,13 +248,8 @@ async function fetchSubscription(url) {
     return filtered.join('\n');
 }
 
-try {
-    if (typeof globalThis !== 'undefined') {
-        globalThis.web4core = Object.assign({}, globalThis.web4core || {}, {
-            fetchSubscription
-        });
-    }
-} catch {
-}
+export {
+    fetchSubscription
+};
 
 

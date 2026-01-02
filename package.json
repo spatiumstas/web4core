@@ -1,0 +1,12 @@
+{
+  "name": "web4core",
+  "private": true,
+  "devDependencies": {
+    "esbuild": "^0.27.2"
+  },
+  "scripts": {
+    "build:web": "esbuild src/entry-web4core.js --bundle --format=iife --platform=browser --outfile=src/web4core.runtime.js",
+    "build:worker": "esbuild workers/api/src/index.js --bundle --format=esm --platform=browser --loader:.md=text --outfile=workers/api/dist/worker.mjs",
+    "build": "npm run build:web && npm run build:worker"
+  }
+}

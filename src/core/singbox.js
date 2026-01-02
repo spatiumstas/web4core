@@ -1,3 +1,5 @@
+import { generateSecretHex32, parseTunSpec, splitCSV, URLTEST, URLTEST_INTERVAL } from '../main.js';
+
 function buildSingBoxOutbound(bean, opts) {
     const useExtended = !!(opts && opts.useExtended) || !!bean?._useExtended;
     const commonTLS = () => {
@@ -413,14 +415,9 @@ function buildSingBoxConfig(outboundsWithTags, opts) {
     return config;
 }
 
-try {
-    if (typeof globalThis !== 'undefined') {
-        globalThis.web4core = Object.assign({}, globalThis.web4core || {}, {
-            buildSingBoxOutbound,
-            buildSingBoxConfig,
-        });
-    }
-} catch {
-}
+export {
+    buildSingBoxOutbound,
+    buildSingBoxConfig,
+};
 
 
