@@ -1,3 +1,5 @@
+import { asInt, URLTEST, URLTEST_INTERVAL } from '../main.js';
+
 function buildXrayOutbound(bean) {
     const s = bean.stream || {};
     const network = s.network || 'tcp';
@@ -152,14 +154,7 @@ function buildXrayConfig(outbounds, opts) {
     return config;
 }
 
-try {
-    if (typeof globalThis !== 'undefined') {
-        globalThis.web4core = Object.assign({}, globalThis.web4core || {}, {
-            buildXrayOutbound,
-            buildXrayConfig,
-        });
-    }
-} catch {
-}
-
-
+export {
+    buildXrayOutbound,
+    buildXrayConfig,
+};

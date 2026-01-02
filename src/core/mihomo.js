@@ -1,3 +1,5 @@
+import { computeTag, validateBean, URLTEST, SUB_FETCH_INTERVAL } from '../main.js';
+
 const FASTEST_GROUP_NAME = '⚡ Fastest';
 
 function buildMihomoProxy(bean) {
@@ -413,15 +415,8 @@ function buildMihomoSubscriptionConfig(subscriptionUrls, extraBeans, opts) {
     return { providers, groups, rules, proxies: extraProxies, listeners };
 }
 
-try {
-    if (typeof globalThis !== 'undefined') {
-        globalThis.web4core = Object.assign({}, globalThis.web4core || {}, {
-            buildMihomoProxy,
-            buildMihomoConfig,
-            buildMihomoSubscriptionConfig,
-        });
-    }
-} catch {
-}
-
-
+export {
+    buildMihomoProxy,
+    buildMihomoConfig,
+    buildMihomoSubscriptionConfig,
+};

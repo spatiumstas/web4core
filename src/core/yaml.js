@@ -197,13 +197,6 @@ function buildMihomoYaml(proxies, groups, providers, rules, listeners, opts) {
     return overlayMihomoYaml(template, proxies, groups, providers, rules, listeners);
 }
 
-try {
-    if (typeof globalThis !== 'undefined') {
-        globalThis.web4core = Object.assign({}, globalThis.web4core || {}, {
-            buildMihomoYaml,
-        });
-    }
-} catch {
-}
-
-
+export {
+    buildMihomoYaml,
+};

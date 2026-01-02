@@ -52,6 +52,60 @@ const MSG_SUB_FETCH = (m) => 'Failed to fetch subscription: ' + (m || '');
 const MSG_NO_LINKS = 'No valid links or profiles provided';
 const MSG_EXTENDED_ENABLE = 'Enable Extended to generate Mieru/SDNS configurations';
 
+const PLACEHOLDER_SINGBOX_BASE = [
+    'subscription links',
+    'vless://...',
+    'vmess://...',
+    'trojan://...',
+    'ss://...',
+    'socks://...',
+    'http://user:pass@host:port',
+    'hy2://...',
+    'tuic://...'
+];
+const PLACEHOLDER_SINGBOX_EXTENDED = [
+    'mieru://... (or json)',
+    'sdns://...'
+];
+const PLACEHOLDER_XRAY = [
+    'subscription links',
+    'vless://...',
+    'vmess://...',
+    'trojan://...',
+    'ss://...',
+    'socks://...',
+    'http://user:pass@host:port'
+];
+const PLACEHOLDER_MIHOMO = [
+    'subscription links',
+    'vless://...',
+    'vmess://...',
+    'trojan://...',
+    'ss://...',
+    'socks://...',
+    'http://user:pass@host:port',
+    'hy2://...',
+    'tuic://...'
+];
+
+function updateLinksPlaceholder() {
+    if (!el.links) return;
+    const core = getCore();
+    const useExtended = !!el.cbExtended?.checked;
+
+    let lines;
+    if (core === 'singbox') {
+        lines = useExtended
+            ? [...PLACEHOLDER_SINGBOX_BASE, ...PLACEHOLDER_SINGBOX_EXTENDED]
+            : PLACEHOLDER_SINGBOX_BASE;
+    } else if (core === 'xray') {
+        lines = PLACEHOLDER_XRAY;
+    } else if (core === 'mihomo') {
+        lines = PLACEHOLDER_MIHOMO;
+    }
+    el.links.placeholder = lines.join('\n') + '\n';
+}
+
 const toggleHidden = (node, hidden) => {
     if (node) node.classList.toggle('is-hidden', hidden);
 };
@@ -128,6 +182,7 @@ function setCore(core) {
     toggleHidden(el.lblAndroidMode, hideSing);
     toggleHidden(el.lblDetour, hideSing);
     toggleHidden(el.lblXrayBalancer, core !== 'xray');
+    updateLinksPlaceholder();
 
     if (core !== 'mihomo') {
         state.wgBeans = [];
@@ -229,6 +284,7 @@ function setupCheckboxValidation() {
     revalidateOnChange.forEach(cb => {
         cb?.addEventListener('change', () => {
             validateField(false);
+            updateLinksPlaceholder();
         });
     });
 }
@@ -355,58 +411,42 @@ function validateField(showOutput) {
             return { beans, tunName, addTun, addSocks, perTunMixed, genClashSecret, useExtended, androidMode };
         }
 
-        if (getCore() === 'singbox') {
+        {
+            const core = getCore();
             const perTunMixed = !!el.cbPerTunMixed?.checked;
-            const useDetour = !!el.cbDetour?.checked;
             const androidMode = !!el.cbAndroidMode?.checked;
-            const opts = { addTun, addSocks, perTunMixed, tunName, genClashSecret, useExtended, androidMode };
-            const used = new Set();
-            const dnsBeans = useExtended ? beans.filter(b => b.proto === 'sdns') : [];
-            const outboundBeans = beans.filter(b => b.proto !== 'sdns');
-            const outbounds = outboundBeans.map(b => {
-                const ob = globalThis.web4core.buildSingBoxOutbound(b, { useExtended: !!useExtended });
-                const tag = globalThis.web4core.computeTag(b, used);
-                return Object.assign({ tag }, ob);
-            });
-            if (useDetour && outbounds.length > 1) {
-                const mainTag = outbounds[0].tag;
-                for (let i = 1; i < outbounds.length; i++) {
-                    outbounds[i].detour = mainTag;
-                }
-            }
-            opts.dnsBeans = dnsBeans;
-            const finalConfig = globalThis.web4core.buildSingBoxConfig(outbounds, opts);
-            renderOutput(JSON.stringify(finalConfig, null, 2), false);
-            setGenerateEnabled(true);
-            el.links.classList.remove('input-error');
-            return true;
-        }
-
-        if (getCore() === 'xray') {
-            let finalConfig;
-            if (beans.length === 1) finalConfig = globalThis.web4core.buildXrayConfig(globalThis.web4core.buildXrayOutbound(beans[0]), {});
-            else {
-                const used = new Set();
-                const outbounds = beans.map(b => {
-                    const ob = globalThis.web4core.buildXrayOutbound(b);
-                    ob.tag = globalThis.web4core.computeTag(b, used);
-                    return ob;
-                });
-                const enableBalancer = !!el.cbXrayBalancer?.checked;
-                finalConfig = globalThis.web4core.buildXrayConfig(outbounds, { enableBalancer });
-            }
-            renderOutput(JSON.stringify(finalConfig, null, 2), false);
-            setGenerateEnabled(true);
-            el.links.classList.remove('input-error');
-            return true;
-        }
-
-        if (getCore() === 'mihomo') {
-            const outBeans = beans.filter(b => !['mieru', 'sdns'].includes(b.proto));
+            const detour = !!el.cbDetour?.checked;
+            const enableBalancer = !!el.cbXrayBalancer?.checked;
             const perProxyPort = !!el.cbMihomoPerProxyPort?.checked;
-            const yamlObj = globalThis.web4core.buildMihomoConfig(outBeans, { perProxyPort });
-            const yaml = globalThis.web4core.buildMihomoYaml(yamlObj.proxies, yamlObj['proxy-groups'], null, null, yamlObj.listeners, { webUI, tun: mihomoTunOpts });
-            renderOutput(yaml, true);
+            const mihomoSubscriptionMode = isMihomoSubscriptionMode();
+
+            const result = globalThis.web4core.buildFromRequest({
+                core,
+                input: raw,
+                wgBeans: Array.isArray(state.wgBeans) ? state.wgBeans : [],
+                options: {
+                    addTun,
+                    addSocks,
+                    perTunMixed,
+                    tunName,
+                    genClashSecret,
+                    useExtended,
+                    androidMode,
+                    detour,
+                    enableBalancer,
+                    webUI,
+                    mihomoTun: mihomoTunEnabled,
+                    mihomoPerProxyTun,
+                    perProxyPort,
+                    mihomoSubscriptionMode,
+                }
+            });
+
+            if (result.kind === 'yaml') {
+                renderOutput(result.data, true);
+            } else {
+                renderOutput(JSON.stringify(result.data, null, 2), false);
+            }
             setGenerateEnabled(true);
             el.links.classList.remove('input-error');
             return true;
@@ -593,6 +633,7 @@ try {
 } catch (e) {
 }
 setCore(state.core);
+updateLinksPlaceholder();
 validateField(false);
 
 el.links.addEventListener('input', debounce(() => {

@@ -1,3 +1,5 @@
+import { parseAddrHostPort } from '../main.js';
+
 function parseWireGuardConf(confText, nameHint) {
     const text = String(confText || '').replace(/\r\n/g, '\n');
     const lines = text.split('\n');
@@ -180,13 +182,6 @@ function parseWireGuardConf(confText, nameHint) {
     return bean;
 }
 
-try {
-    if (typeof globalThis !== 'undefined') {
-        globalThis.web4core = Object.assign({}, globalThis.web4core || {}, {
-            parseWireGuardConf,
-        });
-    }
-} catch {
-}
-
-
+export {
+    parseWireGuardConf,
+};
