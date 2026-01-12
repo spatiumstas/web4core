@@ -40,16 +40,6 @@ function splitMihomoSubscriptionInput(raw) {
   return { subUrls, proxyText: proxyLines.join('\n') };
 }
 
-/**
- * Shared generator entry: used by both UI and Cloudflare Worker.
- *
- * @param {object} req
- * @param {"singbox"|"xray"|"mihomo"} req.core
- * @param {string} req.input
- * @param {object} req.options
- * @param {Array<object>} [req.wgBeans] - optional extra beans (e.g. WireGuard, for Mihomo paths)
- * @returns {{kind:"json", data:any} | {kind:"yaml", data:string}}
- */
 export function buildFromRequest(req) {
   const core = String(req?.core || '').toLowerCase();
   const input = String(req?.input || '');
@@ -64,8 +54,12 @@ export function buildFromRequest(req) {
     if (options.addTun === undefined) options.addTun = true;
     if (options.addSocks === undefined) options.addSocks = true;
     if (options.webUI === undefined) options.webUI = false;
+  } else if (core === 'xray') {
+    if (options.addTun === undefined) options.addTun = false;
+    if (options.addSocks === undefined) options.addSocks = true;
   } else if (core === 'mihomo') {
     if (options.webUI === undefined) options.webUI = true;
+    if (options.addTun === undefined) options.addTun = false;
   }
 
   const beans = input.trim() ? buildBeansFromInput(input.trim()) : [];
@@ -117,8 +111,13 @@ export function buildFromRequest(req) {
 
   if (core === 'xray') {
     let cfg;
+    const addTun = !!options.addTun;
+    const addSocks = !!options.addSocks;
+    if (!addTun && !addSocks) {
+      throw new Error('Xray: enable at least one inbound (TUN or SOCKS5)');
+    }
     if (allBeans.length === 1) {
-      cfg = buildXrayConfig(buildXrayOutbound(allBeans[0]), {});
+      cfg = buildXrayConfig(buildXrayOutbound(allBeans[0]), { addTun, addSocks });
     } else {
       const used = new Set();
       const outbounds = allBeans.map((b) => {
@@ -126,7 +125,7 @@ export function buildFromRequest(req) {
         ob.tag = computeTag(b, used);
         return ob;
       });
-      cfg = buildXrayConfig(outbounds, { enableBalancer: !!options.enableBalancer });
+      cfg = buildXrayConfig(outbounds, { enableBalancer: !!options.enableBalancer, addTun, addSocks });
     }
     return { kind: 'json', data: cfg };
   }
@@ -134,9 +133,8 @@ export function buildFromRequest(req) {
   // mihomo
   const webUI = !!options.webUI;
   const perProxyPort = !!options.perProxyPort;
-  const mihomoTunEnabled = !!options.mihomoTun;
-  const mihomoPerProxyTun = !!options.mihomoPerProxyTun;
-  const mihomoTunOpts = mihomoTunEnabled ? { mode: mihomoPerProxyTun ? 'listeners' : 'tun' } : null;
+  const addTun = !!options.addTun;
+  const mihomoTunOpts = addTun ? { mode: (options.mihomoPerProxyTun ? 'listeners' : 'tun') } : null;
 
   const subMode = !!options.mihomoSubscriptionMode;
   if (subMode) {

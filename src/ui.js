@@ -28,6 +28,10 @@ const el = {
     lblMihomoWebUI: document.getElementById('lblMihomoWebUI'),
     cbXrayBalancer: document.getElementById('cbXrayBalancer'),
     lblXrayBalancer: document.getElementById('lblXrayBalancer'),
+    cbXrayTun: document.getElementById('cbXrayTun'),
+    lblXrayTun: document.getElementById('lblXrayTun'),
+    cbXraySocks: document.getElementById('cbXraySocks'),
+    lblXraySocks: document.getElementById('lblXraySocks'),
     cbPerTunMixed: document.getElementById('cbPerTunMixed'),
     lblPerTunMixed: document.getElementById('lblPerTunMixed'),
     cbAndroidMode: document.getElementById('cbAndroidMode'),
@@ -171,6 +175,8 @@ function setCore(core) {
     toggleHidden(cbSocksLabel, hideSing);
     toggleHidden(cbClashSecretLabel, hideSing);
     toggleHidden(cbExtendedLabel, hideSing);
+    toggleHidden(el.lblXrayTun, core !== 'xray');
+    toggleHidden(el.lblXraySocks, core !== 'xray');
     toggleHidden(el.tunName?.parentElement || el.tunName, hideSing);
     toggleHidden(el.lblMihomoSub, core !== 'mihomo');
     toggleHidden(el.lblMihomoTun, core !== 'mihomo');
@@ -251,12 +257,19 @@ if (el.btnSettings && el.settingsPanel) {
 
 function setupCheckboxValidation() {
     if (!el.cbTun || !el.cbSocks) return;
-    el.cbTun.addEventListener('change', () => {
-        if (!el.cbTun.checked && !el.cbSocks.checked) el.cbSocks.checked = true;
-    });
-    el.cbSocks.addEventListener('change', () => {
-        if (!el.cbTun.checked && !el.cbSocks.checked) el.cbTun.checked = true;
-    });
+
+    const enforceAtLeastOne = (a, b) => {
+        if (!a || !b) return;
+        a.addEventListener('change', () => {
+            if (!a.checked && !b.checked) b.checked = true;
+        });
+        b.addEventListener('change', () => {
+            if (!a.checked && !b.checked) a.checked = true;
+        });
+    };
+
+    enforceAtLeastOne(el.cbTun, el.cbSocks);
+    enforceAtLeastOne(el.cbXrayTun, el.cbXraySocks);
 
     if (el.cbMihomoTun && el.cbMihomoPerProxyTun) {
         el.cbMihomoPerProxyTun.addEventListener('change', () => {
@@ -279,6 +292,8 @@ function setupCheckboxValidation() {
         el.cbPerTunMixed,
         el.cbAndroidMode,
         el.cbXrayBalancer,
+        el.cbXrayTun,
+        el.cbXraySocks,
     ];
 
     revalidateOnChange.forEach(cb => {
@@ -321,8 +336,13 @@ function validateField(showOutput) {
     const raw = el.links.value;
     const hasText = !!raw.trim();
     const tunName = el.tunName.value.trim();
-    const addTun = !!el.cbTun?.checked;
-    const addSocks = !!el.cbSocks?.checked;
+    const core = getCore();
+    const addTun = core === 'xray'
+        ? !!el.cbXrayTun?.checked
+        : (core === 'mihomo' ? !!el.cbMihomoTun?.checked : !!el.cbTun?.checked);
+    const addSocks = core === 'xray'
+        ? !!el.cbXraySocks?.checked
+        : (core === 'mihomo' ? true : !!el.cbSocks?.checked);
     const genClashSecret = !!el.cbClashSecret?.checked;
     const useExtended = !!el.cbExtended?.checked;
     const subMihomo = isMihomoSubscriptionMode();
@@ -435,7 +455,6 @@ function validateField(showOutput) {
                     detour,
                     enableBalancer,
                     webUI,
-                    mihomoTun: mihomoTunEnabled,
                     mihomoPerProxyTun,
                     perProxyPort,
                     mihomoSubscriptionMode,

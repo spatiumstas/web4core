@@ -628,7 +628,7 @@ jobs:
           
               // Generate Xray config
               const outbound = sandbox.buildXrayOutbound(bean);
-              const config = sandbox.buildXrayConfig(outbound);
+              const config = sandbox.buildXrayConfig(outbound, { addTun: false, addSocks: true });
           
               // Write config to file
               const configFile = `test_xray_${i}.json`;
@@ -663,7 +663,7 @@ jobs:
                   ob.tag = sandbox.computeTag ? sandbox.computeTag(b, used) : `p${idx + 1}`;
                   return ob;
                 });
-                const multiConfig = sandbox.buildXrayConfig(multiOutbounds);
+                const multiConfig = sandbox.buildXrayConfig(multiOutbounds, { addTun: false, addSocks: true });
                 const multiFile = `test_xray_multi_all.json`;
                 fs.writeFileSync(multiFile, JSON.stringify(multiConfig, null, 2));
           
@@ -674,7 +674,7 @@ jobs:
 
                 // Balancer-enabled multi-config
                 try {
-                  const multiConfigBal = sandbox.buildXrayConfig(multiOutbounds, { enableBalancer: true });
+                  const multiConfigBal = sandbox.buildXrayConfig(multiOutbounds, { enableBalancer: true, addTun: false, addSocks: true });
                   const multiFileBal = `test_xray_multi_all_balancer.json`;
                   fs.writeFileSync(multiFileBal, JSON.stringify(multiConfigBal, null, 2));
                   execSync(`xray -test -config ${multiFileBal}`, { stdio: 'pipe', encoding: 'utf8' });

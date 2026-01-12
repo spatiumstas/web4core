@@ -54,10 +54,12 @@ HTTP status is usually **400** for invalid input, **405** for wrong method, **40
 
 #### Xray
 - **enableBalancer**: boolean
+- **addTun**: boolean
+- **addSocks**: boolean
 
 #### Mihomo
+- **addTun**: boolean
 - **webUI**: boolean
-- **mihomoTun**: boolean
 - **mihomoPerProxyTun**: boolean
 - **perProxyPort**: boolean
 - **mihomoSubscriptionMode**: boolean
@@ -87,7 +89,7 @@ curl -sS -X POST "https://api.web2core.workers.dev/" ^
 ```bash
 curl -sS -X POST "https://api.web2core.workers.dev/" ^
   -H "Content-Type: application/json" ^
-  --data "{\"core\":\"mihomo\",\"input\":\"vless://UUID@host:443?type=ws&security=tls#test\",\"options\":{\"webUI\":true,\"mihomoTun\":false,\"perProxyPort\":false}}"
+  --data "{\"core\":\"mihomo\",\"input\":\"vless://UUID@host:443?type=ws&security=tls#test\",\"options\":{\"webUI\":true,\"addTun\":false,\"perProxyPort\":false}}"
 ```
 
 #### Mihomo subscription mode

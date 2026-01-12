@@ -100,32 +100,92 @@ function buildXrayOutbound(bean) {
     return outbound;
 }
 
+function buildXrayTunInbounds(opts, outboundsCount) {
+    const addTun = !!(opts && opts.addTun);
+    if (!addTun) return [];
+    if (!Number.isFinite(outboundsCount) || outboundsCount <= 0) return [];
+    const enableBalancer = !!(opts && opts.enableBalancer);
+    const count = (!enableBalancer && outboundsCount > 1) ? outboundsCount : 1;
+    const ifaces = Array.from({ length: count }, (_, i) => `xraytun${i}`);
+    const tunInbounds = [];
+
+    for (let i = 0; i < ifaces.length; i++) {
+        const name = ifaces[i] || 'xraytun0';
+        const tag = `tun-in-${name}`;
+        const inbound = {
+            tag,
+            port: 0,
+            protocol: 'tun',
+            settings: { name }
+        };
+        tunInbounds.push(inbound);
+    }
+
+    return tunInbounds;
+}
+
 function buildXrayConfig(outbounds, opts) {
     if (!Array.isArray(outbounds)) outbounds = [outbounds];
+    const xraySocks = (opts && opts.addSocks === undefined) ? true : !!(opts && opts.addSocks);
     if (outbounds.length === 1) {
-        return {
+        const config = {
             log: { loglevel: 'warning' },
-            inbounds: [{ tag: 'socks-in', port: 1080, listen: '127.0.0.1', protocol: 'socks', settings: { udp: true } }],
+            inbounds: xraySocks ? [{ tag: 'socks-in', port: 1080, listen: '127.0.0.1', protocol: 'socks', settings: { udp: true } }] : [],
             outbounds: [outbounds[0], { tag: 'direct', protocol: 'freedom' }, { tag: 'block', protocol: 'blackhole' }]
         };
+        const tunInbounds = buildXrayTunInbounds(opts, outbounds.length);
+        if (tunInbounds.length) {
+            config.inbounds = [...tunInbounds, ...config.inbounds];
+            config.routing = {
+                rules: [{ inboundTag: tunInbounds.map(x => x.tag).filter(Boolean), outboundTag: outbounds[0].tag || 'proxy' }]
+            };
+        } else if (!xraySocks) {
+            throw new Error('Xray: at least one inbound (TUN or SOCKS) is required');
+        }
+        return config;
     }
     const basePort = 1080;
     const enableBalancer = !!(opts && opts.enableBalancer);
-    const inbounds = enableBalancer
-        ? [{ tag: 'socks-in', port: basePort, listen: '127.0.0.1', protocol: 'socks', settings: { udp: true } }]
-        : outbounds.map((ob, idx) => ({
-            tag: `socks-in-${idx + 1}`,
-            port: basePort + idx,
-            listen: '127.0.0.1',
-            protocol: 'socks',
-            settings: { udp: true }
-        }));
-    const rules = enableBalancer
-        ? [{ inboundTag: ['socks-in'], balancerTag: 'auto' }]
-        : outbounds.map((ob, idx) => ({
-            inboundTag: [`socks-in-${idx + 1}`],
-            outboundTag: ob.tag || 'proxy'
-        }));
+    const tunInbounds = buildXrayTunInbounds(opts, outbounds.length);
+    const inbounds = xraySocks
+        ? (enableBalancer
+            ? [{ tag: 'socks-in', port: basePort, listen: '127.0.0.1', protocol: 'socks', settings: { udp: true } }]
+            : outbounds.map((ob, idx) => ({
+                tag: `socks-in-${idx + 1}`,
+                port: basePort + idx,
+                listen: '127.0.0.1',
+                protocol: 'socks',
+                settings: { udp: true }
+            })))
+        : [];
+    if (tunInbounds.length) {
+        inbounds.unshift(...tunInbounds);
+    }
+    const rules = [];
+    if (xraySocks) {
+        if (enableBalancer) {
+            rules.push({ inboundTag: ['socks-in'], balancerTag: 'auto' });
+        } else {
+            rules.push(...outbounds.map((ob, idx) => ({
+                inboundTag: [`socks-in-${idx + 1}`],
+                outboundTag: ob.tag || 'proxy'
+            })));
+        }
+    }
+    if (tunInbounds.length) {
+        if (enableBalancer) {
+            rules.unshift({ inboundTag: tunInbounds.map(x => x.tag).filter(Boolean), balancerTag: 'auto' });
+        } else {
+            const tags = outbounds.map(ob => ob.tag).filter(Boolean);
+            for (let i = tunInbounds.length - 1; i >= 0; i--) {
+                const obTag = tags[i] || tags[0] || 'proxy';
+                rules.unshift({ inboundTag: [tunInbounds[i].tag], outboundTag: obTag });
+            }
+        }
+    }
+    if (!rules.length) {
+        throw new Error('Xray: at least one inbound (TUN or SOCKS) is required');
+    }
     const routing = enableBalancer
         ? {
             rules,
