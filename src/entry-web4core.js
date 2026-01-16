@@ -3,6 +3,7 @@ import './parseuri.min.js';
 import {
   buildBeansFromInput,
   computeTag,
+  getAllowedCoreProtocols,
   validateBean,
 } from './main.js';
 
@@ -18,6 +19,7 @@ globalThis.web4core = Object.assign({}, globalThis.web4core || {}, {
   buildBeansFromInput,
   validateBean,
   computeTag,
+  getAllowedCoreProtocols,
   buildSingBoxOutbound,
   buildSingBoxConfig,
   buildXrayOutbound,

@@ -164,6 +164,7 @@ function parseWireGuardConf(confText, nameHint) {
         wireguard: {
             ip: ipv4 || '',
             ipv6: ipv6 || '',
+            addresses: Array.isArray(iface.addresses) ? iface.addresses.slice() : [],
             privateKey: iface.privateKey || '',
             publicKey: peer0.publicKey || (chosenPeer.publicKey || ''),
             preSharedKey: peer0.preSharedKey || (chosenPeer.preSharedKey || ''),

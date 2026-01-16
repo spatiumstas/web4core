@@ -27,8 +27,10 @@ function toYAML(obj, indent = 0) {
     }
     if (obj && typeof obj === 'object') {
         const lines = [];
+        const comments = (obj.__comments && typeof obj.__comments === 'object') ? obj.__comments : null;
         for (const [k, v] of Object.entries(obj)) {
             if (v === undefined) continue;
+            if (k === '__comments') continue;
             if (v && typeof v === 'object') {
                 const child = toYAML(v, indent + 1);
                 lines.push(space + k + ':');
@@ -37,6 +39,9 @@ function toYAML(obj, indent = 0) {
                 }
             } else {
                 lines.push(space + k + ': ' + toYamlScalar(v, k));
+                if (comments && typeof comments[k] === 'string' && comments[k].trim()) {
+                    lines.push(space + '# ' + comments[k].trim());
+                }
             }
         }
         return lines.join('\n');
@@ -95,11 +100,11 @@ function overlayMihomoYaml(baseYamlText, proxies, groups, providers, rules, list
     if (Array.isArray(listeners) && listeners.length > 0) {
         upsertSection(lines, 'listeners', listeners);
 
-        const hasMixedListener = listeners.some(
-            l => l && typeof l === 'object' && String(l.type || '').toLowerCase() === 'mixed'
+        const hasSocksListener = listeners.some(
+            l => l && typeof l === 'object' && String(l.type || '').toLowerCase() === 'socks'
         );
 
-        if (hasMixedListener) {
+        if (hasSocksListener) {
             const mixedPortIndex = lines.findIndex(l => /^mixed-port\s*:/i.test(l));
             if (mixedPortIndex !== -1) {
                 lines.splice(mixedPortIndex, 1);
@@ -150,13 +155,12 @@ function buildMihomoYaml(proxies, groups, providers, rules, listeners, opts) {
         const mode = (tunOpt && typeof tunOpt === 'object' && tunOpt.mode) ? String(tunOpt.mode) : 'tun';
         if (mode === 'listeners') {
             const buildTunListener = (idx, proxyName) => {
-                const base = 19819;
                 const offset = idx * 4 + 1;
                 const oct3 = Math.floor(offset / 256);
                 const oct4 = offset % 256;
-                const inet4 = `198.${base % 256}.${oct3}.${oct4}/30`;
+                const inet4 = `198.19.${oct3}.${oct4}/30`;
                 const out = {
-                    name: idx === 0 ? 'mihomo-tun' : `mihomo-tun-${idx}`,
+                    name: `mihomo-tun-${idx + 1}`,
                     type: 'tun',
                     device: `mitun${idx}`,
                     stack: 'gvisor',
@@ -171,24 +175,27 @@ function buildMihomoYaml(proxies, groups, providers, rules, listeners, opts) {
             const tunListeners = [];
             const proxyList = Array.isArray(proxies) ? proxies : [];
             const providerKeys = (providers && typeof providers === 'object') ? Object.keys(providers) : [];
-            let idx = 0;
 
+            const targets = [];
             if (providerKeys.length > 0) {
                 if (providerKeys.length > 1) {
-                    providerKeys.forEach(pn => pn && tunListeners.push(buildTunListener(idx++, `SUB-${pn}`)));
+                    providerKeys.forEach(pn => pn && targets.push(`SUB-${pn}`));
                 } else {
                     const fastestGroup = Array.isArray(groups)
                         ? groups.find(g => g?.type === 'url-test' && Array.isArray(g.use))
                         : null;
-                    tunListeners.push(buildTunListener(idx++, fastestGroup?.name || ''));
+                    const name = (fastestGroup && fastestGroup.name) ? fastestGroup.name : 'PROXY';
+                    targets.push(name);
                 }
-                proxyList.forEach(p => p?.name && tunListeners.push(buildTunListener(idx++, p.name)));
+                proxyList.forEach(p => p?.name && targets.push(p.name));
             } else {
-                tunListeners.push(buildTunListener(0, ''));
-                if (proxyList.length > 1) {
-                    proxyList.forEach((p, i) => p?.name && tunListeners.push(buildTunListener(i + 1, p.name)));
-                }
+                proxyList.forEach(p => p?.name && targets.push(p.name));
             }
+
+            targets.forEach((name, idx) => {
+                tunListeners.push(buildTunListener(idx, name));
+            });
+
             const merged = Array.isArray(listeners) ? listeners.slice() : [];
             merged.push(...tunListeners);
             listeners = merged;

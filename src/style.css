@@ -42,7 +42,7 @@ header {
 
 header pre {
     display: grid;
-    font-size: max(0.68rem, 1.9vmin);
+    font-size: 1.5rem;
     justify-content: center;
     align-content: center;
     text-align: center;
@@ -129,7 +129,6 @@ label {
 .api-link:hover {
     opacity: 1;
     color: var(--primary);
-    text-decoration: underline;
 }
 
 .api-link:focus-visible {
@@ -146,13 +145,13 @@ label {
     max-width: none;
 }
 
-.settings-toggle {
-    border-radius: 999px;
-    border: 1px solid var(--border);
+.chevron-toggle {
+    border-radius: 10px;
+    border: none;
     background: transparent;
     color: var(--text);
     height: 40px;
-    padding: 0 14px;
+    padding: 0 6px;
     font-size: 13px;
     cursor: pointer;
     display: inline-flex;
@@ -161,8 +160,21 @@ label {
     white-space: nowrap;
 }
 
-.settings-toggle:hover {
-    border-color: var(--primary);
+.chevron-toggle svg {
+    transition: transform .15s ease;
+}
+
+.chevron-toggle[aria-expanded="true"] svg {
+    transform: rotate(180deg);
+}
+
+.chevron-toggle:hover {
+    color: var(--primary);
+    background: rgba(55, 157, 216, .06);
+}
+
+.chevron-toggle:focus-visible {
+    outline: 0;
     box-shadow: 0 0 0 3px rgba(55, 157, 216, .15);
 }
 
@@ -173,7 +185,7 @@ label {
     max-height: 260px;
     opacity: 1;
     transform: translateY(0);
-    transition: max-height .3s ease-in-out, opacity .3s ease-in-out, transform .3s ease-in-out;
+    transition: max-height .18s ease-in-out, opacity .18s ease-in-out, transform .18s ease-in-out;
     padding: 0 20px;
 }
 
@@ -209,6 +221,82 @@ label {
 
 #asciiHeader {
     cursor: pointer;
+    position: relative;
+}
+
+.api-link--header {
+    position: absolute;
+    right: 18px;
+    bottom: 12px;
+    transform: none;
+    padding: 6px 10px;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, .25);
+    backdrop-filter: blur(6px);
+}
+
+@media (max-width: 520px) {
+    .api-link--header {
+        bottom: 10px;
+        right: 12px;
+    }
+}
+
+.snowfall {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    pointer-events: none;
+    z-index: 70;
+    overflow: hidden;
+}
+
+.snowfall__flake {
+    position: absolute;
+    top: -12px;
+    border-radius: 999px;
+    --snowfall-sway: 20px;
+    --snowfall-size: 16px;
+    --snowfall-opacity: 0.7;
+    width: var(--snowfall-size);
+    height: var(--snowfall-size);
+    opacity: var(--snowfall-opacity);
+    background: transparent;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    will-change: transform;
+    animation-name: snowfall-float;
+    animation-timing-function: linear;
+    animation-iteration-count: infinite;
+}
+
+.snowfall__glyph {
+    font-size: var(--snowfall-size);
+    line-height: 1;
+    color: rgba(255, 255, 255, 0.95);
+    font-family: Arial, sans-serif;
+    text-shadow: 0 0 2px rgba(0, 0, 0, 0.25);
+}
+
+@keyframes snowfall-float {
+    0% {
+        transform: translate3d(0, -20px, 0);
+    }
+    50% {
+        transform: translate3d(var(--snowfall-sway, 20px), 50vh, 0);
+    }
+    100% {
+        transform: translate3d(0, calc(100vh + 40px), 0);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .snowfall {
+        display: none;
+    }
 }
 
 .input, select, textarea {
@@ -276,7 +364,7 @@ select.input-error {
 }
 
 #links {
-    height: 150px;
+    height: 165px;
     scrollbar-width: none;
     -ms-overflow-style: none;
     resize: vertical;
@@ -341,6 +429,8 @@ input[type="submit"][disabled] {
 }
 
 .core-toggle {
+    --core-count: 3;
+    --core-index: 0;
     position: relative;
     width: 100%;
     max-width: calc(var(--form-max) - 120px);
@@ -348,7 +438,7 @@ input[type="submit"][disabled] {
     border-radius: 999px;
     border: 1px solid var(--border);
     display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-columns: repeat(var(--core-count), 1fr);
     align-items: center;
     user-select: none;
     -webkit-tap-highlight-color: transparent;
@@ -372,20 +462,12 @@ input[type="submit"][disabled] {
     z-index: 1;
     top: 2px;
     bottom: 2px;
-    width: calc(33.333% - 4px);
+    width: calc((100% / var(--core-count)) - 4px);
     border-radius: 999px;
     background: rgba(55, 157, 216, 0.25);
     border: 1px solid var(--primary);
     transition: left .2s ease;
-    left: 2px;
-}
-
-.core-toggle[data-core="xray"] .knob {
-    left: calc(33.333% + 2px);
-}
-
-.core-toggle[data-core="mihomo"] .knob {
-    left: calc(66.666% + 2px);
+    left: calc((100% / var(--core-count)) * var(--core-index) + 2px);
 }
 
 .custom-checkbox {
@@ -552,6 +634,7 @@ input[type="submit"][disabled] {
 
     header pre {
         margin: 0;
+        font-size: 0.65rem;
     }
 
     main.container {
@@ -571,7 +654,7 @@ input[type="submit"][disabled] {
     .core-toggle .knob {
         top: 3px;
         bottom: 3px;
-        width: calc(33.333% - 6px);
+        width: calc((100% / var(--core-count)) - 6px);
     }
 
     .input {

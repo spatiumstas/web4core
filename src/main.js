@@ -26,6 +26,13 @@ function tryJSON(s) {
     }
 }
 
+function takeBase64Prefix(s) {
+    const t = String(s || '').trim();
+    if (!t) return '';
+    const m = t.match(/^[A-Za-z0-9+/=_-]+/);
+    return m ? m[0] : t;
+}
+
 function isHttpUrl(s) {
     try {
         const u = parseUrl((s || '').trim());
@@ -73,6 +80,7 @@ const SUPPORTED_SCHEMES = [
     'vmess',
     'vless',
     'trojan',
+    'anytls',
     'ss',
     'socks',
     'socks4',
@@ -104,6 +112,30 @@ const PUBLIC_CORS_FALLBACKS = [
     (x) => 'https://sub.web2core.workers.dev/?url=' + encodeURIComponent(x),
     (x) => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(x)
 ];
+
+const CORE_PROTOCOL_SUPPORT = {
+    singbox: {
+        base: ['vmess', 'vless', 'trojan', 'ss', 'socks', 'http', 'hy2', 'tuic', 'anytls', 'wireguard'],
+        extendedOnly: ['mieru', 'sdns'],
+    },
+    xray: {
+        base: ['vmess', 'vless', 'trojan', 'ss', 'socks', 'http', 'hy2'],
+    },
+    mihomo: {
+        base: ['vmess', 'vless', 'trojan', 'ss', 'socks', 'http', 'hy2', 'tuic', 'wireguard'],
+    }
+};
+
+function getAllowedCoreProtocols(core, options) {
+    const c = String(core || '').toLowerCase();
+    const cfg = CORE_PROTOCOL_SUPPORT[c];
+    if (!cfg) return [];
+    const useExtended = !!(options && options.useExtended);
+    if (c === 'singbox' && useExtended && Array.isArray(cfg.extendedOnly)) {
+        return Array.from(new Set([...(cfg.base || []), ...cfg.extendedOnly]));
+    }
+    return Array.from(new Set([...(cfg.base || [])]));
+}
 
 function splitCSV(str) {
     return (str || '').split(',').map(s => safeDecodeURIComponent(s.trim())).filter(Boolean);
@@ -249,12 +281,16 @@ function validateBean(bean) {
             requireHost();
             requirePort();
             if (!bean.auth?.uuid) throw new Error('vmess missing UUID');
-            if (!isValidUuid(bean.auth.uuid)) throw new Error('vmess invalid UUID');
             break;
         case 'trojan':
             requireHost();
             requirePort();
             if (!bean.auth?.password) throw new Error('trojan: missing password');
+            break;
+        case 'anytls':
+            requireHost();
+            requirePort();
+            if (!bean.auth?.password) throw new Error('anytls: missing password');
             break;
         case 'ss':
             requireHost();
@@ -358,6 +394,7 @@ function parseLink(input) {
     if (scheme === 'vmess') return parseVMess(trimmed);
     if (scheme === 'vless') return parseVLESS(trimmed);
     if (scheme === 'trojan') return parseTrojan(trimmed);
+    if (scheme === 'anytls') return parseAnyTLS(trimmed);
     if (scheme === 'ss') return parseSS(trimmed);
     if (scheme.startsWith('socks')) return parseSocksHttp(trimmed);
     if (scheme === 'http' || scheme === 'https') return parseSocksHttp(trimmed);
@@ -427,6 +464,33 @@ function parseTrojan(urlStr) {
         udpOverTcp: q.get('udp-over-tcp') === '1' || q.get('udp-over-tcp') === 'true',
         ipVersion: q.get('ip-version') || ''
     };
+    bean.stream = normalizeStream(bean.stream, bean.host);
+    return bean;
+}
+
+function parseAnyTLS(urlStr) {
+    const u = parseUrl(urlStr);
+    if (u.protocol !== 'anytls:') throw new Error('A anytls:// link is required');
+    const q = getQuery(u);
+    const pwd = safeDecodeURIComponent(u.username || '').trim() || (q.get('password') || '').trim();
+    const bean = {
+        proto: 'anytls',
+        host: u.hostname,
+        port: asInt(u.port, 443),
+        name: safeDecodeURIComponent(u.hash.replace('#', '')),
+        auth: { password: pwd },
+        stream: buildStreamFromQuery(q, false),
+        udp: q.get('udp') === '1' || q.get('udp') === 'true',
+        udpOverTcp: q.get('udp-over-tcp') === '1' || q.get('udp-over-tcp') === 'true',
+        ipVersion: q.get('ip-version') || ''
+    };
+    if (!bean.stream || typeof bean.stream !== 'object') bean.stream = {};
+    bean.stream.network = 'tcp';
+    bean.stream.headerType = '';
+    bean.stream.host = '';
+    bean.stream.path = '';
+    bean.stream.authority = '';
+    bean.stream.security = 'tls';
     bean.stream = normalizeStream(bean.stream, bean.host);
     return bean;
 }
@@ -504,9 +568,35 @@ function parseVLESS(urlStr) {
 
 function parseVMess(urlStr) {
     const payloadRaw = urlStr.slice('vmess://'.length);
-    const payload = (payloadRaw || '').split('#')[0].split('?')[0];
-    const decoded = decodeBase64Url(payload || '');
-    const obj = decoded ? tryJSON(decoded) : null;
+    let payload = (payloadRaw || '').split('#')[0].split('?')[0];
+    const tryDecode = (s) => {
+        const decoded = decodeBase64Url(s || '');
+        const obj = decoded ? tryJSON(decoded) : null;
+        return obj;
+    };
+    const candidates = [];
+    const push = (x) => {
+        const v = String(x || '');
+        if (!v) return;
+        if (!candidates.includes(v)) candidates.push(v);
+    };
+    push(payload);
+    push(takeBase64Prefix(payload));
+
+    let obj = null;
+    for (let i = 0; i < candidates.length && !obj; i++) {
+        const cand = candidates[i];
+        obj = tryDecode(cand);
+        if (obj) break;
+
+        const lastEq = cand.lastIndexOf('=');
+        if (lastEq !== -1 && lastEq < cand.length - 1) {
+            push(cand.slice(0, lastEq + 1));
+        }
+        for (let cut = cand.lastIndexOf('/'); cut > 0; cut = cand.lastIndexOf('/', cut - 1)) {
+            push(cand.slice(0, cut));
+        }
+    }
     if (obj) {
         const net = (obj.net || '').toLowerCase();
         const type = (net || 'tcp');
@@ -653,7 +743,8 @@ function parseHysteria2(urlStr) {
             hopInterval: (q.get('hop_interval') || ''),
             alpn: q.get('alpn') || 'h3',
             sni: q.get('sni') || '',
-            allowInsecure: ['1', 'true'].includes((q.get('insecure') || '').toLowerCase())
+            allowInsecure: ['1', 'true'].includes((q.get('insecure') || '').toLowerCase()),
+            congestion: q.get('congestion') || ''
         }
     };
 }
@@ -801,6 +892,7 @@ function buildStreamFromQuery(q, isTrojan) {
     const security = (q.get('security') || (isTrojan ? 'tls' : '')).toLowerCase().replace('reality', 'tls').replace('none', '');
     const sni = q.get('sni') || q.get('peer') || '';
     const authority = q.get('authority') || '';
+    const grpcUserAgent = q.get('grpc-user-agent') || '';
     const alpn = splitCSV(q.get('alpn') || '');
     const aiRaw = (q.get('allowInsecure') || q.get('insecure') || '').toLowerCase();
     const allowInsecure = ['1', 'true', 'yes'].includes(aiRaw);
@@ -816,6 +908,7 @@ function buildStreamFromQuery(q, isTrojan) {
         security,
         sni,
         authority,
+        grpcUserAgent,
         alpn,
         allowInsecure,
         fp,
@@ -898,6 +991,8 @@ export {
     FETCH_INIT,
     PUBLIC_CORS_FALLBACKS,
     computeTag,
+    CORE_PROTOCOL_SUPPORT,
+    getAllowedCoreProtocols,
     validateBean,
     buildBeansFromInput,
     parseTunSpec,

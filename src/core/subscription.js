@@ -26,11 +26,26 @@ function normalizeSubscriptionBody(raw) {
     const t = (raw || '').trim();
     if (!t) return '';
     const tryDecode = (s) => {
-        try {
-            return decodeBase64Url(s);
-        } catch {
-            return '';
+        const input = String(s || '').trim();
+        if (!input) return '';
+        const candidates = [];
+        const push = (x) => {
+            const v = String(x || '');
+            if (!v) return;
+            if (!candidates.includes(v)) candidates.push(v);
+        };
+        push(input);
+        const m = input.match(/^[A-Za-z0-9+/=_-]+/);
+        if (m) push(m[0]);
+        const lastEq = input.lastIndexOf('=');
+        if (lastEq !== -1 && lastEq < input.length - 1) {
+            push(input.slice(0, lastEq + 1));
         }
+        for (const cand of candidates) {
+            const out = decodeBase64Url(cand);
+            if (out) return out;
+        }
+        return '';
     };
     let body = t;
     const dec1 = tryDecode(t);

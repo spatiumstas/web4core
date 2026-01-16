@@ -1,15 +1,19 @@
-import { buildBeansFromInput, computeTag, validateBean } from './main.js';
-import { buildSingBoxConfig, buildSingBoxOutbound } from './core/singbox.js';
+import { buildBeansFromInput, computeTag, getAllowedCoreProtocols, validateBean } from './main.js';
+import { buildSingBoxConfig, buildSingBoxOutbound, buildSingBoxWireGuardEndpoint } from './core/singbox.js';
 import { buildXrayConfig, buildXrayOutbound } from './core/xray.js';
 import { buildMihomoConfig, buildMihomoSubscriptionConfig } from './core/mihomo.js';
 import { buildMihomoYaml } from './core/yaml.js';
 
-function assertNoProtocols(beans, list, label) {
-  if (!Array.isArray(list) || list.length === 0) return;
-  const unsupported = beans.filter((b) => list.includes(b?.proto));
-  if (unsupported.length) {
-    const names = Array.from(new Set(unsupported.map((b) => b.proto))).join(', ');
-    throw new Error(`${label} does not support: ${names}`);
+function assertCoreSupports(beans, core, label, options) {
+  const allowed = new Set(getAllowedCoreProtocols(core, options));
+  const unsupported = new Set();
+  for (const b of (Array.isArray(beans) ? beans : [])) {
+    const p = b?.proto;
+    if (!p) continue;
+    if (!allowed.has(p)) unsupported.add(p);
+  }
+  if (unsupported.size) {
+    throw new Error(`${label} does not support: ${Array.from(unsupported).join(', ')}`);
   }
 }
 
@@ -69,8 +73,9 @@ export function buildFromRequest(req) {
 
   allBeans.forEach(validateBean);
 
-  if (core === 'xray') assertNoProtocols(allBeans, ['hy2', 'tuic', 'mieru', 'sdns', 'wireguard'], 'Xray');
-  if (core === 'mihomo') assertNoProtocols(allBeans, ['mieru', 'sdns'], 'Mihomo');
+  if (core === 'xray' || core === 'mihomo') {
+    assertCoreSupports(allBeans, core, core === 'xray' ? 'Xray' : 'Mihomo', options);
+  }
 
   if (core === 'singbox') {
     const useExtended = !!options.useExtended;
@@ -80,9 +85,14 @@ export function buildFromRequest(req) {
     }
 
     const dnsBeans = useExtended ? allBeans.filter((b) => b.proto === 'sdns') : [];
-    const outboundBeans = allBeans.filter((b) => b.proto !== 'sdns');
-
+    const wgBeans = allBeans.filter((b) => b.proto === 'wireguard');
+    const outboundBeans = allBeans.filter((b) => b.proto !== 'sdns' && b.proto !== 'wireguard');
     const used = new Set();
+    const endpoints = wgBeans.map((b) => {
+      const tag = computeTag(b, used);
+      return Object.assign({ tag }, buildSingBoxWireGuardEndpoint(Object.assign({}, b, { name: tag })));
+    });
+
     const outbounds = outboundBeans.map((b) => {
       const ob = buildSingBoxOutbound(b, { useExtended: !!useExtended });
       const tag = computeTag(b, used);
@@ -104,6 +114,7 @@ export function buildFromRequest(req) {
       useExtended: !!useExtended,
       androidMode: !!options.androidMode,
       dnsBeans,
+      endpoints,
     });
 
     return { kind: 'json', data: cfg };
@@ -146,7 +157,7 @@ export function buildFromRequest(req) {
     if (proxyText.trim()) extraBeans.push(...buildBeansFromInput(proxyText));
     if (wgBeans.length) extraBeans.push(...wgBeans);
     extraBeans.forEach(validateBean);
-    assertNoProtocols(extraBeans, ['mieru', 'sdns'], 'Mihomo');
+    assertCoreSupports(extraBeans, core, 'Mihomo', options);
 
     const cfg = buildMihomoSubscriptionConfig(subUrls, extraBeans, { perProxyPort });
     const yaml = buildMihomoYaml(cfg.proxies, cfg.groups, cfg.providers, cfg.rules, cfg.listeners, {

@@ -3,55 +3,98 @@ import { asInt, URLTEST, URLTEST_INTERVAL } from '../main.js';
 function buildXrayOutbound(bean) {
     const s = bean.stream || {};
     const network = s.network || 'tcp';
-    const streamSettings = { network: (network === 'http' || network === 'h2') ? 'xhttp' : network };
-    const hasReality = !!(s.reality && s.reality.pbk);
-    const sec = hasReality ? 'reality' : (s.security === 'tls' ? 'tls' : '');
-    if (sec === 'tls') {
-        streamSettings.security = 'tls';
-        streamSettings.tlsSettings = {};
-        if (s.sni) streamSettings.tlsSettings.serverName = s.sni;
-        if (s.alpn && s.alpn.length) streamSettings.tlsSettings.alpn = s.alpn;
-        if (s.fp) streamSettings.tlsSettings.fingerprint = s.fp;
-        if (s.allowInsecure) streamSettings.tlsSettings.allowInsecure = true;
-    } else if (sec === 'reality') {
-        streamSettings.security = 'reality';
-        streamSettings.realitySettings = { show: false, publicKey: s.reality.pbk };
-        if (s.reality.sid) streamSettings.realitySettings.shortId = s.reality.sid;
-        if (s.sni) streamSettings.realitySettings.serverName = s.sni;
-        if (s.fp) streamSettings.realitySettings.fingerprint = s.fp;
-    }
-    if (streamSettings.network === 'ws') {
-        streamSettings.wsSettings = {};
-        if (s.host) streamSettings.wsSettings.headers = { Host: s.host };
-        if (s.path) streamSettings.wsSettings.path = s.path;
-        if (s.wsEarlyData) {
-            let maxEarlyData = 0;
-            let earlyDataHeaderName = '';
-            if (typeof s.wsEarlyData === 'object') {
-                maxEarlyData = asInt(s.wsEarlyData.max_early_data ?? s.wsEarlyData.maxEarlyData, 0);
-                earlyDataHeaderName = s.wsEarlyData.early_data_header_name || s.wsEarlyData.earlyDataHeaderName || '';
-            } else {
-                maxEarlyData = asInt(s.wsEarlyData, 0);
+    let streamSettings = {network: (network === 'http' || network === 'h2') ? 'xhttp' : network};
+
+    if (bean.proto === 'hy2') {
+        const h = bean.hysteria2 || {};
+        const alpn = (h.alpn || '').split(',').map(x => x.trim()).filter(Boolean);
+        streamSettings = {
+            network: 'hysteria',
+            security: 'tls',
+            tlsSettings: {
+                serverName: h.sni || undefined,
+                alpn: alpn.length ? alpn : undefined,
+                allowInsecure: h.allowInsecure ? true : undefined,
+            },
+            hysteriaSettings: {
+                version: 2,
+                auth: bean.auth?.password || '',
             }
-            if (maxEarlyData > 0) streamSettings.wsSettings.maxEarlyData = maxEarlyData;
-            if (earlyDataHeaderName) streamSettings.wsSettings.earlyDataHeaderName = earlyDataHeaderName;
+        };
+        const congestion = (h.congestion || '').trim();
+        if (congestion) {
+            streamSettings.hysteriaSettings.congestion = congestion.toLowerCase();
         }
-    } else if (streamSettings.network === 'xhttp') {
-        streamSettings.xhttpSettings = {};
-        if (s.host) streamSettings.xhttpSettings.host = s.host;
-        if (s.path) streamSettings.xhttpSettings.path = s.path;
-        if (s.xhttpMode) streamSettings.xhttpSettings.mode = s.xhttpMode; else streamSettings.xhttpSettings.mode = 'stream-up';
-    } else if (streamSettings.network === 'grpc') {
-        streamSettings.grpcSettings = {};
-        if (s.path) streamSettings.grpcSettings.serviceName = s.path;
-        if (s.authority) streamSettings.grpcSettings.authority = s.authority;
-    } else if (streamSettings.network === 'tcp' && s.headerType === 'http') {
-        streamSettings.tcpSettings = { header: { type: 'http', request: { headers: { Host: s.host } } } };
-        if (s.path) streamSettings.tcpSettings.header.request.path = [s.path];
-    }
-    if (streamSettings.network === 'xhttp' && streamSettings.tlsSettings && Array.isArray(streamSettings.tlsSettings.alpn)) {
-        streamSettings.tlsSettings.alpn = streamSettings.tlsSettings.alpn.filter(v => (v || '').toLowerCase() !== 'http/1.1');
-        if (streamSettings.tlsSettings.alpn.length === 0) delete streamSettings.tlsSettings.alpn;
+        const hopPort = (h.hopPort || '').toString().trim();
+        const hopIntervalRaw = (h.hopInterval || '').toString().trim();
+        const hopInterval = hopIntervalRaw ? asInt((hopIntervalRaw.match(/^(\d+)/) || [])[1], 0) : 0;
+        if (hopPort || hopInterval) {
+            streamSettings.hysteriaSettings.udphop = {};
+            if (hopPort) streamSettings.hysteriaSettings.udphop.port = hopPort;
+            if (hopInterval) streamSettings.hysteriaSettings.udphop.interval = hopInterval;
+        }
+        if (h.obfsPassword) {
+            streamSettings.udpmasks = [{
+                type: 'salamander',
+                settings: {password: h.obfsPassword}
+            }];
+        }
+        if (streamSettings.tlsSettings) {
+            if (!streamSettings.tlsSettings.serverName) delete streamSettings.tlsSettings.serverName;
+            if (!streamSettings.tlsSettings.alpn) delete streamSettings.tlsSettings.alpn;
+            if (!streamSettings.tlsSettings.allowInsecure) delete streamSettings.tlsSettings.allowInsecure;
+            if (Object.keys(streamSettings.tlsSettings).length === 0) delete streamSettings.tlsSettings;
+        }
+    } else {
+        const hasReality = !!(s.reality && s.reality.pbk);
+        const sec = hasReality ? 'reality' : (s.security === 'tls' ? 'tls' : '');
+        if (sec === 'tls') {
+            streamSettings.security = 'tls';
+            streamSettings.tlsSettings = {};
+            if (s.sni) streamSettings.tlsSettings.serverName = s.sni;
+            if (s.alpn && s.alpn.length) streamSettings.tlsSettings.alpn = s.alpn;
+            if (s.fp) streamSettings.tlsSettings.fingerprint = s.fp;
+            if (s.allowInsecure) streamSettings.tlsSettings.allowInsecure = true;
+        } else if (sec === 'reality') {
+            streamSettings.security = 'reality';
+            streamSettings.realitySettings = {show: false, publicKey: s.reality.pbk};
+            if (s.reality.sid) streamSettings.realitySettings.shortId = s.reality.sid;
+            if (s.sni) streamSettings.realitySettings.serverName = s.sni;
+            if (s.fp) streamSettings.realitySettings.fingerprint = s.fp;
+        }
+        if (streamSettings.network === 'ws') {
+            streamSettings.wsSettings = {};
+            if (s.host) streamSettings.wsSettings.headers = {Host: s.host};
+            if (s.path) streamSettings.wsSettings.path = s.path;
+            if (s.wsEarlyData) {
+                let maxEarlyData = 0;
+                let earlyDataHeaderName = '';
+                if (typeof s.wsEarlyData === 'object') {
+                    maxEarlyData = asInt(s.wsEarlyData.max_early_data ?? s.wsEarlyData.maxEarlyData, 0);
+                    earlyDataHeaderName = s.wsEarlyData.early_data_header_name || s.wsEarlyData.earlyDataHeaderName || '';
+                } else {
+                    maxEarlyData = asInt(s.wsEarlyData, 0);
+                }
+                if (maxEarlyData > 0) streamSettings.wsSettings.maxEarlyData = maxEarlyData;
+                if (earlyDataHeaderName) streamSettings.wsSettings.earlyDataHeaderName = earlyDataHeaderName;
+            }
+        } else if (streamSettings.network === 'xhttp') {
+            streamSettings.xhttpSettings = {};
+            if (s.host) streamSettings.xhttpSettings.host = s.host;
+            if (s.path) streamSettings.xhttpSettings.path = s.path;
+            if (s.xhttpMode) streamSettings.xhttpSettings.mode = s.xhttpMode; else streamSettings.xhttpSettings.mode = 'stream-up';
+        } else if (streamSettings.network === 'grpc') {
+            streamSettings.grpcSettings = {};
+            if (s.path) streamSettings.grpcSettings.serviceName = s.path;
+            if (s.authority) streamSettings.grpcSettings.authority = s.authority;
+        } else if (streamSettings.network === 'tcp' && s.headerType === 'http') {
+            streamSettings.tcpSettings = {header: {type: 'http', request: {headers: {Host: s.host}}}};
+            if (s.path) streamSettings.tcpSettings.header.request.path = [s.path];
+        }
+        if (streamSettings.network === 'xhttp' && streamSettings.tlsSettings && Array.isArray(streamSettings.tlsSettings.alpn)) {
+            streamSettings.tlsSettings.alpn = streamSettings.tlsSettings.alpn.filter(v => (v || '').toLowerCase() !== 'http/1.1');
+            if (streamSettings.tlsSettings.alpn.length === 0) delete streamSettings.tlsSettings.alpn;
+        }
     }
     let outbound = null;
     if (bean.proto === 'vmess') {
@@ -91,7 +134,17 @@ function buildXrayOutbound(bean) {
             s.users = [{ user: bean.socks.username, pass: bean.socks.password }];
         }
         outbound = { protocol: bean.proto, tag: (bean.name || bean.proto), settings: { servers: [s] } };
-    } else if (bean.proto === 'hy2' || bean.proto === 'tuic') {
+    } else if (bean.proto === 'hy2') {
+        outbound = {
+            protocol: 'hysteria',
+            tag: (bean.name || 'hy2'),
+            settings: {
+                version: 2,
+                address: bean.host,
+                port: bean.port || 443
+            }
+        };
+    } else if (bean.proto === 'tuic') {
         throw new Error(bean.proto + ' not supported in Xray');
     } else {
         throw new Error('Unknown protocol: ' + bean.proto);

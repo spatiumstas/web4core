@@ -63,7 +63,6 @@ function buildSingBoxOutbound(bean, opts) {
                 const hasDownload = Object.values(download).some(v => v !== '' && v !== 0);
                 if (hasDownload) {
                     t.download = {};
-                    if (download.mode) t.download.mode = download.mode;
                     if (download.host) t.download.host = download.host;
                     if (download.path) t.download.path = download.path;
                     if (download.x_padding_bytes) t.download.x_padding_bytes = download.x_padding_bytes;
@@ -120,7 +119,14 @@ function buildSingBoxOutbound(bean, opts) {
         server_port: bean.port,
         method: bean.ss.method,
         password: bean.ss.password
-    }; else if (bean.proto === 'socks' || bean.proto === 'http') {
+    }; else if (bean.proto === 'anytls') {
+        outbound = {
+            type: 'anytls',
+            server: bean.host,
+            server_port: bean.port || 443,
+            password: bean.auth.password
+        };
+    } else if (bean.proto === 'socks' || bean.proto === 'http') {
         outbound = { type: bean.proto, server: bean.host, server_port: bean.port };
         if (bean.socks?.type === 'socks4') outbound.version = '4';
         if (bean.socks?.username && bean.socks?.password) {
@@ -134,7 +140,15 @@ function buildSingBoxOutbound(bean, opts) {
         if (bean.hysteria2?.obfsPassword) {
             outbound.obfs = { type: 'salamander', password: bean.hysteria2.obfsPassword };
         }
-        if (bean.hysteria2?.hopPort) outbound.hop_ports = bean.hysteria2.hopPort;
+        if (bean.hysteria2?.hopPort) {
+            const raw = String(bean.hysteria2.hopPort || '').trim();
+            const parts = raw.split(',').map(s => s.trim()).filter(Boolean);
+            const ranges = parts.map(p => p.includes('-') ? p.replace('-', ':') : p);
+            if (ranges.length) {
+                outbound.server_ports = ranges;
+                delete outbound.server_port;
+            }
+        }
         if (bean.hysteria2?.hopInterval) {
             const hi = String(bean.hysteria2.hopInterval).trim();
             const hasUnit = /(?:ms|s|m|h|d)$/i.test(hi);
@@ -239,15 +253,85 @@ function buildDNSServers(dnsBeans) {
     return servers;
 }
 
+function buildSingBoxWireGuardEndpoint(bean) {
+    if (!bean || bean.proto !== 'wireguard') throw new Error('wireguard bean required');
+    const wg = bean.wireguard || {};
+
+    const mapPeer = (p) => {
+        if (!p || typeof p !== 'object') return null;
+        const out = {
+            address: p.server || '',
+            port: p.port || 0,
+        };
+        if (p.publicKey) out.public_key = p.publicKey;
+        if (p.preSharedKey) out.pre_shared_key = p.preSharedKey;
+        if (Array.isArray(p.allowedIPs) && p.allowedIPs.length) out.allowed_ips = p.allowedIPs;
+        if (Number.isFinite(wg.persistentKeepalive) && wg.persistentKeepalive > 0) {
+            out.persistent_keepalive_interval = wg.persistentKeepalive;
+        }
+        if (p.reserved !== undefined) out.reserved = p.reserved;
+        if (!out.address || !out.port) return null;
+        return out;
+    };
+
+    const addr = [];
+    if (Array.isArray(wg.addresses) && wg.addresses.length) {
+        addr.push(...wg.addresses);
+    } else {
+        if (wg.ip) addr.push(String(wg.ip).includes('/') ? wg.ip : `${wg.ip}/32`);
+        if (wg.ipv6) addr.push(String(wg.ipv6).includes('/') ? wg.ipv6 : `${wg.ipv6}/128`);
+    }
+
+    const peers = Array.isArray(wg.peers) && wg.peers.length ? wg.peers : [{
+        server: bean.host,
+        port: bean.port,
+        publicKey: wg.publicKey,
+        preSharedKey: wg.preSharedKey,
+        allowedIPs: wg.allowedIPs,
+        reserved: wg.reserved
+    }];
+
+    const ep = {
+        type: 'wireguard',
+        tag: bean.name || 'wireguard',
+        system: false,
+        mtu: Number.isFinite(wg.mtu) ? wg.mtu : undefined,
+        address: addr,
+        private_key: wg.privateKey,
+        peers: peers.map(mapPeer).filter(Boolean),
+    };
+    if (ep.mtu === undefined) delete ep.mtu;
+    return ep;
+}
+
 function buildSingBoxConfig(outboundsWithTags, opts) {
-    const tags = outboundsWithTags.map(ob => ob.tag);
-    const inbounds = buildSingBoxInbounds(opts);
+    const effectiveOpts = Object.assign({}, opts || {});
+    const endpointTags = (effectiveOpts && Array.isArray(effectiveOpts.endpoints))
+        ? effectiveOpts.endpoints.map(e => e?.tag).filter(Boolean)
+        : [];
+    const tags = [...outboundsWithTags.map(ob => ob.tag), ...endpointTags];
+    if (effectiveOpts.addTun && effectiveOpts.perTunMixed && !String(effectiveOpts.tunName || '').trim()) {
+        const count = tags.length;
+        if (count > 1 && !effectiveOpts.androidMode) {
+            const names = Array.from({ length: count }, (_, i) => `singtun${i}`);
+            effectiveOpts.tunName = names.map(n => `${n}:select`).join(',');
+        }
+    }
+
+    const inbounds = buildSingBoxInbounds(effectiveOpts);
     const managementOutbounds = [];
     const routeRules = [];
     const hasMany = tags.length > 1;
-    const tunSpecs = parseTunSpec(opts?.tunName || '');
+    const tunSpecs = parseTunSpec(effectiveOpts?.tunName || '');
+    const tunIndexByName = new Map(tunSpecs.map((t, idx) => [t.name, idx]));
     const inboundTagFor = (name) => (tunSpecs.length > 1 ? `tun-in-${name}` : 'tun-in');
     const mixedInboundTagFor = (name) => (tunSpecs.length > 1 ? `mixed-in-${name}` : 'mixed-in');
+    const defaultOutboundForTun = (name) => {
+        if (!tags.length) return 'direct';
+        const idx = tunIndexByName.has(name) ? tunIndexByName.get(name) : 0;
+        const safeIdx = Number.isFinite(idx) && idx >= 0 ? idx : 0;
+        return tags[safeIdx % tags.length] || (tags[0] || 'direct');
+    };
     let createdGlobalAuto = false;
     let createdGlobalSelector = false;
 
@@ -325,7 +409,7 @@ function buildSingBoxConfig(outboundsWithTags, opts) {
         for (const name of selectNames) {
             if (hasMany) {
                 const outs = globalAutoAvailable ? ['auto', ...tags] : [...tags];
-                const def = globalAutoAvailable ? 'auto' : (tags[0] || 'direct');
+                const def = globalAutoAvailable ? defaultOutboundForTun(name) : defaultOutboundForTun(name);
                 managementOutbounds.push({
                     type: 'selector',
                     tag: `select-${name}`,
@@ -340,7 +424,7 @@ function buildSingBoxConfig(outboundsWithTags, opts) {
             }
         }
 
-        if (opts.addSocks && opts.perTunMixed) {
+        if (effectiveOpts.addSocks && effectiveOpts.perTunMixed) {
             for (const name of autoNames) {
                 const onlyTag = tags[0] || 'direct';
                 routeRules.push({ inbound: mixedInboundTagFor(name), outbound: hasMany ? `auto-${name}` : onlyTag });
@@ -352,27 +436,27 @@ function buildSingBoxConfig(outboundsWithTags, opts) {
         }
     }
 
-    if (opts?.androidMode) {
+    if (effectiveOpts?.androidMode) {
         routeRules.unshift({ protocol: 'dns', action: 'hijack-dns' });
         routeRules.unshift({ action: 'sniff' });
     }
 
     routeRules.push({ ip_version: 6, outbound: 'block' });
     const outbounds = [
-        ...managementOutbounds,
-        ...outboundsWithTags,
         { tag: 'direct', type: 'direct' },
-        { tag: 'block', type: 'block' }
+        { tag: 'block', type: 'block' },
+        ...managementOutbounds,
+        ...outboundsWithTags
     ];
     const experimental = {};
-    if (!opts?.androidMode) {
+    if (!effectiveOpts?.androidMode) {
         experimental.cache_file = { enabled: true };
         experimental.clash_api = {
             external_controller: '[::]:9090',
             external_ui: 'ui',
             external_ui_download_detour: 'direct',
             access_control_allow_private_network: true,
-            secret: opts?.genClashSecret ? generateSecretHex32() : ''
+            secret: effectiveOpts?.genClashSecret ? generateSecretHex32() : ''
         };
     }
     const config = {
@@ -381,15 +465,18 @@ function buildSingBoxConfig(outboundsWithTags, opts) {
         outbounds,
         route: { rules: routeRules, final: (createdGlobalSelector ? 'select' : 'direct') }
     };
+    if (effectiveOpts && Array.isArray(effectiveOpts.endpoints) && effectiveOpts.endpoints.length > 0) {
+        config.endpoints = effectiveOpts.endpoints;
+    }
     if (Object.keys(experimental).length > 0) {
         config.experimental = experimental;
     }
 
-    const dnsServers = (opts?.useExtended ? buildDNSServers(opts?.dnsBeans || []) : []);
+    const dnsServers = (effectiveOpts?.useExtended ? buildDNSServers(effectiveOpts?.dnsBeans || []) : []);
     if (dnsServers.length > 0) {
         config.dns = { servers: dnsServers };
         config.route.default_domain_resolver = dnsServers[0]?.tag || '';
-    } else if (opts?.androidMode) {
+    } else if (effectiveOpts?.androidMode) {
         config.dns = {
             servers: [
                 {
@@ -402,12 +489,12 @@ function buildSingBoxConfig(outboundsWithTags, opts) {
         config.route.default_domain_resolver = 'local';
     }
 
-    if (opts?.androidMode) {
+    if (effectiveOpts?.androidMode) {
         config.route.auto_detect_interface = true;
         config.route.override_android_vpn = true;
     }
 
-    if (opts?.useExtended) {
+    if (effectiveOpts?.useExtended) {
         if (!config.experimental) config.experimental = {};
         config.experimental.unified_delay = { enabled: true };
     }
@@ -417,6 +504,7 @@ function buildSingBoxConfig(outboundsWithTags, opts) {
 
 export {
     buildSingBoxOutbound,
+    buildSingBoxWireGuardEndpoint,
     buildSingBoxConfig,
 };
 

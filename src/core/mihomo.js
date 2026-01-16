@@ -56,6 +56,7 @@ function buildMihomoProxy(bean) {
             obj['grpc-opts'] = {};
             if (s.path) obj['grpc-opts']['grpc-service-name'] = s.path;
             if (s.authority) obj['grpc-opts'].authority = s.authority;
+            if (s.grpcUserAgent) obj['grpc-opts']['grpc-user-agent'] = s.grpcUserAgent;
         } else if (s.network === 'tcp' && s.headerType === 'http') {
             obj.network = 'tcp';
             obj['http-opts'] = { headers: { Host: s.host }, path: [s.path].filter(Boolean) };
@@ -294,7 +295,7 @@ function buildMihomoConfig(beans, opts) {
         groups.push({
             name: 'PROXY',
             type: 'select',
-            proxies: [FASTEST_GROUP_NAME, ...names]
+            proxies: [FASTEST_GROUP_NAME]
         });
     } else {
         groups.push({ name: 'PROXY', type: 'select', proxies: names });
@@ -306,11 +307,10 @@ function buildMihomoConfig(beans, opts) {
         for (let i = 0; i < proxies.length; i++) {
             const port = basePort + i;
             listeners.push({
-                name: `mixed-${proxies[i].name}`,
-                type: 'mixed',
+                name: `socks-${proxies[i].name}`,
+                type: 'socks',
                 port: port,
-                proxy: proxies[i].name,
-                udp: true
+                proxy: proxies[i].name
             });
         }
     }
@@ -343,11 +343,17 @@ function buildMihomoSubscriptionConfig(subscriptionUrls, extraBeans, opts) {
             type: 'http',
             url: url,
             interval: 3600,
+            __comments: {
+                interval: 'Subscription refresh interval'
+            },
             'health-check': {
                 enable: true,
                 interval: 600,
                 url: URLTEST,
-                'expected-status': 204
+                'expected-status': 204,
+                __comments: {
+                    interval: 'Health-check interval'
+                }
             }
         };
         providerNames.push(providerName);
@@ -359,7 +365,11 @@ function buildMihomoSubscriptionConfig(subscriptionUrls, extraBeans, opts) {
         use: providerNames,
         url: URLTEST,
         interval: SUB_FETCH_INTERVAL,
-        tolerance: 50
+        tolerance: 50,
+        __comments: {
+            interval: 'Latency probe interval (seconds)',
+            tolerance: 'Switch threshold (ms)'
+        }
     }];
 
     if (providerNames.length > 1) {
@@ -391,23 +401,22 @@ function buildMihomoSubscriptionConfig(subscriptionUrls, extraBeans, opts) {
     const basePort = (opts && opts.basePort) || 7890;
     const listeners = [];
     if (usePerProxyPort) {
-        const buildMixedListener = (name, proxy, port) => ({
-            name: `mixed-${name}`,
-            type: 'mixed',
+        const buildSocksListener = (name, proxy, port) => ({
+            name: `socks-${name}`,
+            type: 'socks',
             port,
-            proxy,
-            udp: true
+            proxy
         });
         let portIdx = 0;
         if (providerNames.length > 1) {
             providerNames.forEach(providerName => {
-                listeners.push(buildMixedListener(`SUB-${providerName}`, `SUB-${providerName}`, basePort + portIdx++));
+                listeners.push(buildSocksListener(`SUB-${providerName}`, `SUB-${providerName}`, basePort + portIdx++));
             });
         } else {
-            listeners.push(buildMixedListener(FASTEST_GROUP_NAME, FASTEST_GROUP_NAME, basePort + portIdx++));
+            listeners.push(buildSocksListener(FASTEST_GROUP_NAME, FASTEST_GROUP_NAME, basePort + portIdx++));
         }
         extraProxies.forEach(p => {
-            listeners.push(buildMixedListener(p.name, p.name, basePort + portIdx++));
+            listeners.push(buildSocksListener(p.name, p.name, basePort + portIdx++));
         });
     }
 
