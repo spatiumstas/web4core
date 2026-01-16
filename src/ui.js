@@ -1,8 +1,6 @@
 const el = {
     coreToggle: document.getElementById('coreToggle'),
-    lblSing: document.getElementById('lblSing'),
-    lblXray: document.getElementById('lblXray'),
-    lblMihomo: document.getElementById('lblMihomo'),
+    coreItems: Array.from(document.querySelectorAll('#coreToggle .labels [data-core]')),
     outBlock: document.getElementById('outBlock'),
     errorBlock: document.getElementById('errorBlock'),
     errorText: document.getElementById('errorText'),
@@ -38,7 +36,7 @@ const el = {
     lblAndroidMode: document.getElementById('lblAndroidMode'),
     lblDetour: document.getElementById('lblDetour'),
     out: document.getElementById('out'),
-    btnSettings: document.getElementById('btnSettings'),
+    btnChevron: document.getElementById('btnChevron'),
     settingsPanel: document.getElementById('settingsPanel'),
     btnWgUpload: document.getElementById('btnWgUpload'),
     wgFile: document.getElementById('wgFile'),
@@ -78,7 +76,8 @@ const PLACEHOLDER_XRAY = [
     'trojan://...',
     'ss://...',
     'socks://...',
-    'http://user:pass@host:port'
+    'http://user:pass@host:port',
+    'hy2://...'
 ];
 const PLACEHOLDER_MIHOMO = [
     'subscription links',
@@ -165,7 +164,17 @@ function getCore() {
 function setCore(core) {
     state.core = core;
     el.coreToggle.setAttribute('data-core', core);
-    el.coreToggle.setAttribute('aria-checked', core === 'singbox');
+
+    const items = Array.isArray(el.coreItems) ? el.coreItems : [];
+    const idx = Math.max(0, items.findIndex((n) => n?.dataset?.core === core));
+    el.coreToggle.style.setProperty('--core-count', String(items.length || 3));
+    el.coreToggle.style.setProperty('--core-index', String(idx));
+    items.forEach((n, i) => {
+        const selected = n?.dataset?.core === core;
+        n.setAttribute('aria-checked', String(selected));
+        n.tabIndex = selected ? 0 : -1;
+    });
+
     const hideSing = core !== 'singbox';
     const cbTunLabel = el.cbTun?.parentElement;
     const cbSocksLabel = el.cbSocks?.parentElement;
@@ -214,40 +223,35 @@ document.addEventListener('keydown', function (e) {
     }
 });
 
-el.lblSing.addEventListener('click', (e) => {
-    e.stopPropagation();
-    setCore('singbox');
-    validateField(false);
-});
-el.lblXray.addEventListener('click', (e) => {
-    e.stopPropagation();
-    setCore('xray');
-    validateField(false);
-});
-el.lblMihomo.addEventListener('click', (e) => {
-    e.stopPropagation();
-    setCore('mihomo');
-    validateField(false);
-});
+if (el.coreToggle) {
+    el.coreToggle.addEventListener('click', (e) => {
+        const target = e.target && e.target.closest ? e.target.closest('[data-core]') : null;
+        const core = target && target.dataset ? target.dataset.core : '';
+        if (!core) return;
+        e.stopPropagation();
+        setCore(core);
+        validateField(false);
+    });
+}
 
-if (el.btnSettings && el.settingsPanel) {
+if (el.btnChevron && el.settingsPanel) {
     const STORAGE_KEY = 'settings_expanded';
 
     try {
         const saved = localStorage.getItem(STORAGE_KEY);
         if (saved === 'true') {
             el.settingsPanel.classList.remove('settings-panel--collapsed');
-            el.btnSettings.setAttribute('aria-expanded', 'true');
+            el.btnChevron.setAttribute('aria-expanded', 'true');
         } else {
             el.settingsPanel.classList.add('settings-panel--collapsed');
-            el.btnSettings.setAttribute('aria-expanded', 'false');
+            el.btnChevron.setAttribute('aria-expanded', 'false');
         }
     } catch (e) {
     }
 
-    el.btnSettings.addEventListener('click', () => {
+    el.btnChevron.addEventListener('click', () => {
         const collapsed = el.settingsPanel.classList.toggle('settings-panel--collapsed');
-        el.btnSettings.setAttribute('aria-expanded', String(!collapsed));
+        el.btnChevron.setAttribute('aria-expanded', String(!collapsed));
         try {
             localStorage.setItem(STORAGE_KEY, String(!collapsed));
         } catch (e) {
@@ -408,7 +412,7 @@ function validateField(showOutput) {
         if (!beans.length) throw new Error(MSG_NO_LINKS);
         beans.forEach(globalThis.web4core.validateBean);
 
-        assertNoProtocols(beans, getCore() === 'xray' ? ['hy2', 'tuic', 'mieru', 'sdns'] : [], 'Xray');
+        assertNoProtocols(beans, getCore() === 'xray' ? ['tuic', 'mieru', 'sdns', 'wireguard'] : [], 'Xray');
         if (getCore() === 'mihomo') assertNoProtocols(beans, ['mieru', 'sdns'], 'Mihomo');
         if (getCore() === 'mihomo') {
             const outBeans = beans.filter(b => !['mieru', 'sdns'].includes(b.proto));
@@ -644,13 +648,22 @@ el.btnDownload.addEventListener('click', () => {
 });
 
 setupCheckboxValidation();
+
+function getDefaultCore() {
+    const items = Array.isArray(el.coreItems) ? el.coreItems : [];
+    const first = items[0]?.dataset?.core || '';
+    return first;
+}
+
 try {
     const savedCore = localStorage.getItem('core');
-    if (savedCore === 'singbox' || savedCore === 'xray' || savedCore === 'mihomo') {
-        state.core = savedCore;
-    }
+    const items = Array.isArray(el.coreItems) ? el.coreItems : [];
+    const allowed = new Set(items.map((n) => n?.dataset?.core).filter(Boolean));
+    state.core = allowed.has(savedCore) ? savedCore : getDefaultCore();
 } catch (e) {
+    state.core = getDefaultCore();
 }
+
 setCore(state.core);
 updateLinksPlaceholder();
 validateField(false);
@@ -662,7 +675,43 @@ el.links.addEventListener('blur', () => {
     validateField(false);
 });
 
-if (header) header.addEventListener('click', function () {
+if (header) header.addEventListener('click', function (e) {
+    const t = e && e.target && e.target.closest ? e.target.closest('a,button,input,textarea,select,label') : null;
+    if (t) return;
     localStorage.clear();
     setTimeout(() => location.reload(), 0);
 });
+
+(function () {
+    const m = new Date().getMonth();
+    if (m !== 11 && m !== 0 && m !== 1) return;
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+    if (document.getElementById('snowfall')) return;
+
+    const r = (a, b) => Math.random() * (b - a) + a;
+    const glyphs = ['❄', '✻', '✼', '❅', '❆'];
+
+    const root = document.body.appendChild(Object.assign(document.createElement('div'), {id: 'snowfall', className: 'snowfall'}));
+    root.setAttribute('aria-hidden', 'true');
+
+    const frag = document.createDocumentFragment();
+    for (let i = 0; i < 16; i++) {
+        const flake = document.createElement('div');
+        flake.className = 'snowfall__flake';
+        flake.style.cssText =
+            `left:${r(0, 100).toFixed(2)}vw;` +
+            `animation-duration:${r(10, 20).toFixed(2)}s;` +
+            `animation-delay:${r(-14, 0).toFixed(2)}s;` +
+            `--snowfall-size:${r(10, 18).toFixed(1)}px;` +
+            `--snowfall-opacity:${r(0.35, 0.9).toFixed(2)};` +
+            `--snowfall-sway:${r(10, 28).toFixed(1)}px;`;
+
+        const glyph = document.createElement('span');
+        glyph.className = 'snowfall__glyph';
+        glyph.textContent = glyphs[Math.floor(r(0, glyphs.length))];
+
+        flake.appendChild(glyph);
+        frag.appendChild(flake);
+    }
+    root.appendChild(frag);
+})();

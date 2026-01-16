@@ -604,12 +604,12 @@ jobs:
             .filter(line => line && !line.startsWith('//') && !line.startsWith('#'))
             .filter(line => line.includes('://'));
           
-          // Filter out protocols not supported by Xray (hy2, tuic)
-          const testLinks = allTestLinks.filter(link => 
-            !link.startsWith('hy2://') && !link.startsWith('tuic://')
+          // Filter out protocols not supported by Xray (tuic)
+          const testLinks = allTestLinks.filter(link =>
+            !link.startsWith('tuic://')
           );
           
-          console.log(`Found ${testLinks.length} test links (excluding hy2/tuic for Xray)`);
+          console.log(`Found ${testLinks.length} test links (excluding tuic for Xray)`);
           
           let failedTests = 0;
           let validTests = 0;
@@ -654,7 +654,7 @@ jobs:
               // Multi-config test: combine ALL supported links into one Xray config and validate
               try {
               const selected = testLinks
-                .filter(l => !l.startsWith('hy2://') && !l.startsWith('tuic://'))
+                .filter(l => !l.startsWith('tuic://'))
                 .map(l => (sandbox.buildBeansFromInput(l) || [])[0]);
                 const used = new Set();
                 const multiOutbounds = selected.map((b, idx) => {

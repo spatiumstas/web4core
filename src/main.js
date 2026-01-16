@@ -801,6 +801,7 @@ function buildStreamFromQuery(q, isTrojan) {
     const security = (q.get('security') || (isTrojan ? 'tls' : '')).toLowerCase().replace('reality', 'tls').replace('none', '');
     const sni = q.get('sni') || q.get('peer') || '';
     const authority = q.get('authority') || '';
+    const grpcUserAgent = q.get('grpc-user-agent') || '';
     const alpn = splitCSV(q.get('alpn') || '');
     const aiRaw = (q.get('allowInsecure') || q.get('insecure') || '').toLowerCase();
     const allowInsecure = ['1', 'true', 'yes'].includes(aiRaw);
@@ -816,6 +817,7 @@ function buildStreamFromQuery(q, isTrojan) {
         security,
         sni,
         authority,
+        grpcUserAgent,
         alpn,
         allowInsecure,
         fp,

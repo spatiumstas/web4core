@@ -69,7 +69,7 @@ export function buildFromRequest(req) {
 
   allBeans.forEach(validateBean);
 
-  if (core === 'xray') assertNoProtocols(allBeans, ['hy2', 'tuic', 'mieru', 'sdns', 'wireguard'], 'Xray');
+  if (core === 'xray') assertNoProtocols(allBeans, ['tuic', 'mieru', 'sdns', 'wireguard'], 'Xray');
   if (core === 'mihomo') assertNoProtocols(allBeans, ['mieru', 'sdns'], 'Mihomo');
 
   if (core === 'singbox') {

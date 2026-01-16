@@ -56,6 +56,7 @@ function buildMihomoProxy(bean) {
             obj['grpc-opts'] = {};
             if (s.path) obj['grpc-opts']['grpc-service-name'] = s.path;
             if (s.authority) obj['grpc-opts'].authority = s.authority;
+            if (s.grpcUserAgent) obj['grpc-opts']['grpc-user-agent'] = s.grpcUserAgent;
         } else if (s.network === 'tcp' && s.headerType === 'http') {
             obj.network = 'tcp';
             obj['http-opts'] = { headers: { Host: s.host }, path: [s.path].filter(Boolean) };
