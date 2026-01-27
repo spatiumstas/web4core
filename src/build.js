@@ -169,7 +169,7 @@ export function buildFromRequest(req) {
 
   const outBeans = allBeans.filter((b) => b.proto !== 'mieru' && b.proto !== 'sdns');
   const cfg = buildMihomoConfig(outBeans, { perProxyPort });
-  const yaml = buildMihomoYaml(cfg.proxies, cfg['proxy-groups'], null, null, cfg.listeners, {
+  const yaml = buildMihomoYaml(cfg.proxies, cfg['proxy-groups'], null, cfg.rules, cfg.listeners, {
     webUI,
     tun: mihomoTunOpts,
   });

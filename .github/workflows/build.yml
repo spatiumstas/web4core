@@ -10,7 +10,7 @@ permissions:
   id-token: write
 
 jobs:
-  validate-singbox:
+  Validate-singbox:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -24,7 +24,7 @@ jobs:
       - name: Install JS deps
         run: npm ci --no-fund --no-audit
 
-      - name: Build web runtime (web4core.runtime.js)
+      - name: Build web
         run: npm run build:web
 
       - name: Setup Go
@@ -52,7 +52,7 @@ jobs:
           WG_CONF: ${{ secrets.WG_CONF }}
         run: node tools/ci/validate-singbox.js
 
-  validate-singbox-extended:
+  Validate-singbox-extended:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -66,7 +66,7 @@ jobs:
       - name: Install JS deps
         run: npm ci --no-fund --no-audit
 
-      - name: Build web runtime (web4core.runtime.js)
+      - name: Build web
         run: npm run build:web
 
       - name: Setup Go
@@ -92,12 +92,13 @@ jobs:
       - name: Run Extended Configs with sing-box extended
         env:
           CONFIGS: ${{ secrets.CONFIGS }}
+          WG_CONF: ${{ secrets.WG_CONF }}
           MIERU_JSON: ${{ secrets.MIERU_JSON }}
           SDNS_LINK: ${{ secrets.SDNS_LINK }}
           XHTTP_LINK: ${{ secrets.XHTTP_LINK }}
-        run: node tools/ci/validate-singbox-extended.js
+        run: node tools/ci/validate-singbox.js --extended
 
-  validate-xray:
+  Validate-xray:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -111,7 +112,7 @@ jobs:
       - name: Install JS deps
         run: npm ci --no-fund --no-audit
 
-      - name: Build web runtime (web4core.runtime.js)
+      - name: Build web
         run: npm run build:web
 
       - name: Setup Go
@@ -139,7 +140,7 @@ jobs:
           CONFIGS: ${{ secrets.CONFIGS }}
         run: node tools/ci/validate-xray.js
 
-  validate-mihomo:
+  Validate-mihomo:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -153,7 +154,7 @@ jobs:
       - name: Install JS deps
         run: npm ci --no-fund --no-audit
 
-      - name: Build web runtime (web4core.runtime.js)
+      - name: Build web
         run: npm run build:web
 
       - name: Download Mihomo
@@ -185,9 +186,9 @@ jobs:
           WG_CONF: ${{ secrets.WG_CONF }}
         run: node tools/ci/validate-mihomo.js
 
-  build:
+  Build:
     runs-on: ubuntu-latest
-    needs: [ validate-singbox, validate-singbox-extended, validate-xray, validate-mihomo ]
+    needs: [ Validate-singbox, Validate-singbox-extended, Validate-xray, Validate-mihomo ]
     if: github.ref == 'refs/heads/main'
 
     concurrency:
@@ -221,7 +222,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
 
-  deploy:
+  Deploy:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -235,7 +236,7 @@ jobs:
   deploy-worker-api:
     name: Deploy Cloudflare Worker
     runs-on: ubuntu-latest
-    needs: [ validate-singbox, validate-singbox-extended, validate-xray, validate-mihomo ]
+    needs: [ Validate-singbox, Validate-singbox-extended, Validate-xray, Validate-mihomo ]
     if: github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4

@@ -1,6 +1,7 @@
-import { computeTag, validateBean, URLTEST, SUB_FETCH_INTERVAL } from '../main.js';
+import { computeTag, validateBean, URLTEST, PROXY_FETCH_INTERVAL, SUB_REFRESH_INTERVAL } from '../main.js';
 
 const FASTEST_GROUP_NAME = '⚡ Fastest';
+const GLOBAL_GROUP_NAME = 'GLOBAL';
 
 function buildMihomoProxy(bean) {
     const s = bean.stream || {};
@@ -59,7 +60,16 @@ function buildMihomoProxy(bean) {
             if (s.grpcUserAgent) obj['grpc-opts']['grpc-user-agent'] = s.grpcUserAgent;
         } else if (s.network === 'tcp' && s.headerType === 'http') {
             obj.network = 'tcp';
-            obj['http-opts'] = { headers: { Host: s.host }, path: [s.path].filter(Boolean) };
+            const httpOpts = {};
+            if (s.path) {
+                httpOpts.path = [s.path].filter(Boolean);
+            }
+            if (s.host) {
+                httpOpts.headers = { 
+                    Host: Array.isArray(s.host) ? s.host : [s.host] 
+                };
+            }
+            obj['http-opts'] = httpOpts;
         } else {
             obj.network = 'tcp';
         }
@@ -290,15 +300,20 @@ function buildMihomoConfig(beans, opts) {
             type: 'url-test',
             proxies: names,
             url: URLTEST,
-            interval: SUB_FETCH_INTERVAL
+            interval: PROXY_FETCH_INTERVAL
         });
         groups.push({
-            name: 'PROXY',
+            name: GLOBAL_GROUP_NAME,
             type: 'select',
-            proxies: [FASTEST_GROUP_NAME]
+            proxies: [FASTEST_GROUP_NAME, 'REJECT']
         });
     } else {
-        groups.push({ name: 'PROXY', type: 'select', proxies: names });
+        const only = names[0] || 'REJECT';
+        groups.push({
+            name: GLOBAL_GROUP_NAME,
+            type: 'select',
+            proxies: [only, 'REJECT']
+        });
     }
     const usePerProxyPort = !!(opts && opts.perProxyPort);
     const basePort = (opts && opts.basePort) || 7890;
@@ -320,7 +335,7 @@ function buildMihomoConfig(beans, opts) {
         'log-level': 'info',
         proxies,
         'proxy-groups': groups,
-        rules: ['MATCH,PROXY']
+        rules: [`MATCH,${GLOBAL_GROUP_NAME}`]
     };
     if (!usePerProxyPort) {
         config['mixed-port'] = basePort;
@@ -342,13 +357,13 @@ function buildMihomoSubscriptionConfig(subscriptionUrls, extraBeans, opts) {
         providers[providerName] = {
             type: 'http',
             url: url,
-            interval: 3600,
+            interval: SUB_REFRESH_INTERVAL,
             __comments: {
                 interval: 'Subscription refresh interval'
             },
             'health-check': {
                 enable: true,
-                interval: 600,
+                interval: PROXY_FETCH_INTERVAL,
                 url: URLTEST,
                 'expected-status': 204,
                 __comments: {
@@ -364,13 +379,19 @@ function buildMihomoSubscriptionConfig(subscriptionUrls, extraBeans, opts) {
         type: 'url-test',
         use: providerNames,
         url: URLTEST,
-        interval: SUB_FETCH_INTERVAL,
+        interval: PROXY_FETCH_INTERVAL,
         tolerance: 50,
         __comments: {
             interval: 'Latency probe interval (seconds)',
             tolerance: 'Switch threshold (ms)'
         }
     }];
+
+    groups.push({
+        name: GLOBAL_GROUP_NAME,
+        type: 'select',
+        proxies: [FASTEST_GROUP_NAME, 'REJECT']
+    });
 
     if (providerNames.length > 1) {
         providerNames.forEach((providerName) => {
@@ -420,7 +441,7 @@ function buildMihomoSubscriptionConfig(subscriptionUrls, extraBeans, opts) {
         });
     }
 
-    const rules = [`MATCH,${FASTEST_GROUP_NAME}`];
+    const rules = [`MATCH,${GLOBAL_GROUP_NAME}`];
     return { providers, groups, rules, proxies: extraProxies, listeners };
 }
 

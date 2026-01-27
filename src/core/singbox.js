@@ -257,6 +257,26 @@ function buildSingBoxWireGuardEndpoint(bean) {
     if (!bean || bean.proto !== 'wireguard') throw new Error('wireguard bean required');
     const wg = bean.wireguard || {};
 
+    const ensureCidrPrefix = (raw) => {
+        const s = String(raw || '').trim();
+        if (!s) return '';
+        if (s.includes('/')) return s;
+        const isIPv4 = (() => {
+            const parts = s.split('.');
+            if (parts.length !== 4) return false;
+            for (const p of parts) {
+                if (!/^\d+$/.test(p)) return false;
+                const n = parseInt(p, 10);
+                if (!(n >= 0 && n <= 255)) return false;
+            }
+            return true;
+        })();
+        if (isIPv4) return `${s}/32`;
+        const isIPv6Like = s.includes(':') && /^[0-9a-fA-F:.]+$/.test(s);
+        if (isIPv6Like) return `${s}/128`;
+        return s;
+    };
+
     const mapPeer = (p) => {
         if (!p || typeof p !== 'object') return null;
         const out = {
@@ -276,10 +296,12 @@ function buildSingBoxWireGuardEndpoint(bean) {
 
     const addr = [];
     if (Array.isArray(wg.addresses) && wg.addresses.length) {
-        addr.push(...wg.addresses);
-    } else {
-        if (wg.ip) addr.push(String(wg.ip).includes('/') ? wg.ip : `${wg.ip}/32`);
-        if (wg.ipv6) addr.push(String(wg.ipv6).includes('/') ? wg.ipv6 : `${wg.ipv6}/128`);
+        const normalized = wg.addresses.map(ensureCidrPrefix).filter(Boolean);
+        if (normalized.length) addr.push(...normalized);
+    }
+    if (addr.length === 0) {
+        if (wg.ip) addr.push(ensureCidrPrefix(wg.ip));
+        if (wg.ipv6) addr.push(ensureCidrPrefix(wg.ipv6));
     }
 
     const peers = Array.isArray(wg.peers) && wg.peers.length ? wg.peers : [{
