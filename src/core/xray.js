@@ -1,4 +1,4 @@
-import { asInt, URLTEST, URLTEST_INTERVAL } from '../main.js';
+import { asInt, decodeBase64Url, URLTEST, URLTEST_INTERVAL } from '../main.js';
 
 function buildXrayOutbound(bean) {
     const s = bean.stream || {};
@@ -14,7 +14,8 @@ function buildXrayOutbound(bean) {
             tlsSettings: {
                 serverName: h.sni || undefined,
                 alpn: alpn.length ? alpn : undefined,
-                allowInsecure: h.allowInsecure ? true : undefined,
+                pinnedPeerCertSha256: (h.pinnedPeerCertSha256 || '').trim() || undefined,
+                verifyPeerCertByName: (h.verifyPeerCertByName || '').trim() || undefined,
             },
             hysteriaSettings: {
                 version: 2,
@@ -27,11 +28,21 @@ function buildXrayOutbound(bean) {
         }
         const hopPort = (h.hopPort || '').toString().trim();
         const hopIntervalRaw = (h.hopInterval || '').toString().trim();
-        const hopInterval = hopIntervalRaw ? asInt((hopIntervalRaw.match(/^(\d+)/) || [])[1], 0) : 0;
-        if (hopPort || hopInterval) {
+        let hopInterval = 0;
+        let hopIntervalRange = '';
+        if (hopIntervalRaw) {
+            if (/^\d+$/.test(hopIntervalRaw)) {
+                hopInterval = asInt(hopIntervalRaw, 0);
+            } else {
+                const m = hopIntervalRaw.match(/^(\d+)\s*-\s*(\d+)$/);
+                if (m && m[1] && m[2]) hopIntervalRange = `${m[1]}-${m[2]}`;
+            }
+        }
+        if (hopPort || hopInterval || hopIntervalRange) {
             streamSettings.hysteriaSettings.udphop = {};
             if (hopPort) streamSettings.hysteriaSettings.udphop.port = hopPort;
-            if (hopInterval) streamSettings.hysteriaSettings.udphop.interval = hopInterval;
+            if (hopIntervalRange) streamSettings.hysteriaSettings.udphop.interval = hopIntervalRange;
+            else if (hopInterval) streamSettings.hysteriaSettings.udphop.interval = hopInterval;
         }
         if (h.obfsPassword) {
             streamSettings.udpmasks = [{
@@ -42,7 +53,8 @@ function buildXrayOutbound(bean) {
         if (streamSettings.tlsSettings) {
             if (!streamSettings.tlsSettings.serverName) delete streamSettings.tlsSettings.serverName;
             if (!streamSettings.tlsSettings.alpn) delete streamSettings.tlsSettings.alpn;
-            if (!streamSettings.tlsSettings.allowInsecure) delete streamSettings.tlsSettings.allowInsecure;
+            if (!streamSettings.tlsSettings.pinnedPeerCertSha256) delete streamSettings.tlsSettings.pinnedPeerCertSha256;
+            if (!streamSettings.tlsSettings.verifyPeerCertByName) delete streamSettings.tlsSettings.verifyPeerCertByName;
             if (Object.keys(streamSettings.tlsSettings).length === 0) delete streamSettings.tlsSettings;
         }
     } else {
@@ -54,39 +66,66 @@ function buildXrayOutbound(bean) {
             if (s.sni) streamSettings.tlsSettings.serverName = s.sni;
             if (s.alpn && s.alpn.length) streamSettings.tlsSettings.alpn = s.alpn;
             if (s.fp) streamSettings.tlsSettings.fingerprint = s.fp;
-            if (s.allowInsecure) streamSettings.tlsSettings.allowInsecure = true;
+            if (s.pinnedPeerCertSha256) streamSettings.tlsSettings.pinnedPeerCertSha256 = s.pinnedPeerCertSha256;
+            if (s.verifyPeerCertByName) streamSettings.tlsSettings.verifyPeerCertByName = s.verifyPeerCertByName;
         } else if (sec === 'reality') {
             streamSettings.security = 'reality';
             streamSettings.realitySettings = {show: false, publicKey: s.reality.pbk};
             if (s.reality.sid) streamSettings.realitySettings.shortId = s.reality.sid;
+            if (s.reality.spx) streamSettings.realitySettings.spiderX = s.reality.spx;
+            if (s.reality.pqv) {
+                const pqv = String(s.reality.pqv || '').trim();
+                const decoded = decodeBase64Url(pqv);
+                if (!decoded || decoded.length !== 1952) {
+                    throw new Error('Xray REALITY pqv is invalid (expected base64url ML-DSA-65 public key)');
+                }
+                streamSettings.realitySettings.mldsa65Verify = pqv;
+            }
             if (s.sni) streamSettings.realitySettings.serverName = s.sni;
             if (s.fp) streamSettings.realitySettings.fingerprint = s.fp;
         }
         if (streamSettings.network === 'ws') {
             streamSettings.wsSettings = {};
-            if (s.host) streamSettings.wsSettings.headers = {Host: s.host};
-            if (s.path) streamSettings.wsSettings.path = s.path;
+            if (s.host) streamSettings.wsSettings.host = s.host;
+            let wsPath = s.path || '';
             if (s.wsEarlyData) {
-                let maxEarlyData = 0;
-                let earlyDataHeaderName = '';
+                let ed = 0;
                 if (typeof s.wsEarlyData === 'object') {
-                    maxEarlyData = asInt(s.wsEarlyData.max_early_data ?? s.wsEarlyData.maxEarlyData, 0);
-                    earlyDataHeaderName = s.wsEarlyData.early_data_header_name || s.wsEarlyData.earlyDataHeaderName || '';
+                    ed = asInt(s.wsEarlyData.max_early_data ?? s.wsEarlyData.maxEarlyData, 0);
                 } else {
-                    maxEarlyData = asInt(s.wsEarlyData, 0);
+                    ed = asInt(s.wsEarlyData, 0);
                 }
-                if (maxEarlyData > 0) streamSettings.wsSettings.maxEarlyData = maxEarlyData;
-                if (earlyDataHeaderName) streamSettings.wsSettings.earlyDataHeaderName = earlyDataHeaderName;
+                if (ed > 0 && !/\bed=/.test(wsPath)) {
+                    if (!wsPath) wsPath = '/';
+                    wsPath += (wsPath.includes('?') ? '&' : '?') + `ed=${ed}`;
+                }
             }
+            if (wsPath) streamSettings.wsSettings.path = wsPath;
         } else if (streamSettings.network === 'xhttp') {
             streamSettings.xhttpSettings = {};
             if (s.host) streamSettings.xhttpSettings.host = s.host;
             if (s.path) streamSettings.xhttpSettings.path = s.path;
             if (s.xhttpMode) streamSettings.xhttpSettings.mode = s.xhttpMode; else streamSettings.xhttpSettings.mode = 'stream-up';
+            const xmux = s.xhttpXmux || {};
+            const hasXmux = Object.values(xmux).some(v => v !== '' && v !== 0);
+            if (hasXmux) {
+                streamSettings.xhttpSettings.xmux = {};
+                if (xmux.max_concurrency) streamSettings.xhttpSettings.xmux.maxConcurrency = xmux.max_concurrency;
+                if (xmux.max_connections) streamSettings.xhttpSettings.xmux.maxConnections = xmux.max_connections;
+                if (xmux.c_max_reuse_times) streamSettings.xhttpSettings.xmux.cMaxReuseTimes = xmux.c_max_reuse_times;
+                if (xmux.h_max_request_times) streamSettings.xhttpSettings.xmux.hMaxRequestTimes = xmux.h_max_request_times;
+                if (xmux.h_max_reusable_secs) streamSettings.xhttpSettings.xmux.hMaxReusableSecs = xmux.h_max_reusable_secs;
+                if (xmux.h_keep_alive_period) streamSettings.xhttpSettings.xmux.hKeepAlivePeriod = xmux.h_keep_alive_period;
+            }
         } else if (streamSettings.network === 'grpc') {
             streamSettings.grpcSettings = {};
             if (s.path) streamSettings.grpcSettings.serviceName = s.path;
             if (s.authority) streamSettings.grpcSettings.authority = s.authority;
+            if (s.grpcUserAgent) streamSettings.grpcSettings.user_agent = s.grpcUserAgent;
+        } else if (streamSettings.network === 'httpupgrade') {
+            streamSettings.httpupgradeSettings = {};
+            if (s.host) streamSettings.httpupgradeSettings.host = s.host;
+            if (s.path) streamSettings.httpupgradeSettings.path = s.path;
         } else if (streamSettings.network === 'tcp' && s.headerType === 'http') {
             streamSettings.tcpSettings = {header: {type: 'http', request: {headers: {Host: s.host}}}};
             if (s.path) streamSettings.tcpSettings.header.request.path = [s.path];
@@ -113,7 +152,10 @@ function buildXrayOutbound(bean) {
             }
         };
     } else if (bean.proto === 'vless') {
-        const user = { id: bean.auth.uuid, encryption: 'none' };
+        const enc = (bean.auth && typeof bean.auth.encryption === 'string' && bean.auth.encryption.trim())
+            ? bean.auth.encryption.trim()
+            : 'none';
+        const user = { id: bean.auth.uuid, encryption: enc };
         if (bean.auth.flow) user.flow = bean.auth.flow;
         outbound = {
             protocol: 'vless',
@@ -127,7 +169,16 @@ function buildXrayOutbound(bean) {
     }; else if (bean.proto === 'ss') outbound = {
         protocol: 'shadowsocks',
         tag: (bean.name || 'ss'),
-        settings: { servers: [{ address: bean.host, port: bean.port, method: bean.ss.method, password: bean.ss.password }] }
+        settings: {
+            servers: [{
+                address: bean.host,
+                port: bean.port,
+                method: bean.ss.method,
+                password: bean.ss.password,
+                uot: Number.isFinite(bean.ss?.uot) && bean.ss.uot > 0,
+                uotVersion: Number.isFinite(bean.ss?.uot) && bean.ss.uot > 0 ? bean.ss.uot : 0,
+            }]
+        }
     }; else if (bean.proto === 'socks' || bean.proto === 'http') {
         const s = { address: bean.host, port: bean.port };
         if (bean.socks?.username && bean.socks?.password) {

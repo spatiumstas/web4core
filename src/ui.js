@@ -89,7 +89,8 @@ const PLACEHOLDER_MIHOMO = [
     'socks://...',
     'http://user:pass@host:port',
     'hy2://...',
-    'tuic://...'
+    'tuic://...',
+    'masque://...'
 ];
 
 function updateLinksPlaceholder() {

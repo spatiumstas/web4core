@@ -128,7 +128,7 @@ const MIHOMO_DEFAULT_TEMPLATE = [
     '',
     'proxy-groups:',
     'rules:',
-    '  - "MATCH,PROXY"'
+    '  - "MATCH,GLOBAL"'
 ].join('\n');
 
 function buildMihomoYaml(proxies, groups, providers, rules, listeners, opts) {

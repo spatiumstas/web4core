@@ -134,7 +134,14 @@ function buildSingBoxOutbound(bean, opts) {
             outbound.password = bean.socks.password;
         }
     } else if (bean.proto === 'hy2') {
-        const tls = commonTLS() || { enabled: true, alpn: 'h3' };
+        const h = bean.hysteria2 || {};
+        const tlsFromStream = commonTLS();
+        const alpn = splitCSV(h.alpn || '').filter(Boolean);
+        const tls = Object.assign({ enabled: true }, tlsFromStream || {});
+        if (h.allowInsecure) tls.insecure = true;
+        if (h.sni) tls.server_name = h.sni;
+        if (alpn.length) tls.alpn = alpn;
+        else if (!Array.isArray(tls.alpn) || tls.alpn.length === 0) tls.alpn = ['h3'];
         outbound = { type: 'hysteria2', server: bean.host, server_port: bean.port || 443, tls };
         outbound.password = bean.auth.password;
         if (bean.hysteria2?.obfsPassword) {
@@ -157,10 +164,20 @@ function buildSingBoxOutbound(bean, opts) {
             outbound.hop_interval = '10s';
         }
     } else if (bean.proto === 'tuic') {
-        const tls = commonTLS() || { enabled: true };
+        const t = bean.tuic || {};
+        const tlsFromStream = commonTLS();
+        const alpn = splitCSV(t.alpn || '').filter(Boolean);
+        const tls = Object.assign({ enabled: true }, tlsFromStream || {});
+        if (t.allowInsecure) tls.insecure = true;
+        if (t.disableSni) tls.disable_sni = true;
+        if (t.sni) tls.server_name = t.sni;
+        if (alpn.length) tls.alpn = alpn;
         outbound = { type: 'tuic', server: bean.host, server_port: bean.port || 443, tls };
-        if (bean.auth.uuid) outbound.uuid = bean.auth.uuid;
-        if (bean.auth.password) outbound.password = bean.auth.password;
+        if (bean.tuic?.token) outbound.token = bean.tuic.token;
+        else {
+            if (bean.auth.uuid) outbound.uuid = bean.auth.uuid;
+            if (bean.auth.password) outbound.password = bean.auth.password;
+        }
         if (bean.tuic.congestion_control) outbound.congestion_control = bean.tuic.congestion_control;
         if (bean.tuic.udp_over_stream) outbound.udp_over_stream = true;
         else if (bean.tuic.udp_relay_mode) outbound.udp_relay_mode = bean.tuic.udp_relay_mode;
@@ -178,6 +195,51 @@ function buildSingBoxOutbound(bean, opts) {
         if (bean.mieru?.password) outbound.password = bean.mieru.password;
         if (bean.mieru?.multiplexing) outbound.multiplexing = bean.mieru.multiplexing;
     } else throw new Error('Not supported by sing-box: ' + bean.proto);
+
+    if (bean.proto === 'ss') {
+        const ss = bean.ss || {};
+        const uotVersion = (typeof ss.uot === 'number' && Number.isFinite(ss.uot)) ? ss.uot : 0;
+        const smuxEnabled = !!(ss.smux && ss.smux.enabled);
+        if (smuxEnabled && uotVersion > 0) {
+            throw new Error('shadowsocks: udp-over-tcp conflicts with multiplex');
+        }
+        outbound.udp_over_tcp = uotVersion > 0 ? { enabled: true, version: uotVersion } : false;
+
+        if (ss.plugin) {
+            outbound.plugin = ss.plugin;
+            if (ss.pluginOpts) {
+                if (typeof ss.pluginOpts === 'string') {
+                    const s = ss.pluginOpts.trim();
+                    if (s) outbound.plugin_opts = s;
+                } else if (typeof ss.pluginOpts === 'object') {
+                    const parts = [];
+                    for (const [k, v] of Object.entries(ss.pluginOpts)) {
+                        const key = String(k || '').trim();
+                        if (!key) continue;
+                        if (v === true) {
+                            parts.push(key);
+                        } else if (v === false || v === undefined || v === null) {
+                            continue;
+                        } else {
+                            const val = String(v).trim();
+                            if (!val) continue;
+                            parts.push(`${key}=${val}`);
+                        }
+                    }
+                    if (parts.length) outbound.plugin_opts = parts.join(';');
+                }
+            }
+        }
+
+        if (smuxEnabled) {
+            const smux = ss.smux || {};
+            const protocol = String(smux.protocol || '').trim() || 'smux';
+            outbound.multiplex = { enabled: true, protocol };
+            const ms = smux['max-streams'];
+            if (Number.isFinite(ms) && ms > 0) outbound.multiplex.max_streams = ms;
+        }
+    }
+
     const tls = commonTLS();
     if (tls) outbound.tls = tls;
     if (bean.stream) {
@@ -257,6 +319,26 @@ function buildSingBoxWireGuardEndpoint(bean) {
     if (!bean || bean.proto !== 'wireguard') throw new Error('wireguard bean required');
     const wg = bean.wireguard || {};
 
+    const ensureCidrPrefix = (raw) => {
+        const s = String(raw || '').trim();
+        if (!s) return '';
+        if (s.includes('/')) return s;
+        const isIPv4 = (() => {
+            const parts = s.split('.');
+            if (parts.length !== 4) return false;
+            for (const p of parts) {
+                if (!/^\d+$/.test(p)) return false;
+                const n = parseInt(p, 10);
+                if (!(n >= 0 && n <= 255)) return false;
+            }
+            return true;
+        })();
+        if (isIPv4) return `${s}/32`;
+        const isIPv6Like = s.includes(':') && /^[0-9a-fA-F:.]+$/.test(s);
+        if (isIPv6Like) return `${s}/128`;
+        return s;
+    };
+
     const mapPeer = (p) => {
         if (!p || typeof p !== 'object') return null;
         const out = {
@@ -276,10 +358,12 @@ function buildSingBoxWireGuardEndpoint(bean) {
 
     const addr = [];
     if (Array.isArray(wg.addresses) && wg.addresses.length) {
-        addr.push(...wg.addresses);
-    } else {
-        if (wg.ip) addr.push(String(wg.ip).includes('/') ? wg.ip : `${wg.ip}/32`);
-        if (wg.ipv6) addr.push(String(wg.ipv6).includes('/') ? wg.ipv6 : `${wg.ipv6}/128`);
+        const normalized = wg.addresses.map(ensureCidrPrefix).filter(Boolean);
+        if (normalized.length) addr.push(...normalized);
+    }
+    if (addr.length === 0) {
+        if (wg.ip) addr.push(ensureCidrPrefix(wg.ip));
+        if (wg.ipv6) addr.push(ensureCidrPrefix(wg.ipv6));
     }
 
     const peers = Array.isArray(wg.peers) && wg.peers.length ? wg.peers : [{
@@ -432,6 +516,15 @@ function buildSingBoxConfig(outboundsWithTags, opts) {
             for (const name of selectNames) {
                 const onlyTag = tags[0] || 'direct';
                 routeRules.push({ inbound: mixedInboundTagFor(name), outbound: hasMany ? `select-${name}` : onlyTag });
+            }
+        } else if (effectiveOpts.addSocks) {
+            const firstTun = tunSpecs[0];
+            if (firstTun) {
+                const onlyTag = tags[0] || 'direct';
+                const outbound = hasMany
+                    ? (firstTun.mode === 'auto' ? `auto-${firstTun.name}` : `select-${firstTun.name}`)
+                    : onlyTag;
+                routeRules.push({ inbound: 'mixed-in', outbound });
             }
         }
     }

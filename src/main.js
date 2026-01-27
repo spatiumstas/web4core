@@ -93,11 +93,13 @@ const SUPPORTED_SCHEMES = [
     'hysteria2',
     'tuic',
     'mieru',
-    'sdns'
+    'sdns',
+    'masque'
 ];
 const MAX_SUB_REDIRECTS = 2;
 const SUB_FETCH_TIMEOUT = 15000;
-const SUB_FETCH_INTERVAL = 600;
+const PROXY_FETCH_INTERVAL = 300;
+const SUB_REFRESH_INTERVAL = 43200;
 const SUB_FALLBACK_RETRIES = 2;
 const URLTEST = 'https://www.gstatic.com/generate_204';
 const URLTEST_INTERVAL = '3m';
@@ -122,7 +124,7 @@ const CORE_PROTOCOL_SUPPORT = {
         base: ['vmess', 'vless', 'trojan', 'ss', 'socks', 'http', 'hy2'],
     },
     mihomo: {
-        base: ['vmess', 'vless', 'trojan', 'ss', 'socks', 'http', 'hy2', 'tuic', 'wireguard'],
+        base: ['vmess', 'vless', 'trojan', 'ss', 'socks', 'http', 'hy2', 'tuic', 'wireguard', 'masque'],
     }
 };
 
@@ -345,6 +347,15 @@ function validateBean(bean) {
             }
             break;
         }
+        case 'masque': {
+            requireHost();
+            requirePort();
+            const mq = bean.masque || {};
+            if (!mq.privateKey) throw new Error('masque: missing private-key');
+            if (!mq.publicKey) throw new Error('masque: missing public-key');
+            if (!mq.ip && !mq.ipv6) throw new Error('masque: missing ip/ipv6');
+            break;
+        }
         default:
             throw new Error('Unknown protocol: ' + p);
     }
@@ -401,9 +412,42 @@ function parseLink(input) {
     if (scheme === 'hy2' || scheme === 'hysteria2') return parseHysteria2(trimmed);
     if (scheme === 'tuic') return parseTUIC(trimmed);
     if (scheme === 'sdns') return parseSDNS(trimmed);
+    if (scheme === 'masque') return parseMasque(trimmed);
     throw new Error('Unknown link: ' + scheme);
 }
 
+function parseMasque(urlStr) {
+    const u = parseUrl(urlStr);
+    if (u.protocol !== 'masque:') throw new Error('A masque:// link is required');
+    const q = getQuery(u);
+    const name = safeDecodeURIComponent(u.hash.replace('#', ''));
+    const getBool = (key) => {
+        const raw = (q.get(key) || '').toString().toLowerCase();
+        return raw === '1' || raw === 'true' || raw === 'yes';
+    };
+    const dnsRaw = q.get('dns') || '';
+    const dns = dnsRaw ? dnsRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
+    return {
+        proto: 'masque',
+        host: u.hostname,
+        port: asInt(u.port, 443),
+        name,
+        masque: {
+            privateKey: (q.get('private-key') || '').trim(),
+            publicKey: (q.get('public-key') || '').trim(),
+            ip: (q.get('ip') || '').trim(),
+            ipv6: (q.get('ipv6') || '').trim(),
+            uri: (q.get('uri') || '').trim(),
+            sni: (q.get('sni') || '').trim(),
+            mtu: asInt(q.get('mtu'), 0),
+            udp: getBool('udp'),
+            congestionController: (q.get('congestion-controller') || '').trim(),
+            cwnd: asInt(q.get('cwnd'), 0),
+            remoteDnsResolve: getBool('remote-dns-resolve'),
+            dns
+        }
+    };
+}
 function parseSocksHttp(urlStr) {
     const u = parseUrl(urlStr);
     const query = getQuery(u);
@@ -555,7 +599,8 @@ function parseVLESS(urlStr) {
         name: safeDecodeURIComponent(u.hash.replace('#', '')),
         auth: {
             uuid,
-            flow: (q.get('flow') || '').replace(/-udp443$/, '').replace(/^none$/, '')
+            flow: (q.get('flow') || '').replace(/-udp443$/, '').replace(/^none$/, ''),
+            encryption: (q.get('encryption') || '').trim() || 'none'
         },
         stream: buildStreamFromQuery(q, false),
         udp: q.get('udp') === '1' || q.get('udp') === 'true',
@@ -670,6 +715,15 @@ function parseSS(urlStr) {
         }
     }
     const q = getQuery(u);
+    const parseUotVersion = () => {
+        const raw = (q.get('udp-over-tcp-version') || q.get('uotVersion') || q.get('uot') || '').toString().trim().toLowerCase();
+        if (!raw) return 0;
+        if (raw === 'true' || raw === 'yes' || raw === 'on') return 2;
+        if (raw === '1') return 2;
+        const n = parseInt(raw, 10);
+        return Number.isFinite(n) && n > 0 ? n : 0;
+    };
+    const uotVersion = parseUotVersion();
     let plugin = q.get('plugin') || '';
     const pluginOpts = {};
 
@@ -677,11 +731,16 @@ function parseSS(urlStr) {
         const parts = plugin.split(';');
         plugin = parts[0].trim();
         for (let i = 1; i < parts.length; i++) {
-            const kv = parts[i].split('=');
-            if (kv.length === 2) {
-                const key = kv[0].trim();
-                const val = kv[1].trim();
-                pluginOpts[key] = val;
+            const raw = parts[i] || '';
+            if (!raw.trim()) continue;
+            const eq = raw.indexOf('=');
+            if (eq === -1) {
+                const key = raw.trim();
+                if (key) pluginOpts[key] = true;
+            } else {
+                const key = raw.slice(0, eq).trim();
+                const val = raw.slice(eq + 1).trim();
+                if (key && val) pluginOpts[key] = val;
             }
         }
     } else if (plugin) {
@@ -716,7 +775,7 @@ function parseSS(urlStr) {
         ss: {
             method,
             password,
-            uot: q.get('uot') === '1' ? 1 : 0,
+            uot: uotVersion,
             plugin,
             pluginOpts: Object.keys(pluginOpts).length ? pluginOpts : '',
             smux: smuxEnabled ? smux : null
@@ -743,7 +802,9 @@ function parseHysteria2(urlStr) {
             hopInterval: (q.get('hop_interval') || ''),
             alpn: q.get('alpn') || 'h3',
             sni: q.get('sni') || '',
-            allowInsecure: ['1', 'true'].includes((q.get('insecure') || '').toLowerCase()),
+            allowInsecure: ['1', 'true', 'yes'].includes(((q.get('allowInsecure') || q.get('insecure') || '')).toLowerCase()),
+            pinnedPeerCertSha256: (q.get('pinnedPeerCertSha256') || q.get('pinned-peer-cert-sha256') || q.get('pinSHA256') || q.get('pin-sha256') || '').trim(),
+            verifyPeerCertByName: (q.get('verifyPeerCertByName') || q.get('verify-peer-cert-by-name') || '').trim(),
             congestion: q.get('congestion') || ''
         }
     };
@@ -769,8 +830,8 @@ function parseTUIC(urlStr) {
             heartbeat: q.get('heartbeat') || '',
             alpn: q.get('alpn') || '',
             sni: q.get('sni') || '',
-            allowInsecure: q.get('allow_insecure') === '1',
-            disableSni: q.get('disable_sni') === '1',
+            allowInsecure: ['1', 'true', 'yes'].includes(((q.get('allow_insecure') || q.get('allowInsecure') || q.get('insecure') || '')).toLowerCase()),
+            disableSni: ['1', 'true', 'yes'].includes(((q.get('disable_sni') || q.get('disableSni') || '')).toLowerCase()),
             token: q.get('token') || '',
             requestTimeout: q.get('request_timeout') || q.get('request-timeout') || '',
             reduceRtt: ['1', 'true'].includes((q.get('reduce_rtt') || q.get('reduce-rtt') || '').toLowerCase())
@@ -896,6 +957,8 @@ function buildStreamFromQuery(q, isTrojan) {
     const alpn = splitCSV(q.get('alpn') || '');
     const aiRaw = (q.get('allowInsecure') || q.get('insecure') || '').toLowerCase();
     const allowInsecure = ['1', 'true', 'yes'].includes(aiRaw);
+    const pinnedPeerCertSha256 = (q.get('pinnedPeerCertSha256') || q.get('pinned-peer-cert-sha256') || q.get('pinSHA256') || q.get('pin-sha256') || '').trim();
+    const verifyPeerCertByName = (q.get('verifyPeerCertByName') || q.get('verify-peer-cert-by-name') || '').trim();
     const fp = q.get('fp') || '';
     const reality = {
         pbk: q.get('pbk') || '',
@@ -911,6 +974,8 @@ function buildStreamFromQuery(q, isTrojan) {
         grpcUserAgent,
         alpn,
         allowInsecure,
+        pinnedPeerCertSha256,
+        verifyPeerCertByName,
         fp,
         reality,
         headerType: '',
@@ -984,7 +1049,8 @@ export {
     SUPPORTED_SCHEMES,
     MAX_SUB_REDIRECTS,
     SUB_FETCH_TIMEOUT,
-    SUB_FETCH_INTERVAL,
+    PROXY_FETCH_INTERVAL,
+    SUB_REFRESH_INTERVAL,
     SUB_FALLBACK_RETRIES,
     URLTEST,
     URLTEST_INTERVAL,
