@@ -14,12 +14,14 @@ const el = {
     cbExtended: document.getElementById('cbExtended'),
     cbClashSecret: document.getElementById('cbClashSecret'),
     cbMihomoSub: document.getElementById('cbMihomoSub'),
+    cbMihomoSocks: document.getElementById('cbMihomoSocks'),
     cbMihomoTun: document.getElementById('cbMihomoTun'),
     cbMihomoPerProxyTun: document.getElementById('cbMihomoPerProxyTun'),
     cbMihomoPerProxyPort: document.getElementById('cbMihomoPerProxyPort'),
     cbMihomoWebUI: document.getElementById('cbMihomoWebUI'),
     cbDetour: document.getElementById('cbDetour'),
     lblMihomoSub: document.getElementById('lblMihomoSub'),
+    lblMihomoSocks: document.getElementById('lblMihomoSocks'),
     lblMihomoTun: document.getElementById('lblMihomoTun'),
     lblMihomoPerProxyTun: document.getElementById('lblMihomoPerProxyTun'),
     lblMihomoPerProxyPort: document.getElementById('lblMihomoPerProxyPort'),
@@ -83,6 +85,7 @@ const PLACEHOLDER_XRAY = [
 const PLACEHOLDER_MIHOMO = [
     'subscription links',
     'vless://...',
+    'tt://...',
     'vmess://...',
     'trojan://...',
     'ss://...',
@@ -90,7 +93,8 @@ const PLACEHOLDER_MIHOMO = [
     'http://user:pass@host:port',
     'hy2://...',
     'tuic://...',
-    'masque://...'
+    'masque://...',
+    'mieru://... (or json)'
 ];
 
 function updateLinksPlaceholder() {
@@ -120,6 +124,20 @@ const setMihomoPerProxyTunVisible = (visible) => {
         el.cbMihomoPerProxyTun.checked = false;
     }
     toggleHidden(el.lblMihomoPerProxyTun, !show);
+};
+const setMihomoPerProxyPortVisible = (visible) => {
+    const show = !!visible;
+    if (!show && el.cbMihomoPerProxyPort?.checked) {
+        el.cbMihomoPerProxyPort.checked = false;
+    }
+    toggleHidden(el.lblMihomoPerProxyPort, !show);
+};
+const setSingboxPerProxyTunVisible = (visible) => {
+    const show = !!visible;
+    if (!show && el.cbPerTunMixed?.checked) {
+        el.cbPerTunMixed.checked = false;
+    }
+    toggleHidden(el.lblPerTunMixed, !show);
 };
 const setError = (msg) => {
     el.errorText.textContent = msg || '';
@@ -190,12 +208,13 @@ function setCore(core) {
     toggleHidden(el.lblXraySocks, core !== 'xray');
     toggleHidden(el.tunName?.parentElement || el.tunName, hideSing);
     toggleHidden(el.lblMihomoSub, core !== 'mihomo');
+    toggleHidden(el.lblMihomoSocks, core !== 'mihomo');
     toggleHidden(el.lblMihomoTun, core !== 'mihomo');
     setMihomoPerProxyTunVisible(false);
-    toggleHidden(el.lblMihomoPerProxyPort, core !== 'mihomo');
+    setMihomoPerProxyPortVisible(false);
     toggleHidden(el.lblMihomoWebUI, core !== 'mihomo');
     toggleHidden(el.btnWgUpload, core !== 'mihomo' && core !== 'singbox');
-    toggleHidden(el.lblPerTunMixed, hideSing);
+    setSingboxPerProxyTunVisible(false);
     toggleHidden(el.lblAndroidMode, hideSing);
     toggleHidden(el.lblDetour, hideSing);
     toggleHidden(el.lblXrayBalancer, core !== 'xray');
@@ -253,6 +272,23 @@ function setupCheckboxValidation() {
 
     enforceAtLeastOne(el.cbTun, el.cbSocks);
     enforceAtLeastOne(el.cbXrayTun, el.cbXraySocks);
+    enforceAtLeastOne(el.cbMihomoTun, el.cbMihomoSocks);
+
+    if (el.cbTun && el.cbPerTunMixed) {
+        el.cbPerTunMixed.addEventListener('change', () => {
+            if (el.cbPerTunMixed.checked) el.cbTun.checked = true;
+            validateField(false);
+        });
+        el.cbTun.addEventListener('change', () => {
+            if (!el.cbTun.checked) el.cbPerTunMixed.checked = false;
+            validateField(false);
+        });
+    }
+    if (el.cbSocks) {
+        el.cbSocks.addEventListener('change', () => {
+            validateField(false);
+        });
+    }
 
     if (el.cbMihomoTun && el.cbMihomoPerProxyTun) {
         el.cbMihomoPerProxyTun.addEventListener('change', () => {
@@ -263,11 +299,22 @@ function setupCheckboxValidation() {
             validateField(false);
         });
     }
+    if (el.cbMihomoSocks && el.cbMihomoPerProxyPort) {
+        el.cbMihomoPerProxyPort.addEventListener('change', () => {
+            if (el.cbMihomoPerProxyPort.checked) el.cbMihomoSocks.checked = true;
+            validateField(false);
+        });
+        el.cbMihomoSocks.addEventListener('change', () => {
+            if (!el.cbMihomoSocks.checked) el.cbMihomoPerProxyPort.checked = false;
+            validateField(false);
+        });
+    }
 
     const revalidateOnChange = [
         el.cbExtended,
         el.cbDetour,
         el.cbMihomoSub,
+        el.cbMihomoSocks,
         el.cbMihomoTun,
         el.cbMihomoPerProxyTun,
         el.cbMihomoPerProxyPort,
@@ -307,6 +354,17 @@ function splitMihomoSubscriptionInput(raw) {
     return { subUrls, proxyText: proxyLines.join('\n') };
 }
 
+function countMihomoPerProxyTargets(subUrls, extraBeans) {
+    const providerCount = Array.isArray(subUrls) ? subUrls.length : 0;
+    const extraCount = Array.isArray(extraBeans) ? extraBeans.filter(Boolean).length : 0;
+    return providerCount + extraCount;
+}
+
+function countSingboxRouteTargets(beans) {
+    if (!Array.isArray(beans)) return 0;
+    return beans.filter(bean => bean && bean.proto !== 'sdns').length;
+}
+
 function parseAndValidateProxyText(proxyText) {
     const text = String(proxyText || '').trim();
     if (!text) return [];
@@ -325,17 +383,21 @@ function validateField(showOutput) {
         : (core === 'mihomo' ? !!el.cbMihomoTun?.checked : !!el.cbTun?.checked);
     const addSocks = core === 'xray'
         ? !!el.cbXraySocks?.checked
-        : (core === 'mihomo' ? true : !!el.cbSocks?.checked);
+        : (core === 'mihomo' ? !!el.cbMihomoSocks?.checked : !!el.cbSocks?.checked);
     const genClashSecret = !!el.cbClashSecret?.checked;
     const useExtended = !!el.cbExtended?.checked;
     const subMihomo = isMihomoSubscriptionMode();
     const webUI = getCore() === 'mihomo' ? !!el.cbMihomoWebUI?.checked : false;
     const mihomoTunEnabled = getCore() === 'mihomo' ? !!el.cbMihomoTun?.checked : false;
     const mihomoPerProxyTun = getCore() === 'mihomo' ? !!el.cbMihomoPerProxyTun?.checked : false;
+    const mihomoSocksEnabled = getCore() === 'mihomo' ? !!el.cbMihomoSocks?.checked : false;
     const mihomoTunOpts = mihomoTunEnabled ? { mode: (mihomoPerProxyTun ? 'listeners' : 'tun') } : null;
     try {
         const wgBeans = Array.isArray(state.wgBeans) ? state.wgBeans : [];
         if (!hasText && wgBeans.length === 0) {
+            setMihomoPerProxyTunVisible(false);
+            setMihomoPerProxyPortVisible(false);
+            setSingboxPerProxyTunVisible(false);
             setGenerateEnabled(false);
             setError('');
             hideOutput();
@@ -345,14 +407,14 @@ function validateField(showOutput) {
         if (subMihomo) {
             const { subUrls, proxyText } = splitMihomoSubscriptionInput(raw);
             const validHttpUrls = subUrls.length > 0;
-            const hasExtraProxies = wgBeans.length > 0 || !!proxyText?.trim();
-            const shouldShowPerProxyTun = subUrls.length > 1 || (validHttpUrls && hasExtraProxies);
-            setMihomoPerProxyTunVisible(mihomoTunEnabled && shouldShowPerProxyTun);
             if (!showOutput) {
                 setError(validHttpUrls ? '' : MSG_SUB_URL);
                 if (validHttpUrls && proxyText) {
                     try {
                         const proxyBeans = parseAndValidateProxyText(proxyText);
+                        const targetCount = countMihomoPerProxyTargets(subUrls, [...wgBeans, ...proxyBeans]);
+                        setMihomoPerProxyTunVisible(mihomoTunEnabled && targetCount > 1);
+                        setMihomoPerProxyPortVisible(mihomoSocksEnabled && targetCount > 1);
                         setGenerateEnabled(true);
                         el.links.classList.remove('input-error');
                         return { subUrls, proxyBeans };
@@ -364,6 +426,9 @@ function validateField(showOutput) {
                         return false;
                     }
                 }
+                const targetCount = countMihomoPerProxyTargets(subUrls, wgBeans);
+                setMihomoPerProxyTunVisible(mihomoTunEnabled && targetCount > 1);
+                setMihomoPerProxyPortVisible(mihomoSocksEnabled && targetCount > 1);
                 setGenerateEnabled(validHttpUrls);
                 el.links.classList.toggle('input-error', !validHttpUrls);
                 if (!validHttpUrls) hideOutput();
@@ -373,13 +438,16 @@ function validateField(showOutput) {
 
             const extraBeans = wgBeans.slice();
             extraBeans.push(...parseAndValidateProxyText(proxyText));
+            const perProxyPort = !!el.cbMihomoPerProxyPort?.checked;
 
             const config = globalThis.web4core?.buildMihomoSubscriptionConfig(subUrls, extraBeans, {
-                perProxyPort: !!el.cbMihomoPerProxyPort?.checked
+                addSocks: mihomoSocksEnabled,
+                perProxyPort,
+                perProxyListeners: perProxyPort || mihomoPerProxyTun
             });
             if (!config) throw new Error('Failed to build subscription config');
 
-            const yaml = globalThis.web4core?.buildMihomoYaml(config.proxies, config.groups, config.providers, config.rules, config.listeners, { webUI, tun: mihomoTunOpts });
+            const yaml = globalThis.web4core?.buildMihomoYaml(config.proxies, config.groups, config.providers, config.rules, config.listeners, { webUI, tun: mihomoTunOpts, addSocks: mihomoSocksEnabled });
             renderOutput(yaml, true);
             setGenerateEnabled(true);
             el.links.classList.remove('input-error');
@@ -405,10 +473,15 @@ function validateField(showOutput) {
             }
         }
         if (getCore() === 'mihomo') {
-            const outBeans = beans.filter(b => !['mieru', 'sdns'].includes(b.proto));
-            setMihomoPerProxyTunVisible(!!mihomoTunEnabled && outBeans.length > 1);
+            const outBeans = beans.filter(b => b.proto !== 'sdns');
+            const targetCount = countMihomoPerProxyTargets([], outBeans);
+            setMihomoPerProxyTunVisible(!!mihomoTunEnabled && targetCount > 1);
+            setMihomoPerProxyPortVisible(!!mihomoSocksEnabled && targetCount > 1);
+            setSingboxPerProxyTunVisible(false);
         } else {
             setMihomoPerProxyTunVisible(false);
+            setMihomoPerProxyPortVisible(false);
+            setSingboxPerProxyTunVisible(getCore() === 'singbox' && !!addTun && countSingboxRouteTargets(beans) > 1);
         }
 
         if (!useExtended && getCore() === 'singbox') {

@@ -13,10 +13,10 @@ jobs:
   Validate-singbox:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '22'
           cache: 'npm'
@@ -28,7 +28,7 @@ jobs:
         run: npm run build:web
 
       - name: Setup Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v6
         with:
           cache: false
           go-version: '1.21'
@@ -55,10 +55,10 @@ jobs:
   Validate-singbox-extended:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '22'
           cache: 'npm'
@@ -70,7 +70,7 @@ jobs:
         run: npm run build:web
 
       - name: Setup Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v6
         with:
           cache: false
           go-version: '1.21'
@@ -101,10 +101,10 @@ jobs:
   Validate-xray:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '22'
           cache: 'npm'
@@ -116,7 +116,7 @@ jobs:
         run: npm run build:web
 
       - name: Setup Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v6
         with:
           cache: false
           go-version: '1.21'
@@ -143,10 +143,10 @@ jobs:
   Validate-mihomo:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '22'
           cache: 'npm'
@@ -197,7 +197,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Setup Pages
         uses: actions/configure-pages@v5
       - name: Build static site
@@ -220,7 +220,7 @@ jobs:
           node -e 'const fs=require("fs"); const sha=process.env.SHA||""; if(!sha) throw new Error("Missing SHA env"); const files=["style.css","web4core.runtime.js","ui.js","favicon.png"]; let s=fs.readFileSync("_site/index.html","utf8"); for(const f of files){ const i=f.lastIndexOf("."); const base=i>=0?f.slice(0,i):f; const ext=i>=0?f.slice(i+1):""; const to=ext?(base+"-"+sha+"."+ext):(base+"-"+sha); s=s.split(f).join(to); } fs.writeFileSync("_site/index.html", s);'
           echo "$SHA" > _site/version.txt
       - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v4
 
   Deploy:
     environment:
@@ -239,10 +239,10 @@ jobs:
     needs: [ Validate-singbox, Validate-singbox-extended, Validate-xray, Validate-mihomo ]
     if: github.ref == 'refs/heads/main'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '22'
           cache: 'npm'

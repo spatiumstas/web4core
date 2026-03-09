@@ -63,19 +63,64 @@
         <div id="settingsPanel" class="settings-panel settings-panel--collapsed">
             <div class="settings-panel__chips">
                 <label class="custom-checkbox chip">
-                    <input type="checkbox" id="cbTun" checked />
-                    <div class="checkmark"></div>
-                    <span>TUN</span>
-                </label>
-                <label class="custom-checkbox chip">
                     <input type="checkbox" id="cbSocks" checked />
                     <div class="checkmark"></div>
                     <span>SOCKS5</span>
                 </label>
+                <label class="custom-checkbox chip">
+                    <input type="checkbox" id="cbTun" />
+                    <div class="checkmark"></div>
+                    <span>TUN</span>
+                </label>
                 <label class="custom-checkbox chip" id="lblPerTunMixed">
                     <input type="checkbox" id="cbPerTunMixed" />
                     <div class="checkmark"></div>
-                    <span title="Expose per-TUN proxy inbounds when multiple TUNs">Per‑TUN proxy</span>
+                    <span title="Expose per-proxy TUN inbounds when multiple proxies are available">Per-Proxy TUN</span>
+                </label>
+                <label class="custom-checkbox chip is-hidden" id="lblXraySocks">
+                    <input type="checkbox" id="cbXraySocks" checked />
+                    <div class="checkmark"></div>
+                    <span>SOCKS5</span>
+                </label>
+                <label class="custom-checkbox chip is-hidden" id="lblXrayTun">
+                    <input type="checkbox" id="cbXrayTun" />
+                    <div class="checkmark"></div>
+                    <span>TUN</span>
+                </label>
+                <label class="custom-checkbox chip is-hidden" id="lblXrayBalancer">
+                    <input type="checkbox" id="cbXrayBalancer" />
+                    <div class="checkmark"></div>
+                    <span title="Xray routing balancer over all proxies">Balancer</span>
+                </label>
+                <label class="custom-checkbox chip is-hidden" id="lblMihomoSocks">
+                    <input type="checkbox" id="cbMihomoSocks" checked />
+                    <div class="checkmark"></div>
+                    <span>SOCKS5</span>
+                </label>
+                <label class="custom-checkbox chip is-hidden" id="lblMihomoTun">
+                    <input type="checkbox" id="cbMihomoTun" />
+                    <div class="checkmark"></div>
+                    <span>TUN</span>
+                </label>
+                <label class="custom-checkbox chip is-hidden" id="lblMihomoSub">
+                    <input type="checkbox" id="cbMihomoSub" />
+                    <div class="checkmark"></div>
+                    <span title="Use Mihomo proxy-provider with an HTTP(S) URL">Subscription</span>
+                </label>
+                <label class="custom-checkbox chip is-hidden" id="lblMihomoPerProxyTun">
+                    <input type="checkbox" id="cbMihomoPerProxyTun" />
+                    <div class="checkmark"></div>
+                    <span title="Multiple TUN interfaces per proxy">Per‑Proxy TUN</span>
+                </label>
+                <label class="custom-checkbox chip is-hidden" id="lblMihomoPerProxyPort">
+                    <input type="checkbox" id="cbMihomoPerProxyPort" />
+                    <div class="checkmark"></div>
+                    <span>Per-Proxy SOCKS</span>
+                </label>
+                <label class="custom-checkbox chip is-hidden" id="lblMihomoWebUI">
+                    <input type="checkbox" id="cbMihomoWebUI" checked />
+                    <div class="checkmark"></div>
+                    <span>Web UI</span>
                 </label>
                 <label class="custom-checkbox chip">
                     <input type="checkbox" id="cbClashSecret" />
@@ -97,46 +142,6 @@
                     <div class="checkmark"></div>
                     <span
                         title="XHTTP, XUDP, SDNS, Unified delay from github.com/shtorm-7/sing-box-extended">Extended</span>
-                </label>
-                <label class="custom-checkbox chip" id="lblXrayBalancer">
-                    <input type="checkbox" id="cbXrayBalancer" />
-                    <div class="checkmark"></div>
-                    <span title="Xray routing balancer over all proxies">Balancer</span>
-                </label>
-                <label class="custom-checkbox chip is-hidden" id="lblXrayTun">
-                    <input type="checkbox" id="cbXrayTun" />
-                    <div class="checkmark"></div>
-                    <span>TUN</span>
-                </label>
-                <label class="custom-checkbox chip is-hidden" id="lblXraySocks">
-                    <input type="checkbox" id="cbXraySocks" checked />
-                    <div class="checkmark"></div>
-                    <span>SOCKS5</span>
-                </label>
-                <label class="custom-checkbox chip is-hidden" id="lblMihomoSub">
-                    <input type="checkbox" id="cbMihomoSub" />
-                    <div class="checkmark"></div>
-                    <span title="Use Mihomo proxy-provider with an HTTP(S) URL">Subscription</span>
-                </label>
-                <label class="custom-checkbox chip is-hidden" id="lblMihomoTun">
-                    <input type="checkbox" id="cbMihomoTun" />
-                    <div class="checkmark"></div>
-                    <span>TUN</span>
-                </label>
-                <label class="custom-checkbox chip is-hidden" id="lblMihomoPerProxyTun">
-                    <input type="checkbox" id="cbMihomoPerProxyTun" />
-                    <div class="checkmark"></div>
-                    <span title="Multiple TUN interfaces per proxy">Per‑Proxy TUN</span>
-                </label>
-                <label class="custom-checkbox chip is-hidden" id="lblMihomoPerProxyPort">
-                    <input type="checkbox" id="cbMihomoPerProxyPort" />
-                    <div class="checkmark"></div>
-                    <span>Per-Proxy Port</span>
-                </label>
-                <label class="custom-checkbox chip is-hidden" id="lblMihomoWebUI">
-                    <input type="checkbox" id="cbMihomoWebUI" checked />
-                    <div class="checkmark"></div>
-                    <span>Web UI</span>
                 </label>
                 <button id="btnWgUpload" class="custom-checkbox chip is-hidden" type="button"
                     title="WireGuard/AmneziaWG (.conf/.awg)">

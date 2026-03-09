@@ -133,9 +133,17 @@ const MIHOMO_DEFAULT_TEMPLATE = [
 
 function buildMihomoYaml(proxies, groups, providers, rules, listeners, opts) {
     opts = opts || {};
+    const addSocks = opts.addSocks !== false;
     const webUI = opts.webUI === true;
     const tunOpt = opts.tun;
+    const perProxyGroupName = (name) => `🔒 ${name}`;
     let template = MIHOMO_DEFAULT_TEMPLATE;
+    if (!addSocks) {
+        template = template
+            .split('\n')
+            .filter(line => !/^mixed-port\s*:/i.test(line))
+            .join('\n');
+    }
     if (webUI) {
         const lines = template.split('\n');
         const ipv6Index = lines.findIndex(l => /^ipv6\s*:/i.test(l));
@@ -175,21 +183,38 @@ function buildMihomoYaml(proxies, groups, providers, rules, listeners, opts) {
             const tunListeners = [];
             const proxyList = Array.isArray(proxies) ? proxies : [];
             const providerKeys = (providers && typeof providers === 'object') ? Object.keys(providers) : [];
+            const hasGroup = (name) => Array.isArray(groups) && groups.some(g => g && g.name === name);
 
             const targets = [];
             if (providerKeys.length > 0) {
-                if (providerKeys.length > 1) {
-                    providerKeys.forEach(pn => pn && targets.push(`SUB-${pn}`));
-                } else {
+                providerKeys.forEach(pn => {
+                    const groupName = `SUB-${pn}`;
+                    if (pn && hasGroup(groupName)) {
+                        targets.push(groupName);
+                    }
+                });
+                if (targets.length === 0 && providerKeys.length === 1) {
                     const fastestGroup = Array.isArray(groups)
                         ? groups.find(g => g?.type === 'url-test' && Array.isArray(g.use))
                         : null;
                     const name = (fastestGroup && fastestGroup.name) ? fastestGroup.name : 'PROXY';
                     targets.push(name);
                 }
-                proxyList.forEach(p => p?.name && targets.push(p.name));
+                proxyList.forEach(p => {
+                    const proxyName = p?.name;
+                    const targetName = proxyName && hasGroup(perProxyGroupName(proxyName))
+                        ? perProxyGroupName(proxyName)
+                        : proxyName;
+                    if (targetName) targets.push(targetName);
+                });
             } else {
-                proxyList.forEach(p => p?.name && targets.push(p.name));
+                proxyList.forEach(p => {
+                    const proxyName = p?.name;
+                    const targetName = proxyName && hasGroup(perProxyGroupName(proxyName))
+                        ? perProxyGroupName(proxyName)
+                        : proxyName;
+                    if (targetName) targets.push(targetName);
+                });
             }
 
             targets.forEach((name, idx) => {
