@@ -16,7 +16,7 @@ function main() {
   const allLinks = splitLinksFromEnv('CONFIGS');
   if (!allLinks.length) throw new Error('CONFIGS is empty (no test links)');
 
-  const links = allLinks.filter((l) => !l.startsWith('tuic://') && !l.startsWith('anytls://') && !l.startsWith('masque://'));
+  const links = allLinks.filter((l) => !l.startsWith('tuic://') && !l.startsWith('anytls://') && !l.startsWith('masque://') && !l.startsWith('tt://'));
   console.log(`Found ${links.length} test links (excluding tuic/anytls/masque for Xray)`);
   if (!links.length) throw new Error('No Xray-compatible links in CONFIGS');
 

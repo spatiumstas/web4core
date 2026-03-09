@@ -4,6 +4,10 @@ const FASTEST_GROUP_NAME = '⚡ Fastest';
 const GLOBAL_GROUP_NAME = 'GLOBAL';
 const PER_PROXY_GROUP_PREFIX = '🔒 ';
 
+function getPerProxyGroupName(proxyName) {
+    return `${PER_PROXY_GROUP_PREFIX}${proxyName}`;
+}
+
 function sanitizeProviderName(name) {
     const raw = String(name || '').trim().toLowerCase();
     if (!raw) return '';
@@ -34,14 +38,18 @@ function computeProviderName(url, index, total, used) {
     return name;
 }
 
+function isPerProxyListenerMode(opts) {
+    return !!(opts && (opts.perProxyPort || opts.perProxyListeners));
+}
+
 function attachPerProxySelectGroup(groups, proxy) {
-    const groupName = `${PER_PROXY_GROUP_PREFIX}${proxy.name}`;
+    const groupName = getPerProxyGroupName(proxy.name);
     groups.push({
         name: groupName,
         type: 'select',
         proxies: [proxy.name, 'REJECT']
     });
-    proxy._groupName = groupName;
+    return groupName;
 }
 
 function buildMihomoProxy(bean) {
@@ -274,6 +282,53 @@ function buildMihomoProxy(bean) {
         applyCommon(p);
         return p;
     }
+    if (bean.proto === 'mieru') {
+        const mieru = bean.mieru || {};
+        const p = {
+            name: bean.name || computeTag(bean, new Set()),
+            type: 'mieru',
+            server: bean.host,
+            transport: mieru.transport || 'TCP',
+            username: mieru.username,
+            password: mieru.password,
+        };
+        if (mieru.server_ports) p['port-range'] = mieru.server_ports;
+        else p.port = bean.port;
+        if (mieru.multiplexing) p.multiplexing = mieru.multiplexing;
+        if (mieru.handshake_mode) p['handshake-mode'] = mieru.handshake_mode;
+        if (mieru.traffic_pattern) p['traffic-pattern'] = mieru.traffic_pattern;
+        applyCommon(p);
+        return p;
+    }
+    if (bean.proto === 'trusttunnel') {
+        const tt = bean.trusttunnel || {};
+        const p = {
+            ...base,
+            type: 'trusttunnel',
+            username: tt.username,
+            password: tt.password,
+        };
+        if (s.sni) p.sni = s.sni;
+        if (s.alpn && s.alpn.length) p.alpn = s.alpn;
+        if (s.allowInsecure) p['skip-cert-verify'] = true;
+        if (s.fp) p['client-fingerprint'] = s.fp;
+        if (tt.fingerprint) p.fingerprint = tt.fingerprint;
+        if (tt.certificate) p.certificate = tt.certificate;
+        if (tt.privateKey) p['private-key'] = tt.privateKey;
+        const echConfig = (s.ech?.config || s.ech?.configList || '').trim();
+        const echQueryServerName = (s.ech?.queryServerName || '').trim();
+        if (echConfig || echQueryServerName) {
+            p['ech-opts'] = { enable: true };
+            if (echConfig) p['ech-opts'].config = echConfig;
+            if (echQueryServerName) p['ech-opts']['query-server-name'] = echQueryServerName;
+        }
+        if (tt.healthCheck) p['health-check'] = true;
+        if (tt.quic) p.quic = true;
+        if (tt.congestionController) p['congestion-controller'] = tt.congestionController;
+        if (Number.isFinite(tt.cwnd) && tt.cwnd > 0) p.cwnd = tt.cwnd;
+        applyCommon(p);
+        return p;
+    }
     throw new Error('Not supported by Mihomo: ' + bean.proto);
 }
 
@@ -358,14 +413,15 @@ function buildMihomoConfig(beans, opts) {
         used.add(name);
     }
     const names = proxies.map(p => p.name);
+    const usePerProxyListeners = isPerProxyListenerMode(opts);
     const usePerProxyPort = !!(opts && opts.perProxyPort);
     const groups = [];
-    
-    if (usePerProxyPort) {
+
+    if (usePerProxyListeners) {
         proxies.forEach(p => {
             attachPerProxySelectGroup(groups, p);
         });
-        const groupNames = proxies.map(p => p._groupName);
+        const groupNames = proxies.map(p => getPerProxyGroupName(p.name));
         groups.push({
             name: GLOBAL_GROUP_NAME,
             type: 'select',
@@ -400,7 +456,7 @@ function buildMihomoConfig(beans, opts) {
     if (usePerProxyPort && proxies.length > 0) {
         for (let i = 0; i < proxies.length; i++) {
             const port = basePort + i;
-            const targetGroup = proxies[i]._groupName || proxies[i].name;
+            const targetGroup = usePerProxyListeners ? getPerProxyGroupName(proxies[i].name) : proxies[i].name;
             listeners.push({
                 name: `socks-${proxies[i].name}`,
                 type: 'socks',
@@ -455,26 +511,24 @@ function buildMihomoSubscriptionConfig(subscriptionUrls, extraBeans, opts) {
         providerNames.push(providerName);
     });
 
-    const groups = [{
-        name: FASTEST_GROUP_NAME,
-        type: 'url-test',
-        use: providerNames,
-        url: URLTEST,
-        interval: PROXY_FETCH_INTERVAL,
-        tolerance: 50,
-        __comments: {
-            interval: 'Latency probe interval (seconds)',
-            tolerance: 'Switch threshold (ms)'
-        }
-    }];
+    const usePerProxyListeners = isPerProxyListenerMode(opts);
+    const groups = [];
+    if (!usePerProxyListeners) {
+        groups.push({
+            name: FASTEST_GROUP_NAME,
+            type: 'url-test',
+            use: providerNames,
+            url: URLTEST,
+            interval: PROXY_FETCH_INTERVAL,
+            tolerance: 50,
+            __comments: {
+                interval: 'Latency probe interval (seconds)',
+                tolerance: 'Switch threshold (ms)'
+            }
+        });
+    }
 
-    groups.push({
-        name: GLOBAL_GROUP_NAME,
-        type: 'select',
-        proxies: [FASTEST_GROUP_NAME, 'REJECT']
-    });
-
-    if (providerNames.length > 1) {
+    if (providerNames.length > 1 || usePerProxyListeners) {
         providerNames.forEach((providerName) => {
             groups.push({
                 name: `SUB-${providerName}`,
@@ -485,14 +539,16 @@ function buildMihomoSubscriptionConfig(subscriptionUrls, extraBeans, opts) {
     }
 
     const usePerProxyPort = !!(opts && opts.perProxyPort);
-    const fastestGroup = groups.find(g => g && g.name === FASTEST_GROUP_NAME && g.type === 'url-test');
+    const fastestGroup = !usePerProxyListeners
+        ? groups.find(g => g && g.name === FASTEST_GROUP_NAME && g.type === 'url-test')
+        : null;
     const extraProxies = [];
     if (Array.isArray(extraBeans) && extraBeans.length > 0) {
         extraBeans.forEach(bean => {
             validateBean(bean);
             const p = buildMihomoProxy(bean);
             extraProxies.push(p);
-            if (usePerProxyPort) {
+            if (usePerProxyListeners) {
                 attachPerProxySelectGroup(groups, p);
             } else {
                 if (fastestGroup) {
@@ -502,6 +558,26 @@ function buildMihomoSubscriptionConfig(subscriptionUrls, extraBeans, opts) {
             }
         });
     }
+
+    if (usePerProxyListeners) {
+        const globalTargets = providerNames.map(providerName => `SUB-${providerName}`);
+        extraProxies.forEach((p) => {
+            const targetGroup = getPerProxyGroupName(p.name);
+            if (targetGroup) globalTargets.push(targetGroup);
+        });
+        groups.push({
+            name: GLOBAL_GROUP_NAME,
+            type: 'select',
+            proxies: globalTargets.length > 0 ? [...globalTargets, 'REJECT'] : ['REJECT']
+        });
+    } else {
+        groups.push({
+            name: GLOBAL_GROUP_NAME,
+            type: 'select',
+            proxies: [FASTEST_GROUP_NAME, 'REJECT']
+        });
+    }
+
     const basePort = (opts && opts.basePort) || 7890;
     const listeners = [];
     if (usePerProxyPort) {
@@ -512,15 +588,11 @@ function buildMihomoSubscriptionConfig(subscriptionUrls, extraBeans, opts) {
             proxy
         });
         let portIdx = 0;
-        if (providerNames.length > 1) {
-            providerNames.forEach(providerName => {
-                listeners.push(buildSocksListener(`SUB-${providerName}`, `SUB-${providerName}`, basePort + portIdx++));
-            });
-        } else {
-            listeners.push(buildSocksListener(FASTEST_GROUP_NAME, FASTEST_GROUP_NAME, basePort + portIdx++));
-        }
+        providerNames.forEach(providerName => {
+            listeners.push(buildSocksListener(`SUB-${providerName}`, `SUB-${providerName}`, basePort + portIdx++));
+        });
         extraProxies.forEach(p => {
-            const targetGroup = p._groupName || p.name;
+            const targetGroup = getPerProxyGroupName(p.name);
             listeners.push(buildSocksListener(p.name, targetGroup, basePort + portIdx++));
         });
     }

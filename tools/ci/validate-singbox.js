@@ -67,6 +67,7 @@ function runCommonSuite({ runnerName, bin, startupRegex, useExtended }) {
   const links = linksAll.filter((l) => {
     const s = String(l || '');
     if (s.startsWith('masque://')) return false;
+    if (s.startsWith('tt://')) return false;
     if (s.includes('#Test-Hysteria2-HopInterval-Range')) return false;
     if (/[?&]hop_interval=\d+\s*-\s*\d+(?:[&#]|$)/i.test(s)) return false;
     return true;

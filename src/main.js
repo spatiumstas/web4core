@@ -92,6 +92,7 @@ const SUPPORTED_SCHEMES = [
     'hy2',
     'hysteria2',
     'tuic',
+    'tt',
     'mieru',
     'sdns',
     'masque'
@@ -124,7 +125,7 @@ const CORE_PROTOCOL_SUPPORT = {
         base: ['vmess', 'vless', 'trojan', 'ss', 'socks', 'http', 'hy2'],
     },
     mihomo: {
-        base: ['vmess', 'vless', 'trojan', 'ss', 'socks', 'http', 'hy2', 'tuic', 'wireguard', 'masque'],
+        base: ['vmess', 'vless', 'trojan', 'ss', 'socks', 'http', 'hy2', 'tuic', 'wireguard', 'masque', 'mieru', 'trusttunnel'],
     }
 };
 
@@ -145,6 +146,30 @@ function splitCSV(str) {
 
 function getQuery(u) {
     return u.searchParams;
+}
+
+function getFirstTrimmedQueryValue(q, keys) {
+    for (const key of keys) {
+        const value = (q.get(key) || '').trim();
+        if (value) return value;
+    }
+    return '';
+}
+
+function parseTlsQueryExtras(q) {
+    return {
+        certificatePublicKeySha256: getFirstTrimmedQueryValue(q, [
+            'certificate_public_key_sha256',
+            'certificate-public-key-sha256'
+        ]),
+        ech: {
+            config: getFirstTrimmedQueryValue(q, ['echConfig', 'ech-config', 'ech_config']),
+            configPath: getFirstTrimmedQueryValue(q, ['echConfigPath', 'ech-config-path', 'ech_config_path']),
+            configList: getFirstTrimmedQueryValue(q, ['echConfigList', 'ech-config-list', 'ech_config_list']),
+            queryServerName: getFirstTrimmedQueryValue(q, ['echQueryServerName', 'ech-query-server-name', 'ech_query_server_name']),
+            forceQuery: getFirstTrimmedQueryValue(q, ['echForceQuery', 'ech-force-query', 'ech_force_query'])
+        }
+    };
 }
 
 function asInt(n, def = 0) {
@@ -222,6 +247,24 @@ function parseAddrHostPort(addr, defaultPort) {
     return { host, port };
 }
 
+function readTlsVarIntBinary(input, offset) {
+    const source = String(input || '');
+    if (!Number.isInteger(offset) || offset < 0 || offset >= source.length) {
+        throw new Error('tt: invalid varint offset');
+    }
+    const first = source.charCodeAt(offset);
+    const prefix = first >> 6;
+    const size = 1 << prefix;
+    if (offset + size > source.length) throw new Error('tt: truncated varint');
+
+    let value = BigInt(first & 0x3f);
+    for (let i = 1; i < size; i++) {
+        value = (value << 8n) | BigInt(source.charCodeAt(offset + i));
+    }
+    if (value > BigInt(Number.MAX_SAFE_INTEGER)) throw new Error('tt: varint too large');
+    return { value: Number(value), nextOffset: offset + size };
+}
+
 function decodeAuthorityAndExtract(authority, defaultPort) {
     const dec = decodeBase64Url(authority || '');
     if (!dec || !dec.includes('@')) return null;
@@ -273,6 +316,11 @@ function validateBean(bean) {
             requireHost();
             requirePort();
             if (!bean.mieru?.username || !bean.mieru?.password) throw new Error('mieru: missing username/password');
+            break;
+        case 'trusttunnel':
+            requireHost();
+            requirePort();
+            if (!bean.trusttunnel?.username || !bean.trusttunnel?.password) throw new Error('trusttunnel: missing username/password');
             break;
         case 'vless':
             requireHost();
@@ -401,6 +449,7 @@ function parseTunSpec(tunSpec) {
 function parseLink(input) {
     const trimmed = input.trim();
     const scheme = trimmed.split(':', 1)[0].toLowerCase();
+    if (scheme === 'tt') return parseTrustTunnel(trimmed);
     if (scheme === 'mieru') return parseMieru(trimmed);
     if (scheme === 'vmess') return parseVMess(trimmed);
     if (scheme === 'vless') return parseVLESS(trimmed);
@@ -790,6 +839,7 @@ function parseHysteria2(urlStr) {
     const u = parseUrl(urlStr);
     const q = getQuery(u);
     const pwd = u.password ? (safeDecodeURIComponent(u.username || '') + ':' + safeDecodeURIComponent(u.password)) : safeDecodeURIComponent(u.username || '');
+    const tlsExtras = parseTlsQueryExtras(q);
     return {
         proto: 'hy2',
         host: u.hostname,
@@ -805,6 +855,8 @@ function parseHysteria2(urlStr) {
             allowInsecure: ['1', 'true', 'yes'].includes(((q.get('allowInsecure') || q.get('insecure') || '')).toLowerCase()),
             pinnedPeerCertSha256: (q.get('pinnedPeerCertSha256') || q.get('pinned-peer-cert-sha256') || q.get('pinSHA256') || q.get('pin-sha256') || '').trim(),
             verifyPeerCertByName: (q.get('verifyPeerCertByName') || q.get('verify-peer-cert-by-name') || '').trim(),
+            certificatePublicKeySha256: tlsExtras.certificatePublicKeySha256,
+            ech: tlsExtras.ech,
             congestion: q.get('congestion') || ''
         }
     };
@@ -813,6 +865,7 @@ function parseHysteria2(urlStr) {
 function parseTUIC(urlStr) {
     const u = parseUrl(urlStr);
     const q = getQuery(u);
+    const tlsExtras = parseTlsQueryExtras(q);
     return {
         proto: 'tuic',
         host: u.hostname,
@@ -834,7 +887,9 @@ function parseTUIC(urlStr) {
             disableSni: ['1', 'true', 'yes'].includes(((q.get('disable_sni') || q.get('disableSni') || '')).toLowerCase()),
             token: q.get('token') || '',
             requestTimeout: q.get('request_timeout') || q.get('request-timeout') || '',
-            reduceRtt: ['1', 'true'].includes((q.get('reduce_rtt') || q.get('reduce-rtt') || '').toLowerCase())
+            reduceRtt: ['1', 'true'].includes((q.get('reduce_rtt') || q.get('reduce-rtt') || '').toLowerCase()),
+            certificatePublicKeySha256: tlsExtras.certificatePublicKeySha256,
+            ech: tlsExtras.ech
         }
     };
 }
@@ -849,6 +904,8 @@ function parseMieru(urlStr) {
     const serverPorts = q.get('server_ports') || q.get('ports') || '';
     const transport = (q.get('transport') || 'TCP').toUpperCase();
     const multiplexing = (q.get('multiplexing') || '').toUpperCase();
+    const handshakeMode = (q.get('handshake_mode') || q.get('handshake-mode') || '').toUpperCase();
+    const trafficPattern = (q.get('traffic_pattern') || q.get('traffic-pattern') || '').trim();
     return {
         proto: 'mieru',
         host: u.hostname,
@@ -859,9 +916,97 @@ function parseMieru(urlStr) {
             password,
             server_ports: serverPorts,
             transport,
-            multiplexing
+            multiplexing,
+            handshake_mode: handshakeMode,
+            traffic_pattern: trafficPattern
         }
     };
+}
+
+function parseTrustTunnel(urlStr) {
+    const raw = String(urlStr || '').trim();
+    if (!raw.toLowerCase().startsWith('tt://?')) throw new Error('A tt://? link is required');
+
+    const hashIndex = raw.indexOf('#');
+    const payload = raw.slice('tt://?'.length, hashIndex === -1 ? undefined : hashIndex).trim();
+    if (!payload) throw new Error('tt: missing payload');
+
+    const decoded = decodeBase64Url(payload);
+    if (!decoded) throw new Error('tt: invalid base64 payload');
+
+    const fields = new Map();
+    const addresses = [];
+    for (let i = 0; i < decoded.length;) {
+        const tagInfo = readTlsVarIntBinary(decoded, i);
+        const lenInfo = readTlsVarIntBinary(decoded, tagInfo.nextOffset);
+        const valueStart = lenInfo.nextOffset;
+        const valueEnd = valueStart + lenInfo.value;
+        if (valueEnd > decoded.length) throw new Error('tt: truncated field value');
+        const value = decoded.slice(valueStart, valueEnd);
+        if (tagInfo.value === 0x02) addresses.push(value);
+        else fields.set(tagInfo.value, value);
+        i = valueEnd;
+    }
+
+    const versionRaw = fields.get(0x00);
+    if (versionRaw && versionRaw.length) {
+        const version = versionRaw.charCodeAt(0);
+        if (version !== 0) throw new Error('tt: unsupported version ' + version);
+    }
+
+    const endpoint = addresses.find(Boolean) || '';
+    const parsed = parseAddrHostPort(endpoint, 443);
+    const hostname = fields.get(0x01) || '';
+    const customSni = fields.get(0x03) || '';
+    const skipVerification = (fields.get(0x07) || '').charCodeAt(0) === 0x01;
+    const upstreamProtocol = (fields.get(0x09) || '').charCodeAt(0);
+    const sni = customSni || hostname || parsed.host || '';
+    const name = hashIndex === -1 ? '' : safeDecodeURIComponent(raw.slice(hashIndex + 1));
+
+    if (!hostname) throw new Error('tt: missing hostname');
+    if (!endpoint) throw new Error('tt: missing address');
+    if (!fields.get(0x05)) throw new Error('tt: missing username');
+    if (!fields.get(0x06)) throw new Error('tt: missing password');
+
+    const bean = {
+        proto: 'trusttunnel',
+        host: parsed.host,
+        port: parsed.port,
+        name,
+        trusttunnel: {
+            username: fields.get(0x05) || '',
+            password: fields.get(0x06) || '',
+            healthCheck: false,
+            quic: false,
+            congestionController: '',
+            cwnd: 0,
+            fingerprint: '',
+            certificate: '',
+            privateKey: ''
+        },
+        stream: {
+            network: 'tcp',
+            security: 'tls',
+            sni,
+            alpn: [],
+            allowInsecure: skipVerification,
+            ech: {
+                config: '',
+                queryServerName: '',
+            },
+            fp: '',
+        },
+        udp: false,
+        udpOverTcp: false,
+        ipVersion: ''
+    };
+    if (upstreamProtocol === 0x01) bean.stream.alpn = ['h2'];
+    if (upstreamProtocol === 0x02) {
+        bean.stream.alpn = ['h3'];
+        bean.trusttunnel.quic = true;
+    }
+    bean.stream = normalizeStream(bean.stream, bean.host);
+    return bean;
 }
 
 function parseMieruProfilesJson(jsonObj) {
@@ -875,6 +1020,8 @@ function parseMieruProfilesJson(jsonObj) {
         const profileName = (p?.profileName || '').trim();
         const servers = Array.isArray(p?.servers) ? p.servers : [];
         const multiplexing = (p?.multiplexing || '').toString().toUpperCase();
+        const handshakeMode = (p?.handshakeMode || p?.handshake_mode || '').toString().toUpperCase();
+        const trafficPattern = (p?.trafficPattern || p?.traffic_pattern || '').toString().trim();
         for (const s of servers) {
             const host = s?.ipAddress || s?.host || s?.hostname || '';
             const bindings = Array.isArray(s?.portBindings) ? s.portBindings : [];
@@ -899,7 +1046,9 @@ function parseMieruProfilesJson(jsonObj) {
                         password,
                         server_ports: portRange,
                         transport: protocol,
-                        multiplexing
+                        multiplexing,
+                        handshake_mode: handshakeMode,
+                        traffic_pattern: trafficPattern
                     }
                 };
                 beans.push(bean);
@@ -959,6 +1108,7 @@ function buildStreamFromQuery(q, isTrojan) {
     const allowInsecure = ['1', 'true', 'yes'].includes(aiRaw);
     const pinnedPeerCertSha256 = (q.get('pinnedPeerCertSha256') || q.get('pinned-peer-cert-sha256') || q.get('pinSHA256') || q.get('pin-sha256') || '').trim();
     const verifyPeerCertByName = (q.get('verifyPeerCertByName') || q.get('verify-peer-cert-by-name') || '').trim();
+    const {certificatePublicKeySha256, ech} = parseTlsQueryExtras(q);
     const fp = q.get('fp') || '';
     const reality = {
         pbk: q.get('pbk') || '',
@@ -976,6 +1126,8 @@ function buildStreamFromQuery(q, isTrojan) {
         allowInsecure,
         pinnedPeerCertSha256,
         verifyPeerCertByName,
+        certificatePublicKeySha256,
+        ech,
         fp,
         reality,
         headerType: '',

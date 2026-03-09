@@ -4,6 +4,39 @@ function buildXrayOutbound(bean) {
     const s = bean.stream || {};
     const network = s.network || 'tcp';
     let streamSettings = {network: (network === 'http' || network === 'h2') ? 'xhttp' : network};
+    const applyXrayEch = (tlsSettings, ech) => {
+        if (!tlsSettings || !ech) return;
+        if (ech.configList) tlsSettings.echConfigList = ech.configList;
+        if (ech.forceQuery) tlsSettings.echForceQuery = ech.forceQuery;
+    };
+    const buildDownloadSettings = (download, security, tlsSettings, realitySettings) => {
+        if (!download || typeof download !== 'object') return null;
+        const address = download.server || bean.host;
+        const port = download.server_port || bean.port || 0;
+        if (!address || !port) return null;
+        const xhttpSettings = {};
+        if (download.host) xhttpSettings.host = download.host;
+        if (download.path) xhttpSettings.path = download.path;
+        if (download.mode) xhttpSettings.mode = download.mode;
+        if (download.x_padding_bytes) xhttpSettings.xPaddingBytes = download.x_padding_bytes;
+        if (download.sc_max_each_post_bytes) xhttpSettings.scMaxEachPostBytes = download.sc_max_each_post_bytes;
+        if (download.sc_min_posts_interval_ms) xhttpSettings.scMinPostsIntervalMs = download.sc_min_posts_interval_ms;
+        if (download.sc_stream_up_server_secs) xhttpSettings.scStreamUpServerSecs = download.sc_stream_up_server_secs;
+        const config = {
+            address,
+            port,
+            network: 'xhttp',
+            xhttpSettings
+        };
+        if (security === 'tls' && tlsSettings) {
+            config.security = 'tls';
+            config.tlsSettings = {...tlsSettings};
+        } else if (security === 'reality' && realitySettings) {
+            config.security = 'reality';
+            config.realitySettings = {...realitySettings};
+        }
+        return config;
+    };
 
     if (bean.proto === 'hy2') {
         const h = bean.hysteria2 || {};
@@ -50,11 +83,14 @@ function buildXrayOutbound(bean) {
                 settings: {password: h.obfsPassword}
             }];
         }
+        applyXrayEch(streamSettings.tlsSettings, h.ech);
         if (streamSettings.tlsSettings) {
             if (!streamSettings.tlsSettings.serverName) delete streamSettings.tlsSettings.serverName;
             if (!streamSettings.tlsSettings.alpn) delete streamSettings.tlsSettings.alpn;
             if (!streamSettings.tlsSettings.pinnedPeerCertSha256) delete streamSettings.tlsSettings.pinnedPeerCertSha256;
             if (!streamSettings.tlsSettings.verifyPeerCertByName) delete streamSettings.tlsSettings.verifyPeerCertByName;
+            if (!streamSettings.tlsSettings.echConfigList) delete streamSettings.tlsSettings.echConfigList;
+            if (!streamSettings.tlsSettings.echForceQuery) delete streamSettings.tlsSettings.echForceQuery;
             if (Object.keys(streamSettings.tlsSettings).length === 0) delete streamSettings.tlsSettings;
         }
     } else {
@@ -68,6 +104,7 @@ function buildXrayOutbound(bean) {
             if (s.fp) streamSettings.tlsSettings.fingerprint = s.fp;
             if (s.pinnedPeerCertSha256) streamSettings.tlsSettings.pinnedPeerCertSha256 = s.pinnedPeerCertSha256;
             if (s.verifyPeerCertByName) streamSettings.tlsSettings.verifyPeerCertByName = s.verifyPeerCertByName;
+            applyXrayEch(streamSettings.tlsSettings, s.ech);
         } else if (sec === 'reality') {
             streamSettings.security = 'reality';
             streamSettings.realitySettings = {show: false, publicKey: s.reality.pbk};
@@ -117,6 +154,8 @@ function buildXrayOutbound(bean) {
                 if (xmux.h_max_reusable_secs) streamSettings.xhttpSettings.xmux.hMaxReusableSecs = xmux.h_max_reusable_secs;
                 if (xmux.h_keep_alive_period) streamSettings.xhttpSettings.xmux.hKeepAlivePeriod = xmux.h_keep_alive_period;
             }
+            const downloadSettings = buildDownloadSettings(s.xhttpDownload, sec, streamSettings.tlsSettings, streamSettings.realitySettings);
+            if (downloadSettings) streamSettings.xhttpSettings.downloadSettings = downloadSettings;
         } else if (streamSettings.network === 'grpc') {
             streamSettings.grpcSettings = {};
             if (s.path) streamSettings.grpcSettings.serviceName = s.path;

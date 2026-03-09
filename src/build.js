@@ -145,6 +145,7 @@ export function buildFromRequest(req) {
   const webUI = !!options.webUI;
   const perProxyPort = !!options.perProxyPort;
   const addTun = !!options.addTun;
+  const perProxyListeners = perProxyPort || !!options.mihomoPerProxyTun;
   const mihomoTunOpts = addTun ? { mode: (options.mihomoPerProxyTun ? 'listeners' : 'tun') } : null;
 
   const subMode = !!options.mihomoSubscriptionMode;
@@ -159,7 +160,7 @@ export function buildFromRequest(req) {
     extraBeans.forEach(validateBean);
     assertCoreSupports(extraBeans, core, 'Mihomo', options);
 
-    const cfg = buildMihomoSubscriptionConfig(subUrls, extraBeans, { perProxyPort });
+    const cfg = buildMihomoSubscriptionConfig(subUrls, extraBeans, {perProxyPort, perProxyListeners});
     const yaml = buildMihomoYaml(cfg.proxies, cfg.groups, cfg.providers, cfg.rules, cfg.listeners, {
       webUI,
       tun: mihomoTunOpts,
@@ -167,8 +168,8 @@ export function buildFromRequest(req) {
     return { kind: 'yaml', data: yaml };
   }
 
-  const outBeans = allBeans.filter((b) => b.proto !== 'mieru' && b.proto !== 'sdns');
-  const cfg = buildMihomoConfig(outBeans, { perProxyPort });
+  const outBeans = allBeans.filter((b) => b.proto !== 'sdns');
+  const cfg = buildMihomoConfig(outBeans, {perProxyPort, perProxyListeners});
   const yaml = buildMihomoYaml(cfg.proxies, cfg['proxy-groups'], null, cfg.rules, cfg.listeners, {
     webUI,
     tun: mihomoTunOpts,

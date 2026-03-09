@@ -2,6 +2,26 @@ import { generateSecretHex32, parseTunSpec, splitCSV, URLTEST, URLTEST_INTERVAL 
 
 function buildSingBoxOutbound(bean, opts) {
     const useExtended = !!(opts && opts.useExtended) || !!bean?._useExtended;
+    const parseValueList = (raw) => splitCSV(raw || '').filter(Boolean);
+    const looksLikeHexSha256 = (value) => /^[0-9a-f]{64}$/i.test(String(value || '').replace(/:/g, ''));
+    const resolveCertificatePins = (source) => {
+        const directPins = parseValueList(source?.certificatePublicKeySha256 || '');
+        if (directPins.length) return directPins;
+        return parseValueList(source?.pinnedPeerCertSha256 || '').filter(value => !looksLikeHexSha256(value));
+    };
+    const applyTlsExtras = (tls, source) => {
+        const certificatePins = resolveCertificatePins(source || {});
+        if (certificatePins.length) tls.certificate_public_key_sha256 = certificatePins;
+        const ech = source?.ech || {};
+        if (ech.config || ech.configPath || ech.queryServerName) {
+            const echConfig = {enabled: true};
+            const configValues = parseValueList(ech.config || '');
+            if (configValues.length) echConfig.config = configValues;
+            if (ech.configPath) echConfig.config_path = ech.configPath;
+            if (ech.queryServerName) echConfig.query_server_name = ech.queryServerName;
+            tls.ech = echConfig;
+        }
+    };
     const commonTLS = () => {
         const s = bean.stream || {};
         const isReality = !!(s.reality && s.reality.pbk);
@@ -12,12 +32,27 @@ function buildSingBoxOutbound(bean, opts) {
         if (s.allowInsecure) tls.insecure = true;
         if (s.sni) tls.server_name = s.sni;
         if (s.alpn && s.alpn.length) tls.alpn = s.alpn;
+        applyTlsExtras(tls, s);
         if (isReality) {
             tls.reality = { enabled: true, public_key: s.reality.pbk, short_id: s.reality.sid || '' };
             if (!s.fp) tls.utls = { enabled: true, fingerprint: 'random' };
         }
         if (s.fp) tls.utls = { enabled: true, fingerprint: s.fp };
         return tls;
+    };
+
+    const buildExtendedXhttpXmux = (xmux) => {
+        const hasXmux = Object.values(xmux || {}).some(v => v !== '' && v !== 0);
+        if (!hasXmux) return null;
+
+        const result = {};
+        if (xmux.max_concurrency) result.max_concurrency = xmux.max_concurrency;
+        else if (xmux.max_connections) result.max_connections = xmux.max_connections;
+        if (xmux.c_max_reuse_times) result.c_max_reuse_times = xmux.c_max_reuse_times;
+        if (xmux.h_max_request_times) result.h_max_request_times = xmux.h_max_request_times;
+        if (xmux.h_max_reusable_secs) result.h_max_reusable_secs = xmux.h_max_reusable_secs;
+        if (xmux.h_keep_alive_period) result.h_keep_alive_period = xmux.h_keep_alive_period;
+        return Object.keys(result).length ? result : null;
     };
 
     function applyTransport(outbound, stream, packetEncoding) {
@@ -46,18 +81,11 @@ function buildSingBoxOutbound(bean, opts) {
                 if (stream.path) t.path = stream.path;
                 if (stream.host) t.host = stream.host;
                 if (stream.xhttpMode) t.mode = stream.xhttpMode;
+                t.x_padding_bytes = '100-1000';
 
                 const xmux = stream.xhttpXmux || {};
-                const hasXmux = Object.values(xmux).some(v => v !== '' && v !== 0);
-                if (hasXmux) {
-                    t.xmux = {};
-                    if (xmux.max_concurrency) t.xmux.max_concurrency = xmux.max_concurrency;
-                    if (xmux.max_connections) t.xmux.max_connections = xmux.max_connections;
-                    if (xmux.c_max_reuse_times) t.xmux.c_max_reuse_times = xmux.c_max_reuse_times;
-                    if (xmux.h_max_request_times) t.xmux.h_max_request_times = xmux.h_max_request_times;
-                    if (xmux.h_max_reusable_secs) t.xmux.h_max_reusable_secs = xmux.h_max_reusable_secs;
-                    if (xmux.h_keep_alive_period) t.xmux.h_keep_alive_period = xmux.h_keep_alive_period;
-                }
+                const resolvedXmux = buildExtendedXhttpXmux(xmux);
+                if (resolvedXmux) t.xmux = resolvedXmux;
 
                 const download = stream.xhttpDownload || {};
                 const hasDownload = Object.values(download).some(v => v !== '' && v !== 0);
@@ -73,8 +101,8 @@ function buildSingBoxOutbound(bean, opts) {
                     if (download.server_port) t.download.server_port = download.server_port;
                     if (download.detour) t.download.detour = download.detour;
 
-                    if (hasXmux) {
-                        t.download.xmux = t.xmux;
+                    if (resolvedXmux) {
+                        t.download.xmux = resolvedXmux;
                     }
                 }
             } else if (stream.network === 'grpc') {
@@ -142,6 +170,7 @@ function buildSingBoxOutbound(bean, opts) {
         if (h.sni) tls.server_name = h.sni;
         if (alpn.length) tls.alpn = alpn;
         else if (!Array.isArray(tls.alpn) || tls.alpn.length === 0) tls.alpn = ['h3'];
+        applyTlsExtras(tls, h);
         outbound = { type: 'hysteria2', server: bean.host, server_port: bean.port || 443, tls };
         outbound.password = bean.auth.password;
         if (bean.hysteria2?.obfsPassword) {
@@ -172,6 +201,7 @@ function buildSingBoxOutbound(bean, opts) {
         if (t.disableSni) tls.disable_sni = true;
         if (t.sni) tls.server_name = t.sni;
         if (alpn.length) tls.alpn = alpn;
+        applyTlsExtras(tls, t);
         outbound = { type: 'tuic', server: bean.host, server_port: bean.port || 443, tls };
         if (bean.tuic?.token) outbound.token = bean.tuic.token;
         else {

@@ -83,6 +83,7 @@ const PLACEHOLDER_XRAY = [
 const PLACEHOLDER_MIHOMO = [
     'subscription links',
     'vless://...',
+    'tt://...',
     'vmess://...',
     'trojan://...',
     'ss://...',
@@ -90,7 +91,8 @@ const PLACEHOLDER_MIHOMO = [
     'http://user:pass@host:port',
     'hy2://...',
     'tuic://...',
-    'masque://...'
+    'masque://...',
+    'mieru://... (or json)'
 ];
 
 function updateLinksPlaceholder() {
@@ -373,9 +375,11 @@ function validateField(showOutput) {
 
             const extraBeans = wgBeans.slice();
             extraBeans.push(...parseAndValidateProxyText(proxyText));
+            const perProxyPort = !!el.cbMihomoPerProxyPort?.checked;
 
             const config = globalThis.web4core?.buildMihomoSubscriptionConfig(subUrls, extraBeans, {
-                perProxyPort: !!el.cbMihomoPerProxyPort?.checked
+                perProxyPort,
+                perProxyListeners: perProxyPort || mihomoPerProxyTun
             });
             if (!config) throw new Error('Failed to build subscription config');
 
@@ -405,7 +409,7 @@ function validateField(showOutput) {
             }
         }
         if (getCore() === 'mihomo') {
-            const outBeans = beans.filter(b => !['mieru', 'sdns'].includes(b.proto));
+            const outBeans = beans.filter(b => b.proto !== 'sdns');
             setMihomoPerProxyTunVisible(!!mihomoTunEnabled && outBeans.length > 1);
         } else {
             setMihomoPerProxyTunVisible(false);

@@ -16,7 +16,7 @@ function pickMihomoCompatibleLink(web4core, links) {
     try {
       const b = (web4core.buildBeansFromInput(l) || [])[0];
       if (!b) continue;
-      if (['mieru', 'sdns', 'anytls'].includes(b.proto)) continue;
+      if (['sdns', 'anytls'].includes(b.proto)) continue;
       if (b.proto === 'socks' && b.socks && b.socks.type === 'socks4') continue;
       return l;
     } catch {}
@@ -30,6 +30,12 @@ function buildYaml(web4core, input, options, wgBeans) {
   return out.data;
 }
 
+function validateMihomoYaml(yamlText, fileName) {
+  writeYaml(fileName, yamlText);
+  execOrThrow(`mihomo -t -f ${fileName}`);
+  fs.unlinkSync(fileName);
+}
+
 function main() {
   const web4core = loadWeb4core();
   const rawLinks = splitLinksFromEnv('CONFIGS');
@@ -39,7 +45,7 @@ function main() {
     try {
       const b = (web4core.buildBeansFromInput(l) || [])[0];
       if (!b) return false;
-      if (['mieru', 'sdns', 'anytls'].includes(b.proto)) return false;
+      if (['sdns', 'anytls'].includes(b.proto)) return false;
       if (b.proto === 'socks' && b.socks && b.socks.type === 'socks4') return false;
       return true;
     } catch {
@@ -69,37 +75,25 @@ function main() {
       // baseline
       {
         const y = buildYaml(web4core, linkLine, { webUI: true, addTun: false }, wgBean ? [wgBean] : []);
-        const f = `mihomo_${i}_basic.yaml`;
-        writeYaml(f, y);
-        execOrThrow(`mihomo -t -f ${f}`);
-        fs.unlinkSync(f);
+        validateMihomoYaml(y, `mihomo_${i}_basic.yaml`);
       }
 
       // per-proxy port
       {
         const y = buildYaml(web4core, linkLine, { webUI: false, perProxyPort: true, addTun: false }, wgBean ? [wgBean] : []);
-        const f = `mihomo_${i}_perport.yaml`;
-        writeYaml(f, y);
-        execOrThrow(`mihomo -t -f ${f}`);
-        fs.unlinkSync(f);
+        validateMihomoYaml(y, `mihomo_${i}_perport.yaml`);
       }
 
       // tun: section mode
       {
         const y = buildYaml(web4core, linkLine, { webUI: true, addTun: true, mihomoPerProxyTun: false }, wgBean ? [wgBean] : []);
-        const f = `mihomo_${i}_tun.yaml`;
-        writeYaml(f, y);
-        execOrThrow(`mihomo -t -f ${f}`);
-        fs.unlinkSync(f);
+        validateMihomoYaml(y, `mihomo_${i}_tun.yaml`);
       }
 
       // tun: listeners mode (per-proxy tun)
       {
         const y = buildYaml(web4core, linkLine, { webUI: true, addTun: true, mihomoPerProxyTun: true }, wgBean ? [wgBean] : []);
-        const f = `mihomo_${i}_tun_listeners.yaml`;
-        writeYaml(f, y);
-        execOrThrow(`mihomo -t -f ${f}`);
-        fs.unlinkSync(f);
+        validateMihomoYaml(y, `mihomo_${i}_tun_listeners.yaml`);
       }
 
       console.log(`✅ Mihomo ok: ${label}`);
@@ -114,9 +108,7 @@ function main() {
   try {
     const inputAll = compatibleLinks.join('\n');
     const y = buildYaml(web4core, inputAll, { webUI: true, addTun: false }, wgBean ? [wgBean] : []);
-    writeYaml('mihomo_all.yaml', y);
-    execOrThrow('mihomo -t -f mihomo_all.yaml');
-    fs.unlinkSync('mihomo_all.yaml');
+    validateMihomoYaml(y, 'mihomo_all.yaml');
     console.log('✅ Mihomo multi-all ok');
   } catch (e) {
     fail++;
@@ -141,9 +133,7 @@ function main() {
       mihomoPerProxyTun: true,
     }, wgBean ? [wgBean] : []);
 
-    writeYaml('mihomo_subscription.yaml', y);
-    execOrThrow('mihomo -t -f mihomo_subscription.yaml');
-    fs.unlinkSync('mihomo_subscription.yaml');
+    validateMihomoYaml(y, 'mihomo_subscription.yaml');
     console.log('✅ Mihomo subscription-mode ok');
   } catch (e) {
     fail++;
