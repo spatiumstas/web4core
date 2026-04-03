@@ -107,7 +107,6 @@ function buildSingBoxOutbound(bean, opts) {
                 }
             } else if (stream.network === 'grpc') {
                 if (stream.path) t.service_name = stream.path;
-                if (stream.authority) t.authority = stream.authority;
             } else if (stream.network === 'httpupgrade') {
                 if (stream.path) t.path = stream.path;
                 if (stream.host) t.host = stream.host;

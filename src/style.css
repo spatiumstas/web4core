@@ -322,7 +322,7 @@ label {
     box-shadow: 0 0 0 1px rgba(55, 157, 216, .75),
     0 0 14px 3px rgba(55, 157, 216, .55),
     0 0 26px 8px rgba(55, 157, 216, .35);
-    animation: inputGlow 1.4s linear infinite;
+    animation: inputGlow 2.5s linear infinite;
 }
 
 @keyframes inputGlow {

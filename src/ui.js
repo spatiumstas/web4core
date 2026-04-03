@@ -69,7 +69,7 @@ const PLACEHOLDER_SINGBOX_BASE = [
     'anytls://...'
 ];
 const PLACEHOLDER_SINGBOX_EXTENDED = [
-    'mieru://... (or json)',
+    'mieru://... or mierus://... (or json)',
     'sdns://...'
 ];
 const PLACEHOLDER_XRAY = [
@@ -94,7 +94,7 @@ const PLACEHOLDER_MIHOMO = [
     'hy2://...',
     'tuic://...',
     'masque://...',
-    'mieru://... (or json)'
+    'mieru://... or mierus://... (or json)'
 ];
 
 function updateLinksPlaceholder() {
