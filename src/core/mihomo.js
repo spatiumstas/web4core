@@ -107,6 +107,66 @@ function buildMihomoProxy(bean) {
             if (s.path) obj['grpc-opts']['grpc-service-name'] = s.path;
             if (s.authority) obj['grpc-opts'].authority = s.authority;
             if (s.grpcUserAgent) obj['grpc-opts']['grpc-user-agent'] = s.grpcUserAgent;
+            if (Number.isFinite(s.grpcPingInterval) && s.grpcPingInterval > 0) {
+                obj['grpc-opts']['ping-interval'] = s.grpcPingInterval;
+            }
+            if (Number.isFinite(s.grpcMaxConnections) && s.grpcMaxConnections > 0) {
+                obj['grpc-opts']['max-connections'] = s.grpcMaxConnections;
+            }
+            if (Number.isFinite(s.grpcMinStreams) && s.grpcMinStreams >= 0) {
+                obj['grpc-opts']['min-streams'] = s.grpcMinStreams;
+            }
+            if (Number.isFinite(s.grpcMaxStreams) && s.grpcMaxStreams >= 0) {
+                obj['grpc-opts']['max-streams'] = s.grpcMaxStreams;
+            }
+        } else if (s.network === 'xhttp') {
+            obj.network = 'xhttp';
+            obj['xhttp-opts'] = {};
+            if (s.path) obj['xhttp-opts'].path = s.path;
+            if (s.host) obj['xhttp-opts'].host = s.host;
+            if (s.xhttpMode) obj['xhttp-opts'].mode = s.xhttpMode;
+            else obj['xhttp-opts'].mode = 'stream-up';
+            obj['xhttp-opts']['x-padding-bytes'] = '100-1000';
+
+            if (Number.isFinite(s.xhttpScMaxEachPostBytes) && s.xhttpScMaxEachPostBytes > 0) {
+                obj['xhttp-opts']['sc-max-each-post-bytes'] = s.xhttpScMaxEachPostBytes;
+            }
+
+            const xmux = s.xhttpXmux || {};
+            const reuseSettings = {};
+            if (xmux.max_connections) reuseSettings['max-connections'] = xmux.max_connections;
+            if (xmux.max_concurrency) reuseSettings['max-concurrency'] = xmux.max_concurrency;
+            if (xmux.c_max_reuse_times) reuseSettings['c-max-reuse-times'] = xmux.c_max_reuse_times;
+            if (xmux.h_max_request_times) reuseSettings['h-max-request-times'] = xmux.h_max_request_times;
+            if (xmux.h_max_reusable_secs) reuseSettings['h-max-reusable-secs'] = xmux.h_max_reusable_secs;
+            if (Object.keys(reuseSettings).length) {
+                obj['xhttp-opts']['reuse-settings'] = reuseSettings;
+            }
+
+            const download = s.xhttpDownload || {};
+            const hasDownload = Object.values(download).some(v => v !== '' && v !== 0);
+            if (hasDownload) {
+                obj['xhttp-opts']['download-settings'] = {};
+                if (download.host) obj['xhttp-opts']['download-settings'].host = download.host;
+                if (download.path) obj['xhttp-opts']['download-settings'].path = download.path;
+                if (download.x_padding_bytes) obj['xhttp-opts']['download-settings']['x-padding-bytes'] = download.x_padding_bytes;
+                if (download.sc_max_each_post_bytes) {
+                    obj['xhttp-opts']['download-settings']['sc-max-each-post-bytes'] = download.sc_max_each_post_bytes;
+                }
+                if (download.server) obj['xhttp-opts']['download-settings'].server = download.server;
+                if (download.server_port) obj['xhttp-opts']['download-settings'].port = download.server_port;
+
+                const dx = download.xmux || {};
+                const downloadReuseSettings = {};
+                if (dx.max_connections) downloadReuseSettings['max-connections'] = dx.max_connections;
+                if (dx.max_concurrency) downloadReuseSettings['max-concurrency'] = dx.max_concurrency;
+                if (dx.c_max_reuse_times) downloadReuseSettings['c-max-reuse-times'] = dx.c_max_reuse_times;
+                if (dx.h_max_request_times) downloadReuseSettings['h-max-request-times'] = dx.h_max_request_times;
+                if (dx.h_max_reusable_secs) downloadReuseSettings['h-max-reusable-secs'] = dx.h_max_reusable_secs;
+                if (Object.keys(downloadReuseSettings).length) {
+                    obj['xhttp-opts']['download-settings']['reuse-settings'] = downloadReuseSettings;
+                }
+            }
         } else if (s.network === 'tcp' && s.headerType === 'http') {
             obj.network = 'tcp';
             const httpOpts = {};
@@ -326,6 +386,9 @@ function buildMihomoProxy(bean) {
         if (tt.quic) p.quic = true;
         if (tt.congestionController) p['congestion-controller'] = tt.congestionController;
         if (Number.isFinite(tt.cwnd) && tt.cwnd > 0) p.cwnd = tt.cwnd;
+        if (Number.isFinite(tt.maxConnections) && tt.maxConnections > 0) p['max-connections'] = tt.maxConnections;
+        if (Number.isFinite(tt.minStreams) && tt.minStreams >= 0) p['min-streams'] = tt.minStreams;
+        if (Number.isFinite(tt.maxStreams) && tt.maxStreams >= 0) p['max-streams'] = tt.maxStreams;
         applyCommon(p);
         return p;
     }

@@ -9,8 +9,38 @@ function buildXrayOutbound(bean) {
         if (ech.configList) tlsSettings.echConfigList = ech.configList;
         if (ech.forceQuery) tlsSettings.echForceQuery = ech.forceQuery;
     };
+    const applyFinalmask = (streamSettingsTarget, source) => {
+        if (!streamSettingsTarget || !source || typeof source !== 'object') return;
+        const fm = source.finalmask;
+        if (!fm || typeof fm !== 'object') return;
+        const out = {};
+        if (Array.isArray(fm.tcp) && fm.tcp.length) out.tcp = fm.tcp;
+        if (Array.isArray(fm.udp) && fm.udp.length) out.udp = fm.udp;
+        if (fm.quicParams && typeof fm.quicParams === 'object' && Object.keys(fm.quicParams).length) {
+            out.quicParams = fm.quicParams;
+        }
+        if (Object.keys(out).length) streamSettingsTarget.finalmask = out;
+    };
     const buildDownloadSettings = (download, security, tlsSettings, realitySettings) => {
         if (!download || typeof download !== 'object') return null;
+        const dx = download.xmux || {};
+        const hasExplicitDownload = !!(
+            download.host ||
+            download.path ||
+            download.mode ||
+            download.x_padding_bytes ||
+            download.sc_max_each_post_bytes ||
+            download.sc_min_posts_interval_ms ||
+            download.sc_stream_up_server_secs ||
+            download.server ||
+            download.server_port ||
+            dx.max_concurrency ||
+            dx.max_connections ||
+            dx.c_max_reuse_times ||
+            dx.h_max_request_times ||
+            dx.h_max_reusable_secs
+        );
+        if (!hasExplicitDownload) return null;
         const address = download.server || bean.host;
         const port = download.server_port || bean.port || 0;
         if (!address || !port) return null;
@@ -55,34 +85,13 @@ function buildXrayOutbound(bean) {
                 auth: bean.auth?.password || '',
             }
         };
-        const congestion = (h.congestion || '').trim();
-        if (congestion) {
-            streamSettings.hysteriaSettings.congestion = congestion.toLowerCase();
-        }
-        const hopPort = (h.hopPort || '').toString().trim();
-        const hopIntervalRaw = (h.hopInterval || '').toString().trim();
-        let hopInterval = 0;
-        let hopIntervalRange = '';
-        if (hopIntervalRaw) {
-            if (/^\d+$/.test(hopIntervalRaw)) {
-                hopInterval = asInt(hopIntervalRaw, 0);
-            } else {
-                const m = hopIntervalRaw.match(/^(\d+)\s*-\s*(\d+)$/);
-                if (m && m[1] && m[2]) hopIntervalRange = `${m[1]}-${m[2]}`;
-            }
-        }
-        if (hopPort || hopInterval || hopIntervalRange) {
-            streamSettings.hysteriaSettings.udphop = {};
-            if (hopPort) streamSettings.hysteriaSettings.udphop.port = hopPort;
-            if (hopIntervalRange) streamSettings.hysteriaSettings.udphop.interval = hopIntervalRange;
-            else if (hopInterval) streamSettings.hysteriaSettings.udphop.interval = hopInterval;
-        }
         if (h.obfsPassword) {
             streamSettings.udpmasks = [{
                 type: 'salamander',
                 settings: {password: h.obfsPassword}
             }];
         }
+        applyFinalmask(streamSettings, h);
         applyXrayEch(streamSettings.tlsSettings, h.ech);
         if (streamSettings.tlsSettings) {
             if (!streamSettings.tlsSettings.serverName) delete streamSettings.tlsSettings.serverName;
@@ -173,6 +182,7 @@ function buildXrayOutbound(bean) {
             streamSettings.tlsSettings.alpn = streamSettings.tlsSettings.alpn.filter(v => (v || '').toLowerCase() !== 'http/1.1');
             if (streamSettings.tlsSettings.alpn.length === 0) delete streamSettings.tlsSettings.alpn;
         }
+        applyFinalmask(streamSettings, s);
     }
     let outbound = null;
     if (bean.proto === 'vmess') {

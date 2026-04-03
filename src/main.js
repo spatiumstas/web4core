@@ -840,6 +840,38 @@ function parseHysteria2(urlStr) {
     const q = getQuery(u);
     const pwd = u.password ? (safeDecodeURIComponent(u.username || '') + ':' + safeDecodeURIComponent(u.password)) : safeDecodeURIComponent(u.username || '');
     const tlsExtras = parseTlsQueryExtras(q);
+    const qParams = tryJSON(q.get('quicParams') || q.get('quic_params') || '') || {};
+    const fmTcp = tryJSON(q.get('finalmask_tcp') || q.get('finalmask-tcp') || '') || [];
+    const fmUdp = tryJSON(q.get('finalmask_udp') || q.get('finalmask-udp') || '') || [];
+    const hy2Finalmask = {};
+    if (Array.isArray(fmTcp) && fmTcp.length) hy2Finalmask.tcp = fmTcp;
+    if (Array.isArray(fmUdp) && fmUdp.length) hy2Finalmask.udp = fmUdp;
+    const hy2QuicParams = (qParams && typeof qParams === 'object') ? { ...qParams } : {};
+    const congestion = (q.get('congestion') || '').trim().toLowerCase();
+    const brutalUp = (q.get('brutal_up') || q.get('brutalUp') || q.get('up') || '').trim();
+    const brutalDown = (q.get('brutal_down') || q.get('brutalDown') || q.get('down') || '').trim();
+    const hopPort = (q.get('mport') || '').trim();
+    const hopIntervalRaw = (q.get('hop_interval') || '').trim();
+    let hopIntervalValue = null;
+    if (hopIntervalRaw) {
+        const m = hopIntervalRaw.match(/^(\d+)\s*-\s*(\d+)$/);
+        if (m && m[1] && m[2]) {
+            hopIntervalValue = `${m[1]}-${m[2]}`;
+        } else if (/^\d+$/.test(hopIntervalRaw)) {
+            hopIntervalValue = asInt(hopIntervalRaw, 0);
+        }
+    }
+    if (congestion && !hy2QuicParams.congestion) hy2QuicParams.congestion = congestion;
+    if (brutalUp && !hy2QuicParams.brutalUp) hy2QuicParams.brutalUp = brutalUp;
+    if (brutalDown && !hy2QuicParams.brutalDown) hy2QuicParams.brutalDown = brutalDown;
+    if (hopPort || hopIntervalValue !== null) {
+        if (!hy2QuicParams.udpHop || typeof hy2QuicParams.udpHop !== 'object') hy2QuicParams.udpHop = {};
+        if (hopPort && !hy2QuicParams.udpHop.ports) hy2QuicParams.udpHop.ports = hopPort;
+        if (hopIntervalValue !== null && hy2QuicParams.udpHop.interval === undefined) {
+            hy2QuicParams.udpHop.interval = hopIntervalValue;
+        }
+    }
+    if (Object.keys(hy2QuicParams).length) hy2Finalmask.quicParams = hy2QuicParams;
     return {
         proto: 'hy2',
         host: u.hostname,
@@ -857,7 +889,10 @@ function parseHysteria2(urlStr) {
             verifyPeerCertByName: (q.get('verifyPeerCertByName') || q.get('verify-peer-cert-by-name') || '').trim(),
             certificatePublicKeySha256: tlsExtras.certificatePublicKeySha256,
             ech: tlsExtras.ech,
-            congestion: q.get('congestion') || ''
+            congestion: q.get('congestion') || '',
+            brutalUp,
+            brutalDown,
+            finalmask: Object.keys(hy2Finalmask).length ? hy2Finalmask : null
         }
     };
 }
@@ -928,7 +963,11 @@ function parseTrustTunnel(urlStr) {
     if (!raw.toLowerCase().startsWith('tt://?')) throw new Error('A tt://? link is required');
 
     const hashIndex = raw.indexOf('#');
-    const payload = raw.slice('tt://?'.length, hashIndex === -1 ? undefined : hashIndex).trim();
+    const payloadPlus = raw.slice('tt://?'.length, hashIndex === -1 ? undefined : hashIndex).trim();
+    const ampIndex = payloadPlus.indexOf('&');
+    const payload = (ampIndex === -1 ? payloadPlus : payloadPlus.slice(0, ampIndex)).trim();
+    const extraQuery = ampIndex === -1 ? '' : payloadPlus.slice(ampIndex + 1);
+    const extraParams = new URLSearchParams(extraQuery);
     if (!payload) throw new Error('tt: missing payload');
 
     const decoded = decodeBase64Url(payload);
@@ -980,6 +1019,9 @@ function parseTrustTunnel(urlStr) {
             quic: false,
             congestionController: '',
             cwnd: 0,
+            maxConnections: 0,
+            minStreams: 0,
+            maxStreams: 0,
             fingerprint: '',
             certificate: '',
             privateKey: ''
@@ -1005,6 +1047,22 @@ function parseTrustTunnel(urlStr) {
         bean.stream.alpn = ['h3'];
         bean.trusttunnel.quic = true;
     }
+    const tt = bean.trusttunnel;
+    const qQuic = (extraParams.get('quic') || '').toLowerCase();
+    if (['1', 'true', 'yes'].includes(qQuic)) tt.quic = true;
+    const qHealth = (extraParams.get('health-check') || extraParams.get('health_check') || '').toLowerCase();
+    if (['1', 'true', 'yes'].includes(qHealth)) tt.healthCheck = true;
+    const qCc = (extraParams.get('congestion-controller') || extraParams.get('congestion_controller') || '').trim();
+    if (qCc) tt.congestionController = qCc;
+    const qCwnd = asInt(extraParams.get('cwnd'), 0);
+    if (qCwnd > 0) tt.cwnd = qCwnd;
+    const qMaxConn = asInt(extraParams.get('max-connections') || extraParams.get('max_connections'), 0);
+    if (qMaxConn > 0) tt.maxConnections = qMaxConn;
+    const qMinStreams = asInt(extraParams.get('min-streams') || extraParams.get('min_streams'), 0);
+    if (qMinStreams >= 0) tt.minStreams = qMinStreams;
+    const qMaxStreams = asInt(extraParams.get('max-streams') || extraParams.get('max_streams'), 0);
+    if (qMaxStreams >= 0) tt.maxStreams = qMaxStreams;
+
     bean.stream = normalizeStream(bean.stream, bean.host);
     return bean;
 }
@@ -1103,6 +1161,10 @@ function buildStreamFromQuery(q, isTrojan) {
     const sni = q.get('sni') || q.get('peer') || '';
     const authority = q.get('authority') || '';
     const grpcUserAgent = q.get('grpc-user-agent') || '';
+    const grpcPingInterval = asInt(q.get('ping-interval') || q.get('ping_interval'), 0);
+    const grpcMaxConnections = asInt(q.get('grpc-max-connections') || q.get('grpc_max_connections'), 0);
+    const grpcMinStreams = asInt(q.get('grpc-min-streams') || q.get('grpc_min_streams'), 0);
+    const grpcMaxStreams = asInt(q.get('grpc-max-streams') || q.get('grpc_max_streams'), 0);
     const alpn = splitCSV(q.get('alpn') || '');
     const aiRaw = (q.get('allowInsecure') || q.get('insecure') || '').toLowerCase();
     const allowInsecure = ['1', 'true', 'yes'].includes(aiRaw);
@@ -1122,6 +1184,10 @@ function buildStreamFromQuery(q, isTrojan) {
         sni,
         authority,
         grpcUserAgent,
+        grpcPingInterval,
+        grpcMaxConnections,
+        grpcMinStreams,
+        grpcMaxStreams,
         alpn,
         allowInsecure,
         pinnedPeerCertSha256,
@@ -1153,13 +1219,14 @@ function buildStreamFromQuery(q, isTrojan) {
         stream.host = q.get('host') || '';
         stream.xhttpMode = q.get('xmode') || q.get('mode') || '';
         stream.xhttpXmux = {
-            max_concurrency: q.get('xmux_max_concurrency') || '',
-            max_connections: q.get('xmux_max_connections') || '',
-            c_max_reuse_times: q.get('xmux_c_max_reuse_times') || '',
-            h_max_request_times: q.get('xmux_h_max_request_times') || '',
-            h_max_reusable_secs: q.get('xmux_h_max_reusable_secs') || '',
+            max_concurrency: q.get('xmux_max_concurrency') || q.get('reuse_max_concurrency') || '',
+            max_connections: q.get('xmux_max_connections') || q.get('reuse_max_connections') || '',
+            c_max_reuse_times: q.get('xmux_c_max_reuse_times') || q.get('reuse_c_max_reuse_times') || '',
+            h_max_request_times: q.get('xmux_h_max_request_times') || q.get('reuse_h_max_request_times') || '',
+            h_max_reusable_secs: q.get('xmux_h_max_reusable_secs') || q.get('reuse_h_max_reusable_secs') || '',
             h_keep_alive_period: asInt(q.get('xmux_h_keep_alive_period'), 0)
         };
+        stream.xhttpScMaxEachPostBytes = asInt(q.get('sc-max-each-post-bytes') || q.get('sc_max_each_post_bytes'), 0);
         stream.xhttpDownload = {
             mode: q.get('download_mode') || '',
             host: q.get('download_host') || '',
@@ -1168,10 +1235,33 @@ function buildStreamFromQuery(q, isTrojan) {
             sc_max_each_post_bytes: q.get('download_sc_max_each_post_bytes') || '',
             sc_min_posts_interval_ms: q.get('download_sc_min_posts_interval_ms') || '',
             sc_stream_up_server_secs: q.get('download_sc_stream_up_server_secs') || '',
+            no_sse_header: q.get('download_no_sse_header') || '',
             server: q.get('download_server') || '',
             server_port: asInt(q.get('download_server_port'), 0),
-            detour: q.get('download_detour') || ''
+            detour: q.get('download_detour') || '',
+            xmux: {
+                max_concurrency: q.get('download_xmux_max_concurrency') || q.get('download_reuse_max_concurrency') || '',
+                max_connections: q.get('download_xmux_max_connections') || q.get('download_reuse_max_connections') || '',
+                c_max_reuse_times: q.get('download_xmux_c_max_reuse_times') || q.get('download_reuse_c_max_reuse_times') || '',
+                h_max_request_times: q.get('download_xmux_h_max_request_times') || q.get('download_reuse_h_max_request_times') || '',
+                h_max_reusable_secs: q.get('download_xmux_h_max_reusable_secs') || q.get('download_reuse_h_max_reusable_secs') || ''
+            }
         };
+        const xhttpQParams = tryJSON(q.get('quicParams') || q.get('quic_params') || '') || {};
+        const xhttpFinalmask = {};
+        const xhttpTcp = tryJSON(q.get('finalmask_tcp') || q.get('finalmask-tcp') || '') || [];
+        const xhttpUdp = tryJSON(q.get('finalmask_udp') || q.get('finalmask-udp') || '') || [];
+        if (Array.isArray(xhttpTcp) && xhttpTcp.length) xhttpFinalmask.tcp = xhttpTcp;
+        if (Array.isArray(xhttpUdp) && xhttpUdp.length) xhttpFinalmask.udp = xhttpUdp;
+        const xhttpQuicParams = (xhttpQParams && typeof xhttpQParams === 'object') ? { ...xhttpQParams } : {};
+        const xhttpCongestion = (q.get('congestion') || '').trim().toLowerCase();
+        const xhttpBrutalUp = (q.get('brutal_up') || q.get('brutalUp') || q.get('up') || '').trim();
+        const xhttpBrutalDown = (q.get('brutal_down') || q.get('brutalDown') || q.get('down') || '').trim();
+        if (xhttpCongestion && !xhttpQuicParams.congestion) xhttpQuicParams.congestion = xhttpCongestion;
+        if (xhttpBrutalUp && !xhttpQuicParams.brutalUp) xhttpQuicParams.brutalUp = xhttpBrutalUp;
+        if (xhttpBrutalDown && !xhttpQuicParams.brutalDown) xhttpQuicParams.brutalDown = xhttpBrutalDown;
+        if (Object.keys(xhttpQuicParams).length) xhttpFinalmask.quicParams = xhttpQuicParams;
+        if (Object.keys(xhttpFinalmask).length) stream.finalmask = xhttpFinalmask;
     } else if (type === 'httpupgrade') {
         stream.path = q.get('path') || '';
         stream.host = q.get('host') || '';
