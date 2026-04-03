@@ -8,6 +8,18 @@ function getPerProxyGroupName(proxyName) {
     return `${PER_PROXY_GROUP_PREFIX}${proxyName}`;
 }
 
+function uniqueTargets(...parts) {
+    const out = [];
+    const seen = new Set();
+    parts.flat().forEach((item) => {
+        const name = String(item || '').trim();
+        if (!name || seen.has(name)) return;
+        seen.add(name);
+        out.push(name);
+    });
+    return out;
+}
+
 function sanitizeProviderName(name) {
     const raw = String(name || '').trim().toLowerCase();
     if (!raw) return '';
@@ -107,6 +119,77 @@ function buildMihomoProxy(bean) {
             if (s.path) obj['grpc-opts']['grpc-service-name'] = s.path;
             if (s.authority) obj['grpc-opts'].authority = s.authority;
             if (s.grpcUserAgent) obj['grpc-opts']['grpc-user-agent'] = s.grpcUserAgent;
+            if (Number.isFinite(s.grpcPingInterval) && s.grpcPingInterval > 0) {
+                obj['grpc-opts']['ping-interval'] = s.grpcPingInterval;
+            }
+            if (Number.isFinite(s.grpcMaxConnections) && s.grpcMaxConnections > 0) {
+                obj['grpc-opts']['max-connections'] = s.grpcMaxConnections;
+            }
+            if (Number.isFinite(s.grpcMinStreams) && s.grpcMinStreams >= 0) {
+                obj['grpc-opts']['min-streams'] = s.grpcMinStreams;
+            }
+            if (Number.isFinite(s.grpcMaxStreams) && s.grpcMaxStreams >= 0) {
+                obj['grpc-opts']['max-streams'] = s.grpcMaxStreams;
+            }
+        } else if (s.network === 'xhttp') {
+            obj.network = 'xhttp';
+            obj['xhttp-opts'] = {};
+            if (s.path) obj['xhttp-opts'].path = s.path;
+            if (s.host) obj['xhttp-opts'].host = s.host;
+            if (s.xhttpMode) obj['xhttp-opts'].mode = s.xhttpMode;
+            else obj['xhttp-opts'].mode = 'stream-up';
+            obj['xhttp-opts']['x-padding-bytes'] = '100-1000';
+
+            if (s.xhttpScMaxEachPostBytes !== '' && s.xhttpScMaxEachPostBytes !== undefined) {
+                obj['xhttp-opts']['sc-max-each-post-bytes'] = s.xhttpScMaxEachPostBytes;
+            }
+            if (Number.isFinite(s.xhttpScMaxBufferedPosts) && s.xhttpScMaxBufferedPosts > 0) {
+                obj['xhttp-opts']['sc-max-buffered-posts'] = s.xhttpScMaxBufferedPosts;
+            }
+            if (s.xhttpScMinPostsIntervalMs !== '' && s.xhttpScMinPostsIntervalMs !== undefined) {
+                obj['xhttp-opts']['sc-min-posts-interval-ms'] = s.xhttpScMinPostsIntervalMs;
+            }
+
+            const xmux = s.xhttpXmux || {};
+            const reuseSettings = {};
+            if (xmux.max_connections) reuseSettings['max-connections'] = xmux.max_connections;
+            if (xmux.max_concurrency) reuseSettings['max-concurrency'] = xmux.max_concurrency;
+            if (xmux.c_max_reuse_times) reuseSettings['c-max-reuse-times'] = xmux.c_max_reuse_times;
+            if (xmux.h_max_request_times) reuseSettings['h-max-request-times'] = xmux.h_max_request_times;
+            if (xmux.h_max_reusable_secs) reuseSettings['h-max-reusable-secs'] = xmux.h_max_reusable_secs;
+            if (xmux.h_keep_alive_period) reuseSettings['h-keep-alive-period'] = xmux.h_keep_alive_period;
+            if (Object.keys(reuseSettings).length) {
+                obj['xhttp-opts']['reuse-settings'] = reuseSettings;
+            }
+
+            const download = s.xhttpDownload || {};
+            const hasDownload = Object.values(download).some(v => v !== '' && v !== 0);
+            if (hasDownload) {
+                obj['xhttp-opts']['download-settings'] = {};
+                if (download.host) obj['xhttp-opts']['download-settings'].host = download.host;
+                if (download.path) obj['xhttp-opts']['download-settings'].path = download.path;
+                if (download.x_padding_bytes) obj['xhttp-opts']['download-settings']['x-padding-bytes'] = download.x_padding_bytes;
+                if (download.sc_max_each_post_bytes) {
+                    obj['xhttp-opts']['download-settings']['sc-max-each-post-bytes'] = download.sc_max_each_post_bytes;
+                }
+                if (download.sc_min_posts_interval_ms) {
+                    obj['xhttp-opts']['download-settings']['sc-min-posts-interval-ms'] = download.sc_min_posts_interval_ms;
+                }
+                if (download.server) obj['xhttp-opts']['download-settings'].server = download.server;
+                if (download.server_port) obj['xhttp-opts']['download-settings'].port = download.server_port;
+
+                const dx = download.xmux || {};
+                const downloadReuseSettings = {};
+                if (dx.max_connections) downloadReuseSettings['max-connections'] = dx.max_connections;
+                if (dx.max_concurrency) downloadReuseSettings['max-concurrency'] = dx.max_concurrency;
+                if (dx.c_max_reuse_times) downloadReuseSettings['c-max-reuse-times'] = dx.c_max_reuse_times;
+                if (dx.h_max_request_times) downloadReuseSettings['h-max-request-times'] = dx.h_max_request_times;
+                if (dx.h_max_reusable_secs) downloadReuseSettings['h-max-reusable-secs'] = dx.h_max_reusable_secs;
+                if (dx.h_keep_alive_period) downloadReuseSettings['h-keep-alive-period'] = dx.h_keep_alive_period;
+                if (Object.keys(downloadReuseSettings).length) {
+                    obj['xhttp-opts']['download-settings']['reuse-settings'] = downloadReuseSettings;
+                }
+            }
         } else if (s.network === 'tcp' && s.headerType === 'http') {
             obj.network = 'tcp';
             const httpOpts = {};
@@ -191,11 +274,17 @@ function buildMihomoProxy(bean) {
         }
         if (bean.hysteria2?.hopInterval) {
             const hi = String(bean.hysteria2.hopInterval).trim();
-            const m = hi.match(/^(\d+)/);
-            if (m && m[1]) {
-                p['hop-interval'] = parseInt(m[1], 10);
+            const range = hi.match(/^(\d+)\s*-\s*(\d+)$/);
+            if (range && range[1] && range[2]) {
+                p['hop-interval'] = `${range[1]}-${range[2]}`;
+            } else {
+                const m = hi.match(/^(\d+)/);
+                if (m && m[1]) {
+                    p['hop-interval'] = parseInt(m[1], 10);
+                }
             }
         }
+        if (bean.hysteria2?.bbrProfile) p['bbr-profile'] = bean.hysteria2.bbrProfile;
         applyCommon(p);
         return p;
     }
@@ -211,6 +300,7 @@ function buildMihomoProxy(bean) {
         if (bean.tuic?.sni) p.sni = bean.tuic.sni;
         if (bean.tuic?.allowInsecure) p['skip-cert-verify'] = true;
         if (bean.tuic?.congestion_control) p['congestion-controller'] = bean.tuic.congestion_control;
+        if (bean.tuic?.bbr_profile) p['bbr-profile'] = bean.tuic.bbr_profile;
         if (bean.tuic?.udp_relay_mode) p['udp-relay-mode'] = bean.tuic.udp_relay_mode;
         if (bean.tuic?.disableSni) p['disable-sni'] = true;
         if (bean.tuic?.heartbeat) {
@@ -273,9 +363,11 @@ function buildMihomoProxy(bean) {
         if (mq.ipv6) p.ipv6 = mq.ipv6;
         if (mq.uri) p.uri = mq.uri;
         if (mq.sni) p.sni = mq.sni;
+        if (mq.network) p.network = mq.network;
         if (Number.isFinite(mq.mtu) && mq.mtu > 0) p.mtu = mq.mtu;
         if (mq.udp === true) p.udp = true;
         if (mq.congestionController) p['congestion-controller'] = mq.congestionController;
+        if (mq.bbrProfile) p['bbr-profile'] = mq.bbrProfile;
         if (Number.isFinite(mq.cwnd) && mq.cwnd > 0) p.cwnd = mq.cwnd;
         if (mq.remoteDnsResolve) p['remote-dns-resolve'] = true;
         if (Array.isArray(mq.dns) && mq.dns.length) p.dns = mq.dns;
@@ -325,7 +417,11 @@ function buildMihomoProxy(bean) {
         if (tt.healthCheck) p['health-check'] = true;
         if (tt.quic) p.quic = true;
         if (tt.congestionController) p['congestion-controller'] = tt.congestionController;
+        if (tt.bbrProfile) p['bbr-profile'] = tt.bbrProfile;
         if (Number.isFinite(tt.cwnd) && tt.cwnd > 0) p.cwnd = tt.cwnd;
+        if (Number.isFinite(tt.maxConnections) && tt.maxConnections > 0) p['max-connections'] = tt.maxConnections;
+        if (Number.isFinite(tt.minStreams) && tt.minStreams >= 0) p['min-streams'] = tt.minStreams;
+        if (Number.isFinite(tt.maxStreams) && tt.maxStreams >= 0) p['max-streams'] = tt.maxStreams;
         applyCommon(p);
         return p;
     }
@@ -440,7 +536,7 @@ function buildMihomoConfig(beans, opts) {
             groups.push({
                 name: GLOBAL_GROUP_NAME,
                 type: 'select',
-                proxies: [FASTEST_GROUP_NAME, 'REJECT']
+                proxies: uniqueTargets(FASTEST_GROUP_NAME, names, 'REJECT')
             });
         } else {
             const only = names[0] || 'REJECT';
@@ -513,6 +609,7 @@ function buildMihomoSubscriptionConfig(subscriptionUrls, extraBeans, opts) {
     });
 
     const usePerProxyListeners = isPerProxyListenerMode(opts);
+    const usePerProxyPort = !!(opts && opts.perProxyPort);
     const groups = [];
     if (!usePerProxyListeners) {
         groups.push({
@@ -529,7 +626,7 @@ function buildMihomoSubscriptionConfig(subscriptionUrls, extraBeans, opts) {
         });
     }
 
-    if (providerNames.length > 1 || usePerProxyListeners) {
+    if (usePerProxyListeners || usePerProxyPort) {
         providerNames.forEach((providerName) => {
             groups.push({
                 name: `SUB-${providerName}`,
@@ -539,7 +636,6 @@ function buildMihomoSubscriptionConfig(subscriptionUrls, extraBeans, opts) {
         });
     }
 
-    const usePerProxyPort = !!(opts && opts.perProxyPort);
     const addSocks = !opts || opts.addSocks !== false;
     const fastestGroup = !usePerProxyListeners
         ? groups.find(g => g && g.name === FASTEST_GROUP_NAME && g.type === 'url-test')
@@ -573,10 +669,14 @@ function buildMihomoSubscriptionConfig(subscriptionUrls, extraBeans, opts) {
             proxies: globalTargets.length > 0 ? [...globalTargets, 'REJECT'] : ['REJECT']
         });
     } else {
+        const fastestTargets = fastestGroup && Array.isArray(fastestGroup.proxies)
+            ? [...fastestGroup.proxies]
+            : [];
         groups.push({
             name: GLOBAL_GROUP_NAME,
             type: 'select',
-            proxies: [FASTEST_GROUP_NAME, 'REJECT']
+            proxies: uniqueTargets(FASTEST_GROUP_NAME, fastestTargets, 'REJECT'),
+            use: providerNames
         });
     }
 

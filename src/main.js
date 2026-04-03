@@ -94,6 +94,7 @@ const SUPPORTED_SCHEMES = [
     'tuic',
     'tt',
     'mieru',
+    'mierus',
     'sdns',
     'masque'
 ];
@@ -311,10 +312,30 @@ function validateBean(bean) {
         }
         throw new Error(label + ': reserved must be 3 bytes or a non-empty base64 string');
     };
+    const parsePortRangeItem = (item) => {
+        const m = String(item || '').trim().match(/^(\d+)(?:\s*-\s*(\d+))?$/);
+        if (!m) return null;
+        const a = parseInt(m[1], 10);
+        const b = m[2] ? parseInt(m[2], 10) : a;
+        if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
+        if (a < 1 || a > 65535 || b < 1 || b > 65535 || a > b) return null;
+        return { start: a, end: b };
+    };
+    const hasValidPortRange = (raw) => {
+        const text = String(raw || '').trim();
+        if (!text) return false;
+        const items = text.split(',').map(x => x.trim()).filter(Boolean);
+        if (!items.length) return false;
+        return items.every(x => !!parsePortRangeItem(x));
+    };
     switch (p) {
         case 'mieru':
             requireHost();
-            requirePort();
+            if (!Number.isFinite(bean.port) || bean.port <= 0) {
+                if (!hasValidPortRange(bean.mieru?.server_ports)) {
+                    throw new Error('mieru: invalid port or port range');
+                }
+            }
             if (!bean.mieru?.username || !bean.mieru?.password) throw new Error('mieru: missing username/password');
             break;
         case 'trusttunnel':
@@ -450,7 +471,7 @@ function parseLink(input) {
     const trimmed = input.trim();
     const scheme = trimmed.split(':', 1)[0].toLowerCase();
     if (scheme === 'tt') return parseTrustTunnel(trimmed);
-    if (scheme === 'mieru') return parseMieru(trimmed);
+    if (scheme === 'mieru' || scheme === 'mierus') return parseMieru(trimmed);
     if (scheme === 'vmess') return parseVMess(trimmed);
     if (scheme === 'vless') return parseVLESS(trimmed);
     if (scheme === 'trojan') return parseTrojan(trimmed);
@@ -488,9 +509,11 @@ function parseMasque(urlStr) {
             ipv6: (q.get('ipv6') || '').trim(),
             uri: (q.get('uri') || '').trim(),
             sni: (q.get('sni') || '').trim(),
+            network: (q.get('network') || '').trim().toLowerCase(),
             mtu: asInt(q.get('mtu'), 0),
             udp: getBool('udp'),
             congestionController: (q.get('congestion-controller') || '').trim(),
+            bbrProfile: (q.get('bbr-profile') || q.get('bbr_profile') || '').trim(),
             cwnd: asInt(q.get('cwnd'), 0),
             remoteDnsResolve: getBool('remote-dns-resolve'),
             dns
@@ -840,6 +863,38 @@ function parseHysteria2(urlStr) {
     const q = getQuery(u);
     const pwd = u.password ? (safeDecodeURIComponent(u.username || '') + ':' + safeDecodeURIComponent(u.password)) : safeDecodeURIComponent(u.username || '');
     const tlsExtras = parseTlsQueryExtras(q);
+    const qParams = tryJSON(q.get('quicParams') || q.get('quic_params') || '') || {};
+    const fmTcp = tryJSON(q.get('finalmask_tcp') || q.get('finalmask-tcp') || '') || [];
+    const fmUdp = tryJSON(q.get('finalmask_udp') || q.get('finalmask-udp') || '') || [];
+    const hy2Finalmask = {};
+    if (Array.isArray(fmTcp) && fmTcp.length) hy2Finalmask.tcp = fmTcp;
+    if (Array.isArray(fmUdp) && fmUdp.length) hy2Finalmask.udp = fmUdp;
+    const hy2QuicParams = (qParams && typeof qParams === 'object') ? { ...qParams } : {};
+    const congestion = (q.get('congestion') || '').trim().toLowerCase();
+    const brutalUp = (q.get('brutal_up') || q.get('brutalUp') || q.get('up') || '').trim();
+    const brutalDown = (q.get('brutal_down') || q.get('brutalDown') || q.get('down') || '').trim();
+    const hopPort = (q.get('mport') || '').trim();
+    const hopIntervalRaw = (q.get('hop_interval') || '').trim();
+    let hopIntervalValue = null;
+    if (hopIntervalRaw) {
+        const m = hopIntervalRaw.match(/^(\d+)\s*-\s*(\d+)$/);
+        if (m && m[1] && m[2]) {
+            hopIntervalValue = `${m[1]}-${m[2]}`;
+        } else if (/^\d+$/.test(hopIntervalRaw)) {
+            hopIntervalValue = asInt(hopIntervalRaw, 0);
+        }
+    }
+    if (congestion && !hy2QuicParams.congestion) hy2QuicParams.congestion = congestion;
+    if (brutalUp && !hy2QuicParams.brutalUp) hy2QuicParams.brutalUp = brutalUp;
+    if (brutalDown && !hy2QuicParams.brutalDown) hy2QuicParams.brutalDown = brutalDown;
+    if (hopPort || hopIntervalValue !== null) {
+        if (!hy2QuicParams.udpHop || typeof hy2QuicParams.udpHop !== 'object') hy2QuicParams.udpHop = {};
+        if (hopPort && !hy2QuicParams.udpHop.ports) hy2QuicParams.udpHop.ports = hopPort;
+        if (hopIntervalValue !== null && hy2QuicParams.udpHop.interval === undefined) {
+            hy2QuicParams.udpHop.interval = hopIntervalValue;
+        }
+    }
+    if (Object.keys(hy2QuicParams).length) hy2Finalmask.quicParams = hy2QuicParams;
     return {
         proto: 'hy2',
         host: u.hostname,
@@ -850,6 +905,7 @@ function parseHysteria2(urlStr) {
             obfsPassword: q.get('obfs-password') || '',
             hopPort: q.get('mport') || '',
             hopInterval: (q.get('hop_interval') || ''),
+            bbrProfile: q.get('bbr-profile') || q.get('bbr_profile') || '',
             alpn: q.get('alpn') || 'h3',
             sni: q.get('sni') || '',
             allowInsecure: ['1', 'true', 'yes'].includes(((q.get('allowInsecure') || q.get('insecure') || '')).toLowerCase()),
@@ -857,7 +913,10 @@ function parseHysteria2(urlStr) {
             verifyPeerCertByName: (q.get('verifyPeerCertByName') || q.get('verify-peer-cert-by-name') || '').trim(),
             certificatePublicKeySha256: tlsExtras.certificatePublicKeySha256,
             ech: tlsExtras.ech,
-            congestion: q.get('congestion') || ''
+            congestion: q.get('congestion') || '',
+            brutalUp,
+            brutalDown,
+            finalmask: Object.keys(hy2Finalmask).length ? hy2Finalmask : null
         }
     };
 }
@@ -877,6 +936,7 @@ function parseTUIC(urlStr) {
         },
         tuic: {
             congestion_control: q.get('congestion_control') || 'bbr',
+            bbr_profile: q.get('bbr-profile') || q.get('bbr_profile') || '',
             udp_relay_mode: q.get('udp_relay_mode') || 'native',
             zero_rtt_handshake: q.get('zero_rtt') === '1',
             udp_over_stream: q.get('udp_over_stream') === '1',
@@ -896,20 +956,71 @@ function parseTUIC(urlStr) {
 
 function parseMieru(urlStr) {
     const u = parseUrl(urlStr);
-    if (u.protocol !== 'mieru:') throw new Error('A mieru:// link is required');
+    if (u.protocol !== 'mieru:' && u.protocol !== 'mierus:') throw new Error('A mieru:// or mierus:// link is required');
     const q = getQuery(u);
+    const isLikelyStandardShare = (() => {
+        const raw = String(urlStr || '').trim();
+        const isMieruScheme = raw.toLowerCase().startsWith('mieru://');
+        const isMierusScheme = raw.toLowerCase().startsWith('mierus://');
+        if (!isMieruScheme && !isMierusScheme) return false;
+        if ((u.username || '').trim() || (u.password || '').trim()) return false;
+        const queryText = (q && typeof q.toString === 'function') ? q.toString() : '';
+        if (queryText.trim()) return false;
+        const offset = isMierusScheme ? 'mierus://'.length : 'mieru://'.length;
+        const payload = raw.slice(offset).split('#', 1)[0].trim();
+        return /^[A-Za-z0-9+/=_-]+$/.test(payload) && payload.length > 20;
+    })();
+    if (isLikelyStandardShare) {
+        throw new Error('mieru: standard base64 share link is not supported yet');
+    }
+    const extractRangeFromAuthority = (raw) => {
+        const src = String(raw || '').trim();
+        if (!src) return '';
+        const noHash = src.split('#', 1)[0] || '';
+        const noQuery = noHash.split('?', 1)[0] || '';
+        const schemePos = noQuery.indexOf('://');
+        const authority = schemePos >= 0 ? noQuery.slice(schemePos + 3) : noQuery;
+        const hostPort = authority.includes('@') ? authority.slice(authority.lastIndexOf('@') + 1) : authority;
+        const m = hostPort.match(/:(\d+\s*-\s*\d+)$/);
+        if (!m) return '';
+        return m[1].replace(/\s+/g, '');
+    };
+    const getAllQueryValues = (key) => {
+        if (q && typeof q.getAll === 'function') {
+            const values = q.getAll(key);
+            if (Array.isArray(values)) return values.map(v => String(v || '').trim()).filter(Boolean);
+        }
+        const raw = String(urlStr || '');
+        const queryPart = raw.includes('?') ? raw.slice(raw.indexOf('?') + 1).split('#', 1)[0] : '';
+        if (!queryPart) return [];
+        try {
+            const sp = new URLSearchParams(queryPart);
+            return sp.getAll(key).map(v => String(v || '').trim()).filter(Boolean);
+        } catch {
+            return [];
+        }
+    };
     const username = safeDecodeURIComponent(u.username || '');
     const password = safeDecodeURIComponent(u.password || '');
     const name = safeDecodeURIComponent(u.hash.replace('#', ''));
-    const serverPorts = q.get('server_ports') || q.get('ports') || '';
-    const transport = (q.get('transport') || 'TCP').toUpperCase();
+    const repeatedPorts = getAllQueryValues('port');
+    let serverPorts = q.get('server_ports') || q.get('ports') || q.get('portRange') || q.get('port_range') || '';
+    if (!serverPorts && repeatedPorts.length) serverPorts = repeatedPorts.join(',');
+    if (!serverPorts) serverPorts = extractRangeFromAuthority(urlStr);
+    const protocolItems = getAllQueryValues('protocol').map(x => x.toUpperCase());
+    const transport = (q.get('transport') || q.get('protocol') || protocolItems[0] || 'TCP').toUpperCase();
     const multiplexing = (q.get('multiplexing') || '').toUpperCase();
     const handshakeMode = (q.get('handshake_mode') || q.get('handshake-mode') || '').toUpperCase();
     const trafficPattern = (q.get('traffic_pattern') || q.get('traffic-pattern') || '').trim();
+    let fallbackPort = 0;
+    if (serverPorts) {
+        const m = String(serverPorts).match(/^(\d+)/);
+        if (m) fallbackPort = asInt(m[1], fallbackPort);
+    }
     return {
         proto: 'mieru',
         host: u.hostname,
-        port: asInt(u.port, 27017),
+        port: asInt(u.port, fallbackPort),
         name,
         mieru: {
             username,
@@ -928,7 +1039,11 @@ function parseTrustTunnel(urlStr) {
     if (!raw.toLowerCase().startsWith('tt://?')) throw new Error('A tt://? link is required');
 
     const hashIndex = raw.indexOf('#');
-    const payload = raw.slice('tt://?'.length, hashIndex === -1 ? undefined : hashIndex).trim();
+    const payloadPlus = raw.slice('tt://?'.length, hashIndex === -1 ? undefined : hashIndex).trim();
+    const ampIndex = payloadPlus.indexOf('&');
+    const payload = (ampIndex === -1 ? payloadPlus : payloadPlus.slice(0, ampIndex)).trim();
+    const extraQuery = ampIndex === -1 ? '' : payloadPlus.slice(ampIndex + 1);
+    const extraParams = new URLSearchParams(extraQuery);
     if (!payload) throw new Error('tt: missing payload');
 
     const decoded = decodeBase64Url(payload);
@@ -980,6 +1095,9 @@ function parseTrustTunnel(urlStr) {
             quic: false,
             congestionController: '',
             cwnd: 0,
+            maxConnections: 0,
+            minStreams: 0,
+            maxStreams: 0,
             fingerprint: '',
             certificate: '',
             privateKey: ''
@@ -1005,13 +1123,33 @@ function parseTrustTunnel(urlStr) {
         bean.stream.alpn = ['h3'];
         bean.trusttunnel.quic = true;
     }
+    const tt = bean.trusttunnel;
+    const qQuic = (extraParams.get('quic') || '').toLowerCase();
+    if (['1', 'true', 'yes'].includes(qQuic)) tt.quic = true;
+    const qHealth = (extraParams.get('health-check') || extraParams.get('health_check') || '').toLowerCase();
+    if (['1', 'true', 'yes'].includes(qHealth)) tt.healthCheck = true;
+    const qCc = (extraParams.get('congestion-controller') || extraParams.get('congestion_controller') || '').trim();
+    if (qCc) tt.congestionController = qCc;
+    const qBbrProfile = (extraParams.get('bbr-profile') || extraParams.get('bbr_profile') || '').trim();
+    if (qBbrProfile) tt.bbrProfile = qBbrProfile;
+    const qCwnd = asInt(extraParams.get('cwnd'), 0);
+    if (qCwnd > 0) tt.cwnd = qCwnd;
+    const qMaxConn = asInt(extraParams.get('max-connections') || extraParams.get('max_connections'), 0);
+    if (qMaxConn > 0) tt.maxConnections = qMaxConn;
+    const qMinStreams = asInt(extraParams.get('min-streams') || extraParams.get('min_streams'), 0);
+    if (qMinStreams >= 0) tt.minStreams = qMinStreams;
+    const qMaxStreams = asInt(extraParams.get('max-streams') || extraParams.get('max_streams'), 0);
+    if (qMaxStreams >= 0) tt.maxStreams = qMaxStreams;
+
     bean.stream = normalizeStream(bean.stream, bean.host);
     return bean;
 }
 
 function parseMieruProfilesJson(jsonObj) {
     if (!jsonObj || typeof jsonObj !== 'object') return [];
-    const profiles = Array.isArray(jsonObj.profiles) ? jsonObj.profiles : [];
+    const profiles = Array.isArray(jsonObj.profiles)
+        ? jsonObj.profiles
+        : ((jsonObj.profileName || jsonObj.user || jsonObj.servers) ? [jsonObj] : []);
     if (!profiles.length) return [];
     const beans = [];
     for (const p of profiles) {
@@ -1019,9 +1157,21 @@ function parseMieruProfilesJson(jsonObj) {
         const password = p?.user?.password || '';
         const profileName = (p?.profileName || '').trim();
         const servers = Array.isArray(p?.servers) ? p.servers : [];
-        const multiplexing = (p?.multiplexing || '').toString().toUpperCase();
+        const multiplexing = (() => {
+            const mx = p?.multiplexing;
+            if (typeof mx === 'string') return mx.toUpperCase();
+            if (mx && typeof mx === 'object') {
+                const level = (mx.level || mx.Level || '').toString().trim();
+                return level ? level.toUpperCase() : '';
+            }
+            return '';
+        })();
         const handshakeMode = (p?.handshakeMode || p?.handshake_mode || '').toString().toUpperCase();
-        const trafficPattern = (p?.trafficPattern || p?.traffic_pattern || '').toString().trim();
+        const trafficPattern = (() => {
+            const tp = p?.trafficPattern ?? p?.traffic_pattern;
+            if (typeof tp === 'string') return tp.trim();
+            return '';
+        })();
         for (const s of servers) {
             const host = s?.ipAddress || s?.host || s?.hostname || '';
             const bindings = Array.isArray(s?.portBindings) ? s.portBindings : [];
@@ -1029,9 +1179,10 @@ function parseMieruProfilesJson(jsonObj) {
             for (const b of bindings) {
                 const protocol = (b?.protocol || 'TCP').toString().toUpperCase();
                 const portRange = (b?.portRange || '').toString();
-                let serverPort = 27017;
+                const singlePort = asInt(b?.port, 0);
+                let serverPort = singlePort > 0 ? singlePort : 0;
                 if (portRange) {
-                    const m = portRange.match(/^(\d+)(?:-(\d+))?$/);
+                    const m = portRange.match(/^(\d+)(?:\s*-\s*(\d+))?$/);
                     if (m) {
                         serverPort = asInt(m[1], serverPort);
                     }
@@ -1081,10 +1232,8 @@ function buildBeansFromInput(raw) {
     if ((text.startsWith('{') || text.startsWith('['))) {
         const obj = tryJSON(text);
         if (obj) {
-            if (obj.profiles) {
-                const fromProfiles = parseMieruProfilesJson(obj);
-                if (fromProfiles.length) return fromProfiles;
-            }
+            const fromProfiles = parseMieruProfilesJson(obj);
+            if (fromProfiles.length) return fromProfiles;
             return [];
         }
     }
@@ -1093,6 +1242,13 @@ function buildBeansFromInput(raw) {
 }
 
 function buildStreamFromQuery(q, isTrojan) {
+    const parseIntOrRange = (raw) => {
+        const t = String(raw || '').trim();
+        if (!t) return '';
+        if (/^\d+\s*-\s*\d+$/.test(t)) return t.replace(/\s+/g, '');
+        const n = asInt(t, 0);
+        return n > 0 ? n : '';
+    };
     let type = (q.get('type') || 'tcp').toLowerCase();
     const mode = (q.get('mode') || '').toLowerCase();
     if (mode === 'gun') type = 'grpc';
@@ -1103,6 +1259,10 @@ function buildStreamFromQuery(q, isTrojan) {
     const sni = q.get('sni') || q.get('peer') || '';
     const authority = q.get('authority') || '';
     const grpcUserAgent = q.get('grpc-user-agent') || '';
+    const grpcPingInterval = asInt(q.get('ping-interval') || q.get('ping_interval'), 0);
+    const grpcMaxConnections = asInt(q.get('grpc-max-connections') || q.get('grpc_max_connections'), 0);
+    const grpcMinStreams = asInt(q.get('grpc-min-streams') || q.get('grpc_min_streams'), 0);
+    const grpcMaxStreams = asInt(q.get('grpc-max-streams') || q.get('grpc_max_streams'), 0);
     const alpn = splitCSV(q.get('alpn') || '');
     const aiRaw = (q.get('allowInsecure') || q.get('insecure') || '').toLowerCase();
     const allowInsecure = ['1', 'true', 'yes'].includes(aiRaw);
@@ -1122,6 +1282,10 @@ function buildStreamFromQuery(q, isTrojan) {
         sni,
         authority,
         grpcUserAgent,
+        grpcPingInterval,
+        grpcMaxConnections,
+        grpcMinStreams,
+        grpcMaxStreams,
         alpn,
         allowInsecure,
         pinnedPeerCertSha256,
@@ -1153,13 +1317,16 @@ function buildStreamFromQuery(q, isTrojan) {
         stream.host = q.get('host') || '';
         stream.xhttpMode = q.get('xmode') || q.get('mode') || '';
         stream.xhttpXmux = {
-            max_concurrency: q.get('xmux_max_concurrency') || '',
-            max_connections: q.get('xmux_max_connections') || '',
-            c_max_reuse_times: q.get('xmux_c_max_reuse_times') || '',
-            h_max_request_times: q.get('xmux_h_max_request_times') || '',
-            h_max_reusable_secs: q.get('xmux_h_max_reusable_secs') || '',
+            max_concurrency: q.get('xmux_max_concurrency') || q.get('reuse_max_concurrency') || '',
+            max_connections: q.get('xmux_max_connections') || q.get('reuse_max_connections') || '',
+            c_max_reuse_times: q.get('xmux_c_max_reuse_times') || q.get('reuse_c_max_reuse_times') || '',
+            h_max_request_times: q.get('xmux_h_max_request_times') || q.get('reuse_h_max_request_times') || '',
+            h_max_reusable_secs: q.get('xmux_h_max_reusable_secs') || q.get('reuse_h_max_reusable_secs') || '',
             h_keep_alive_period: asInt(q.get('xmux_h_keep_alive_period'), 0)
         };
+        stream.xhttpScMaxEachPostBytes = parseIntOrRange(q.get('sc-max-each-post-bytes') || q.get('sc_max_each_post_bytes'));
+        stream.xhttpScMaxBufferedPosts = asInt(q.get('sc-max-buffered-posts') || q.get('sc_max_buffered_posts'), 0);
+        stream.xhttpScMinPostsIntervalMs = parseIntOrRange(q.get('sc-min-posts-interval-ms') || q.get('sc_min_posts_interval_ms'));
         stream.xhttpDownload = {
             mode: q.get('download_mode') || '',
             host: q.get('download_host') || '',
@@ -1168,10 +1335,33 @@ function buildStreamFromQuery(q, isTrojan) {
             sc_max_each_post_bytes: q.get('download_sc_max_each_post_bytes') || '',
             sc_min_posts_interval_ms: q.get('download_sc_min_posts_interval_ms') || '',
             sc_stream_up_server_secs: q.get('download_sc_stream_up_server_secs') || '',
+            no_sse_header: q.get('download_no_sse_header') || '',
             server: q.get('download_server') || '',
             server_port: asInt(q.get('download_server_port'), 0),
-            detour: q.get('download_detour') || ''
+            detour: q.get('download_detour') || '',
+            xmux: {
+                max_concurrency: q.get('download_xmux_max_concurrency') || q.get('download_reuse_max_concurrency') || '',
+                max_connections: q.get('download_xmux_max_connections') || q.get('download_reuse_max_connections') || '',
+                c_max_reuse_times: q.get('download_xmux_c_max_reuse_times') || q.get('download_reuse_c_max_reuse_times') || '',
+                h_max_request_times: q.get('download_xmux_h_max_request_times') || q.get('download_reuse_h_max_request_times') || '',
+                h_max_reusable_secs: q.get('download_xmux_h_max_reusable_secs') || q.get('download_reuse_h_max_reusable_secs') || ''
+            }
         };
+        const xhttpQParams = tryJSON(q.get('quicParams') || q.get('quic_params') || '') || {};
+        const xhttpFinalmask = {};
+        const xhttpTcp = tryJSON(q.get('finalmask_tcp') || q.get('finalmask-tcp') || '') || [];
+        const xhttpUdp = tryJSON(q.get('finalmask_udp') || q.get('finalmask-udp') || '') || [];
+        if (Array.isArray(xhttpTcp) && xhttpTcp.length) xhttpFinalmask.tcp = xhttpTcp;
+        if (Array.isArray(xhttpUdp) && xhttpUdp.length) xhttpFinalmask.udp = xhttpUdp;
+        const xhttpQuicParams = (xhttpQParams && typeof xhttpQParams === 'object') ? { ...xhttpQParams } : {};
+        const xhttpCongestion = (q.get('congestion') || '').trim().toLowerCase();
+        const xhttpBrutalUp = (q.get('brutal_up') || q.get('brutalUp') || q.get('up') || '').trim();
+        const xhttpBrutalDown = (q.get('brutal_down') || q.get('brutalDown') || q.get('down') || '').trim();
+        if (xhttpCongestion && !xhttpQuicParams.congestion) xhttpQuicParams.congestion = xhttpCongestion;
+        if (xhttpBrutalUp && !xhttpQuicParams.brutalUp) xhttpQuicParams.brutalUp = xhttpBrutalUp;
+        if (xhttpBrutalDown && !xhttpQuicParams.brutalDown) xhttpQuicParams.brutalDown = xhttpBrutalDown;
+        if (Object.keys(xhttpQuicParams).length) xhttpFinalmask.quicParams = xhttpQuicParams;
+        if (Object.keys(xhttpFinalmask).length) stream.finalmask = xhttpFinalmask;
     } else if (type === 'httpupgrade') {
         stream.path = q.get('path') || '';
         stream.host = q.get('host') || '';
