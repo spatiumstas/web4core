@@ -6,6 +6,8 @@ const el = {
     errorText: document.getElementById('errorText'),
     links: document.getElementById('links'),
     tunName: document.getElementById('tunName'),
+    urlTestButton: document.getElementById('urlTestButton'),
+    urlTestMenu: document.getElementById('urlTestMenu'),
     gen: document.getElementById('gen'),
     btnCopy: document.getElementById('btnCopy'),
     btnDownload: document.getElementById('btnDownload'),
@@ -46,7 +48,9 @@ const el = {
 
 const state = {
     core: 'singbox',
-    wgBeans: []
+    wgBeans: [],
+    urlTest: '',
+    urlTestMenuOpen: false,
 };
 
 const header = document.getElementById('asciiHeader');
@@ -96,6 +100,93 @@ const PLACEHOLDER_MIHOMO = [
     'masque://...',
     'mieru://... or mierus://... (or json)'
 ];
+
+function initUrlTestPicker() {
+    if (!el.urlTestMenu) return;
+    const choices = Array.isArray(globalThis.web4core?.URLTEST_CHOICES)
+        ? globalThis.web4core.URLTEST_CHOICES
+            .map((choice) => {
+                if (Array.isArray(choice)) {
+                    return {
+                        label: String(choice[0] || '').trim(),
+                        url: String(choice[1] || '').trim(),
+                        logo: String(choice[2] || '').trim(),
+                    };
+                }
+                const url = String(choice || '').trim();
+                return { label: url, url, logo: '' };
+            })
+            .filter((choice) => choice.url)
+        : [];
+    el.urlTestMenu.innerHTML = '';
+    if (!state.urlTest && choices.length > 0) state.urlTest = choices[0].url;
+    for (const choice of choices) {
+        const item = document.createElement('button');
+        item.type = 'button';
+        item.className = 'probe-menu__item';
+        item.setAttribute('role', 'menuitemradio');
+        item.dataset.urlTest = choice.url;
+        item.dataset.service = (choice.label || '').trim().toLowerCase();
+        item.setAttribute('aria-checked', String(choice.url === state.urlTest));
+        item.title = choice.url;
+
+        const badge = document.createElement('span');
+        badge.className = 'probe-menu__badge';
+        badge.setAttribute('aria-hidden', 'true');
+        badge.innerHTML = choice.logo || '<svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="10" fill="var(--primary)"/></svg>';
+
+        const text = document.createElement('span');
+        text.className = 'probe-menu__text';
+
+        const title = document.createElement('span');
+        title.className = 'probe-menu__title';
+        title.textContent = choice.label || choice.url;
+
+        const check = document.createElement('span');
+        check.className = 'probe-menu__check';
+        check.setAttribute('aria-hidden', 'true');
+        check.textContent = '✓';
+
+        text.appendChild(title);
+        item.appendChild(badge);
+        item.appendChild(text);
+        item.appendChild(check);
+        item.addEventListener('click', () => {
+            setUrlTest(choice.url);
+            setUrlTestMenuOpen(false);
+            validateField(false);
+        });
+        el.urlTestMenu.appendChild(item);
+    }
+    setUrlTest(state.urlTest);
+}
+
+function syncUrlTestMenuSelection() {
+    if (!el.urlTestMenu) return;
+    const items = Array.from(el.urlTestMenu.querySelectorAll('.probe-menu__item'));
+    for (const item of items) {
+        const selected = item.dataset.urlTest === state.urlTest;
+        item.classList.toggle('is-selected', selected);
+        item.setAttribute('aria-checked', String(selected));
+    }
+}
+
+function setUrlTest(url) {
+    state.urlTest = String(url || '').trim();
+    syncUrlTestMenuSelection();
+    if (el.urlTestButton) {
+        el.urlTestButton.title = state.urlTest || 'Ping service';
+        el.urlTestButton.classList.toggle('is-active', !!state.urlTest);
+    }
+}
+
+function setUrlTestMenuOpen(open) {
+    state.urlTestMenuOpen = !!open;
+    if (el.urlTestButton) el.urlTestButton.setAttribute('aria-expanded', String(state.urlTestMenuOpen));
+    if (el.urlTestMenu) el.urlTestMenu.classList.toggle('hidden', !state.urlTestMenuOpen);
+    const chips = el.urlTestButton?.closest('.settings-panel__chips');
+    if (chips) chips.classList.toggle('has-overlay-menu', state.urlTestMenuOpen);
+}
 
 function updateLinksPlaceholder() {
     if (!el.links) return;
@@ -387,6 +478,7 @@ function validateField(showOutput) {
     const genClashSecret = !!el.cbClashSecret?.checked;
     const useExtended = !!el.cbExtended?.checked;
     const subMihomo = isMihomoSubscriptionMode();
+    const urlTest = String(state.urlTest || '').trim();
     const webUI = getCore() === 'mihomo' ? !!el.cbMihomoWebUI?.checked : false;
     const mihomoTunEnabled = getCore() === 'mihomo' ? !!el.cbMihomoTun?.checked : false;
     const mihomoPerProxyTun = getCore() === 'mihomo' ? !!el.cbMihomoPerProxyTun?.checked : false;
@@ -443,7 +535,8 @@ function validateField(showOutput) {
             const config = globalThis.web4core?.buildMihomoSubscriptionConfig(subUrls, extraBeans, {
                 addSocks: mihomoSocksEnabled,
                 perProxyPort,
-                perProxyListeners: perProxyPort || mihomoPerProxyTun
+                perProxyListeners: perProxyPort || mihomoPerProxyTun,
+                urlTest
             });
             if (!config) throw new Error('Failed to build subscription config');
 
@@ -525,6 +618,7 @@ function validateField(showOutput) {
                     mihomoPerProxyTun,
                     perProxyPort,
                     mihomoSubscriptionMode,
+                    urlTest,
                 }
             });
 
@@ -711,6 +805,7 @@ el.btnDownload.addEventListener('click', () => {
 });
 
 setupCheckboxValidation();
+initUrlTestPicker();
 
 function getDefaultCore() {
     const items = Array.isArray(el.coreItems) ? el.coreItems : [];
@@ -722,6 +817,27 @@ state.core = getDefaultCore();
 setCore(state.core);
 updateLinksPlaceholder();
 validateField(false);
+
+if (el.urlTestButton && el.urlTestMenu) {
+    el.urlTestButton.addEventListener('click', (e) => {
+        e.stopPropagation();
+        setUrlTestMenuOpen(!state.urlTestMenuOpen);
+    });
+
+    el.urlTestMenu.addEventListener('click', (e) => {
+        e.stopPropagation();
+    });
+
+    document.addEventListener('click', () => {
+        if (state.urlTestMenuOpen) setUrlTestMenuOpen(false);
+    });
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && state.urlTestMenuOpen) {
+            setUrlTestMenuOpen(false);
+        }
+    });
+}
 
 el.links.addEventListener('input', debounce(() => {
     validateField(false);

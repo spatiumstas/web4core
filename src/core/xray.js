@@ -280,6 +280,7 @@ function buildXrayTunInbounds(opts, outboundsCount) {
 function buildXrayConfig(outbounds, opts) {
     if (!Array.isArray(outbounds)) outbounds = [outbounds];
     const xraySocks = (opts && opts.addSocks === undefined) ? true : !!(opts && opts.addSocks);
+    const probeUrl = (opts && typeof opts.urlTest === 'string' && opts.urlTest.trim()) ? opts.urlTest.trim() : URLTEST;
     if (outbounds.length === 1) {
         const config = {
             log: { loglevel: 'warning' },
@@ -359,7 +360,7 @@ function buildXrayConfig(outbounds, opts) {
         const selector = outbounds.map(ob => ob.tag).filter(Boolean);
         config.observatory = {
             subjectSelector: selector,
-            probeURL: URLTEST,
+            probeURL: probeUrl,
             probeInterval: URLTEST_INTERVAL,
             enableConcurrency: selector.length > 8
         };

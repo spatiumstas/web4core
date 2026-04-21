@@ -20,6 +20,12 @@ function uniqueTargets(...parts) {
     return out;
 }
 
+function getUrlTest(opts) {
+    const candidate = String(opts?.urlTest || '').trim();
+    if (!candidate) return URLTEST;
+    return candidate.includes('generate_204') ? candidate : URLTEST;
+}
+
 function sanitizeProviderName(name) {
     const raw = String(name || '').trim().toLowerCase();
     if (!raw) return '';
@@ -494,6 +500,7 @@ function deduplicateProxies(beans) {
 }
 
 function buildMihomoConfig(beans, opts) {
+    const urlTest = getUrlTest(opts);
     const dedupedBeans = deduplicateProxies(beans);
     const proxies = dedupedBeans.map(b => buildMihomoProxy(b));
     const used = new Set();
@@ -530,7 +537,7 @@ function buildMihomoConfig(beans, opts) {
                 name: FASTEST_GROUP_NAME,
                 type: 'url-test',
                 proxies: names,
-                url: URLTEST,
+                url: urlTest,
                 interval: PROXY_FETCH_INTERVAL
             });
             groups.push({
@@ -579,6 +586,7 @@ function buildMihomoConfig(beans, opts) {
 }
 
 function buildMihomoSubscriptionConfig(subscriptionUrls, extraBeans, opts) {
+    const urlTest = getUrlTest(opts);
     if (!Array.isArray(subscriptionUrls) || subscriptionUrls.length === 0) {
         throw new Error('At least one subscription URL is required');
     }
@@ -598,7 +606,7 @@ function buildMihomoSubscriptionConfig(subscriptionUrls, extraBeans, opts) {
             'health-check': {
                 enable: true,
                 interval: PROXY_FETCH_INTERVAL,
-                url: URLTEST,
+                url: urlTest,
                 'expected-status': 204,
                 __comments: {
                     interval: 'Health-check interval'
@@ -616,7 +624,7 @@ function buildMihomoSubscriptionConfig(subscriptionUrls, extraBeans, opts) {
             name: FASTEST_GROUP_NAME,
             type: 'url-test',
             use: providerNames,
-            url: URLTEST,
+            url: urlTest,
             interval: PROXY_FETCH_INTERVAL,
             tolerance: 50,
             __comments: {

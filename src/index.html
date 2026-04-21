@@ -148,6 +148,13 @@
                     <span>WireGuard</span>
                 </button>
                 <input type="file" id="wgFile" class="file-input-hidden" accept=".conf,.wg,.awg,text/plain" multiple />
+                <div class="probe-picker" title="Ping/latency check target for auto selection">
+                    <button id="urlTestButton" class="custom-checkbox chip probe-picker__button" type="button"
+                        aria-label="Ping service" aria-haspopup="menu" aria-expanded="false">
+                        <span>Ping</span>
+                    </button>
+                    <div id="urlTestMenu" class="probe-menu hidden" role="menu" aria-label="Ping service options"></div>
+                </div>
             </div>
             <div class="settings-panel__field">
                 <input class="input" type="text" id="tunName"

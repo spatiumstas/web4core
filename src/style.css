@@ -181,7 +181,7 @@ label {
 .settings-panel {
     width: 100%;
     max-width: var(--form-max);
-    overflow: hidden;
+    overflow: visible;
     max-height: 260px;
     opacity: 1;
     transform: translateY(0);
@@ -190,6 +190,7 @@ label {
 }
 
 .settings-panel--collapsed {
+    overflow: hidden;
     max-height: 0;
     opacity: 0;
     transform: translateY(-4px);
@@ -198,6 +199,7 @@ label {
 
 .settings-panel__chips {
     display: flex;
+    align-items: flex-start;
     flex-wrap: wrap;
     gap: 6px;
     margin: 4px 0 8px;
@@ -393,8 +395,110 @@ select.input-error {
     gap: 10px;
     align-items: center;
     justify-content: center;
+    flex-wrap: wrap;
     width: 100%;
     max-width: var(--form-max);
+}
+
+.probe-select-wrap {
+    min-width: 0;
+}
+
+.probe-picker {
+    position: relative;
+    min-width: 0;
+}
+
+.settings-panel__chips .probe-picker__button {
+    padding: 7px 14px;
+    line-height: 1;
+}
+
+.probe-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    z-index: 30;
+    width: min(196px, calc(100vw - 24px));
+    max-width: calc(100vw - 24px);
+    padding: 6px;
+    border: 1px solid rgba(148, 163, 184, 0.22);
+    border-radius: 14px;
+    background: rgba(22, 28, 39, 0.98);
+    box-shadow: 0 14px 30px rgba(0, 0, 0, 0.28), 0 0 0 1px rgba(55, 157, 216, 0.06);
+    backdrop-filter: blur(10px);
+}
+
+.probe-menu__item {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 20px 1fr 12px;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 9px;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    background: transparent;
+    color: var(--text);
+    text-align: left;
+    cursor: pointer;
+}
+
+.probe-menu__item:not(:last-child) {
+    margin-bottom: 4px;
+}
+
+.probe-menu__item.is-selected {
+    border-color: rgba(55, 157, 216, 0.55);
+    background: rgba(55, 157, 216, 0.08);
+}
+
+.probe-menu__badge {
+    width: 20px;
+    height: 20px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 20px;
+    overflow: hidden;
+}
+
+.probe-menu__badge svg {
+    width: 20px;
+    height: 20px;
+    display: block;
+}
+
+.probe-menu__item[data-service*="cloudflare"] .probe-menu__badge svg,
+.probe-menu__item[data-service*="apple"] .probe-menu__badge svg {
+    transform: scale(1.18);
+    transform-origin: center;
+}
+
+.probe-menu__text {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+}
+
+.probe-menu__title {
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.15;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.probe-menu__check {
+    opacity: 0;
+    color: var(--primary);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.probe-menu__item.is-selected .probe-menu__check {
+    opacity: 1;
 }
 
 .btn-primary, input[type="submit"] {
@@ -616,6 +720,12 @@ input[type="submit"][disabled] {
         border-color: var(--primary);
         background: rgba(55, 157, 216, 0.16);
     }
+
+    .probe-menu__item:hover {
+        background: rgba(55, 157, 216, 0.08);
+        border-color: rgba(55, 157, 216, 0.18);
+    }
+
 }
 
 @media (max-width: 600px) {
@@ -680,6 +790,13 @@ input[type="submit"][disabled] {
         max-width: 100%;
     }
 
+    .probe-menu {
+        top: calc(100% + 4px);
+        right: 0;
+        width: min(180px, calc(100vw - 20px));
+        max-width: calc(100vw - 20px);
+    }
+
     input[type="submit"] {
         padding: 10px 14px;
         font-size: 14px;
@@ -722,6 +839,12 @@ input[type="submit"][disabled] {
             linear-gradient(90deg, var(--bg-dark) 0%, transparent 100%) 0 0 / 18px 100% no-repeat,
             linear-gradient(270deg, var(--bg-dark) 0%, transparent 100%) 100% 0 / 18px 100% no-repeat;
         background-attachment: local, local;
+    }
+
+    .settings-panel__chips.has-overlay-menu {
+        overflow: visible;
+        touch-action: auto;
+        overscroll-behavior-x: auto;
     }
 
     .settings-panel__chips::-webkit-scrollbar {
