@@ -110,14 +110,14 @@ const URLTEST_LOGO_MICROSOFT = '<svg viewBox="0 0 20 20" aria-hidden="true"><rec
 const URLTEST_LOGO_UBUNTU = '<svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="10" fill="#E95420"/><circle cx="10" cy="10" r="2.1" fill="#fff"/><circle cx="5.1" cy="10" r="1.45" fill="#fff"/><circle cx="12.45" cy="5.76" r="1.45" fill="#fff"/><circle cx="12.45" cy="14.24" r="1.45" fill="#fff"/><path d="M6.5 10h2.1" stroke="#fff" stroke-width="1.2" stroke-linecap="round"/><path d="M11.08 6.7l-1.05 1.82" stroke="#fff" stroke-width="1.2" stroke-linecap="round"/><path d="m11.08 13.3-1.05-1.82" stroke="#fff" stroke-width="1.2" stroke-linecap="round"/></svg>';
 const URLTEST_LOGO_FEDORA = '<svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="10" fill="#294172"/><path d="M11.2 4.5c1.6 0 2.9 1.2 2.9 2.8 0 1.25-.8 2.3-1.95 2.67v2.75c0 1.57-1.31 2.8-2.94 2.8H7.85v-2.12h1.27c.49 0 .86-.37.86-.84v-3.9c0-1.54 1.26-2.8 2.83-2.8h1.33V4.5H11.2Zm-.3 3.54c-.48 0-.88.4-.88.88v.62h.88c.49 0 .89-.4.89-.88 0-.35-.21-.62-.52-.75a.86.86 0 0 0-.37-.07Z" fill="#fff"/></svg>';
 const URLTEST_CHOICES = [
-    ['Google', 'http://google.com/generate_204', URLTEST_LOGO_GOOGLE],
-    ['Cloudflare', 'http://cp.cloudflare.com/generate_204', URLTEST_LOGO_CLOUDFLARE],
-    ['Apple', 'http://captive.apple.com/hotspot-detect.html', URLTEST_LOGO_APPLE],
-    ['Microsoft', 'http://msftconnecttest.com/connecttest.txt', URLTEST_LOGO_MICROSOFT],
-    ['Ubuntu', 'http://connectivity-check.ubuntu.com/', URLTEST_LOGO_UBUNTU],
-    ['Fedora', 'http://fedoraproject.org/static/hotspot.txt', URLTEST_LOGO_FEDORA]
+    { id: 'google', label: 'Google', url: 'http://google.com/generate_204', logo: URLTEST_LOGO_GOOGLE, expectedStatus: 204 },
+    { id: 'cloudflare', label: 'Cloudflare', url: 'http://cp.cloudflare.com/generate_204', logo: URLTEST_LOGO_CLOUDFLARE, expectedStatus: 204 },
+    { id: 'apple', label: 'Apple', url: 'http://captive.apple.com/hotspot-detect.html', logo: URLTEST_LOGO_APPLE, expectedStatus: 200 },
+    { id: 'microsoft', label: 'Microsoft', url: 'http://msftconnecttest.com/connecttest.txt', logo: URLTEST_LOGO_MICROSOFT, expectedStatus: 200 },
+    { id: 'ubuntu', label: 'Ubuntu', url: 'http://connectivity-check.ubuntu.com/', logo: URLTEST_LOGO_UBUNTU, expectedStatus: 200 },
+    { id: 'fedora', label: 'Fedora', url: 'http://fedoraproject.org/static/hotspot.txt', logo: URLTEST_LOGO_FEDORA, expectedStatus: 200 }
 ];
-const URLTEST = URLTEST_CHOICES[0][1];
+const URLTEST = URLTEST_CHOICES[0].url;
 const URLTEST_INTERVAL = '3m';
 const FETCH_INIT = {
     method: 'GET',
@@ -481,11 +481,29 @@ function parseTunSpec(tunSpec) {
         .filter(x => x.name);
 }
 
-function resolveUrlTest(input) {
+function getUrlTestChoice(input) {
     const candidate = String(input || '').trim();
-    if (!candidate) return URLTEST;
-    if (URLTEST_CHOICES.some((choice) => Array.isArray(choice) && String(choice[1] || '').trim() === candidate)) return candidate;
-    return isHttpUrl(candidate) ? candidate : URLTEST;
+    if (!candidate) return URLTEST_CHOICES[0];
+    const found = URLTEST_CHOICES.find((choice) => choice && choice.url === candidate);
+    if (found) return found;
+    if (isHttpUrl(candidate)) {
+        return {
+            id: 'custom',
+            label: candidate.replace(/^https?:\/\//i, ''),
+            url: candidate,
+            logo: '',
+            expectedStatus: candidate.includes('generate_204') ? 204 : 200,
+        };
+    }
+    return URLTEST_CHOICES[0];
+}
+
+function resolveUrlTest(input) {
+    return getUrlTestChoice(input).url;
+}
+
+function resolveUrlTestExpectedStatus(input) {
+    return getUrlTestChoice(input).expectedStatus || 204;
 }
 
 function parseLink(input) {
@@ -1423,9 +1441,11 @@ export {
     computeTag,
     CORE_PROTOCOL_SUPPORT,
     getAllowedCoreProtocols,
+    getUrlTestChoice,
     validateBean,
     buildBeansFromInput,
     parseTunSpec,
     parseAddrHostPort,
-    resolveUrlTest
+    resolveUrlTest,
+    resolveUrlTestExpectedStatus
 };

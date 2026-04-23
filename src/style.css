@@ -7,7 +7,7 @@
     --border: #4d545f;
     --radius: 20px;
     --font: Roboto, system-ui, Segoe UI, Arial, sans-serif;
-    --form-max: 820px;
+    --form-max: 902px;
 }
 
 * {
@@ -19,7 +19,6 @@ html, body {
     padding: 0;
     scrollbar-width: none;
     -ms-overflow-style: none;
-    zoom: 1.1;
 }
 
 body::-webkit-scrollbar {
@@ -33,16 +32,20 @@ body {
     display: block;
 }
 
+body.probe-menu-open {
+    overflow: hidden;
+}
+
 header {
     width: 100%;
     max-width: var(--form-max);
-    margin: 10px auto 6px;
+    margin: 11px auto 7px;
     text-align: center;
 }
 
 header pre {
     display: grid;
-    font-size: 1.5rem;
+    font-size: 1.65rem;
     justify-content: center;
     align-content: center;
     text-align: center;
@@ -53,10 +56,10 @@ main.container {
     width: 100%;
     max-width: var(--form-max);
     margin: 0 auto;
-    padding: 12px 16px 20px;
+    padding: 13px 18px 22px;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 13px;
     align-items: center;
 }
 
@@ -91,7 +94,7 @@ main.container {
 
 .row {
     display: flex;
-    gap: 10px;
+    gap: 11px;
     align-items: center;
     flex-wrap: wrap;
     width: 100%;
@@ -99,7 +102,7 @@ main.container {
 }
 
 label {
-    font-size: 14px;
+    font-size: 15px;
     color: var(--text);
 }
 
@@ -406,6 +409,15 @@ select.input-error {
 
 .probe-picker {
     position: relative;
+    flex: 0 0 auto;
+    min-width: 0;
+}
+
+.probe-picker__button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
     min-width: 0;
 }
 
@@ -414,13 +426,32 @@ select.input-error {
     line-height: 1;
 }
 
+.probe-picker__chevron {
+    flex: 0 0 auto;
+    color: #fff;
+    opacity: .8;
+    transition: transform .18s ease, opacity .18s ease;
+}
+
+.probe-picker__button span {
+    white-space: nowrap;
+}
+
+.probe-picker__button[aria-expanded="true"] .probe-picker__chevron {
+    transform: rotate(180deg);
+    opacity: 1;
+}
+
 .probe-menu {
-    position: absolute;
-    top: calc(100% + 6px);
-    right: 0;
-    z-index: 30;
-    width: min(196px, calc(100vw - 24px));
-    max-width: calc(100vw - 24px);
+    position: fixed;
+    left: 0;
+    top: 0;
+    z-index: 1000;
+    width: min(200px, calc(100vw - 16px));
+    max-width: calc(100vw - 16px);
+    max-height: min(260px, calc(100vh - 16px));
+    overflow-y: auto;
+    overscroll-behavior: contain;
     padding: 6px;
     border: 1px solid rgba(148, 163, 184, 0.22);
     border-radius: 14px;
@@ -432,16 +463,22 @@ select.input-error {
 .probe-menu__item {
     width: 100%;
     display: grid;
-    grid-template-columns: 20px 1fr 12px;
+    grid-template-columns: 20px 1fr 20px;
     align-items: center;
     gap: 8px;
-    padding: 8px 9px;
+    padding: 8px 12px;
     border: 1px solid transparent;
     border-radius: 10px;
     background: transparent;
     color: var(--text);
     text-align: left;
     cursor: pointer;
+}
+
+.probe-menu__item:focus-visible {
+    outline: 0;
+    border-color: rgba(55, 157, 216, 0.55);
+    box-shadow: 0 0 0 3px rgba(55, 157, 216, 0.16);
 }
 
 .probe-menu__item:not(:last-child) {
@@ -454,18 +491,18 @@ select.input-error {
 }
 
 .probe-menu__badge {
-    width: 20px;
-    height: 20px;
+    width: 18px;
+    height: 18px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    flex: 0 0 20px;
+    flex: 0 0 18px;
     overflow: hidden;
 }
 
 .probe-menu__badge svg {
-    width: 20px;
-    height: 20px;
+    width: 18px;
+    height: 18px;
     display: block;
 }
 
@@ -495,10 +532,15 @@ select.input-error {
     color: var(--primary);
     font-size: 12px;
     font-weight: 700;
+    text-align: center;
 }
 
 .probe-menu__item.is-selected .probe-menu__check {
     opacity: 1;
+}
+
+.probe-menu::-webkit-scrollbar {
+    width: 8px;
 }
 
 .btn-primary, input[type="submit"] {
@@ -538,7 +580,7 @@ input[type="submit"][disabled] {
     position: relative;
     width: 100%;
     max-width: calc(var(--form-max) - 120px);
-    height: 40px;
+    height: 44px;
     border-radius: 999px;
     border: 1px solid var(--border);
     display: grid;
@@ -557,7 +599,7 @@ input[type="submit"][disabled] {
 .core-toggle .labels span {
     text-align: center;
     cursor: pointer;
-    font-size: 14px;
+    font-size: 15px;
     color: white;
 }
 
@@ -581,7 +623,7 @@ input[type="submit"][disabled] {
     gap: 8px;
     cursor: pointer;
     user-select: none;
-    padding: 8px 12px;
+    padding: 9px 13px;
     border: 1px solid var(--border);
     border-radius: var(--radius);
     background: var(--bg-dark);
@@ -644,7 +686,7 @@ input[type="submit"][disabled] {
     border-width: 1px;
     border-color: transparent;
     background: rgba(148, 163, 184, 0.12);
-    padding: 7px 14px;
+    padding: 8px 15px;
     gap: 6px;
     min-width: 0;
 }
@@ -654,7 +696,7 @@ input[type="submit"][disabled] {
 }
 
 .settings-panel__chips .custom-checkbox span {
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 500;
     line-height: 1;
 }
@@ -734,7 +776,6 @@ input[type="submit"][disabled] {
         overflow-y: auto !important;
         position: relative !important;
         width: 100vw;
-        zoom: 1;
     }
 
     header {
@@ -841,12 +882,6 @@ input[type="submit"][disabled] {
         background-attachment: local, local;
     }
 
-    .settings-panel__chips.has-overlay-menu {
-        overflow: visible;
-        touch-action: auto;
-        overscroll-behavior-x: auto;
-    }
-
     .settings-panel__chips::-webkit-scrollbar {
         display: none;
     }
@@ -856,5 +891,11 @@ input[type="submit"][disabled] {
         scroll-snap-align: start;
         scroll-snap-stop: normal;
         white-space: nowrap;
+    }
+
+    .probe-menu {
+        width: min(260px, calc(100vw - 16px));
+        max-width: calc(100vw - 16px);
+        max-height: min(260px, calc(100vh - 16px));
     }
 }
