@@ -5,7 +5,9 @@
     "esbuild": "^0.27.2"
   },
   "scripts": {
-    "build:web": "esbuild src/entry-web4core.js --bundle --format=iife --platform=browser --outfile=src/web4core.runtime.js",
+    "build:web:runtime": "esbuild src/entry-web4core.js --bundle --format=iife --platform=browser --outfile=src/web4core.runtime.js",
+    "build:web:ui": "esbuild src/ui/app.js --bundle --format=iife --platform=browser --outfile=src/ui.js",
+    "build:web": "npm run build:web:runtime && npm run build:web:ui",
     "build:worker": "esbuild workers/api/src/index.js --bundle --format=esm --platform=browser --loader:.md=text --outfile=workers/api/dist/worker.mjs",
     "build": "npm run build:web && npm run build:worker"
   }

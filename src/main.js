@@ -103,7 +103,21 @@ const SUB_FETCH_TIMEOUT = 15000;
 const PROXY_FETCH_INTERVAL = 300;
 const SUB_REFRESH_INTERVAL = 43200;
 const SUB_FALLBACK_RETRIES = 2;
-const URLTEST = 'https://www.gstatic.com/generate_204';
+const URLTEST_LOGO_GOOGLE = '<svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="10" fill="#fff"/><path d="M16.98 10.2c0-.43-.04-.75-.13-1.09H10v2.14h4.02c-.08.53-.5 1.33-1.44 1.86l-.01.07 2.09 1.58.14.01c1.26-1.13 2.18-2.79 2.18-4.57Z" fill="#4285F4"/><path d="M10 17.2c1.97 0 3.63-.64 4.84-1.74l-2.31-1.76c-.62.42-1.46.71-2.53.71-1.93 0-3.57-1.25-4.15-2.98l-.07.01-2.17 1.64-.02.07A7.31 7.31 0 0 0 10 17.2Z" fill="#34A853"/><path d="M5.85 11.43A4.3 4.3 0 0 1 5.61 10c0-.5.09-.99.23-1.43l-.01-.1-2.2-1.67-.07.03A7.15 7.15 0 0 0 2.8 10c0 1.14.28 2.22.76 3.17l2.29-1.74Z" fill="#FBBC05"/><path d="M10 5.59c1.34 0 2.25.57 2.77 1.05l2.02-1.93C13.62 3.65 11.97 2.8 10 2.8a7.31 7.31 0 0 0-6.44 3.85l2.28 1.72C6.43 6.84 8.07 5.59 10 5.59Z" fill="#EA4335"/></svg>';
+const URLTEST_LOGO_CLOUDFLARE = '<svg viewBox="0 0 20 20" aria-hidden="true"><rect width="20" height="20" rx="10" fill="#fff" fill-opacity="0"/><path d="M14.18 11.17a2.22 2.22 0 0 0-2.18-2.61 3.02 3.02 0 0 0-5.76-.5 1.84 1.84 0 0 0-1.83 1.84c0 .14.02.27.05.4A1.78 1.78 0 0 0 5.3 13.8h8.58a1.32 1.32 0 0 0 .3-2.63Z" fill="#F38020"/><path d="M14.96 11.48a1.43 1.43 0 0 0-1.4-1.69 1.95 1.95 0 0 0-1.82 1.24 1.12 1.12 0 0 0-.72 2h3.78a.79.79 0 0 0 .16-1.55Z" fill="#FAAE40"/></svg>';
+const URLTEST_LOGO_APPLE = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M13.53 10.53c.02 2 1.76 2.67 1.78 2.68-.01.04-.27.92-.89 1.82-.54.78-1.1 1.56-1.98 1.58-.87.02-1.16-.51-2.16-.51-1 0-1.33.49-2.09.53-.84.03-1.48-.84-2.03-1.61-1.13-1.58-2-4.48-.84-6.48.57-.99 1.6-1.62 2.72-1.64.85-.02 1.65.57 2.16.57.5 0 1.45-.7 2.45-.6.42.02 1.58.17 2.33 1.25-.06.04-1.39.8-1.38 2.41Zm-1.84-4.3c.45-.54.76-1.28.68-2.03-.66.03-1.46.43-1.94.97-.43.48-.8 1.23-.7 1.95.74.06 1.5-.38 1.96-.89Z" fill="#D0D3D8"/></svg>';
+const URLTEST_LOGO_MICROSOFT = '<svg viewBox="0 0 20 20" aria-hidden="true"><rect x="2.5" y="2.5" width="7" height="7" fill="#F25022"/><rect x="10.5" y="2.5" width="7" height="7" fill="#7FBA00"/><rect x="2.5" y="10.5" width="7" height="7" fill="#00A4EF"/><rect x="10.5" y="10.5" width="7" height="7" fill="#FFB900"/></svg>';
+const URLTEST_LOGO_UBUNTU = '<svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="10" fill="#E95420"/><circle cx="10" cy="10" r="2.1" fill="#fff"/><circle cx="5.1" cy="10" r="1.45" fill="#fff"/><circle cx="12.45" cy="5.76" r="1.45" fill="#fff"/><circle cx="12.45" cy="14.24" r="1.45" fill="#fff"/><path d="M6.5 10h2.1" stroke="#fff" stroke-width="1.2" stroke-linecap="round"/><path d="M11.08 6.7l-1.05 1.82" stroke="#fff" stroke-width="1.2" stroke-linecap="round"/><path d="m11.08 13.3-1.05-1.82" stroke="#fff" stroke-width="1.2" stroke-linecap="round"/></svg>';
+const URLTEST_LOGO_FEDORA = '<svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="10" fill="#294172"/><path d="M11.2 4.5c1.6 0 2.9 1.2 2.9 2.8 0 1.25-.8 2.3-1.95 2.67v2.75c0 1.57-1.31 2.8-2.94 2.8H7.85v-2.12h1.27c.49 0 .86-.37.86-.84v-3.9c0-1.54 1.26-2.8 2.83-2.8h1.33V4.5H11.2Zm-.3 3.54c-.48 0-.88.4-.88.88v.62h.88c.49 0 .89-.4.89-.88 0-.35-.21-.62-.52-.75a.86.86 0 0 0-.37-.07Z" fill="#fff"/></svg>';
+const URLTEST_CHOICES = [
+    { id: 'google', label: 'Google', url: 'https://google.com/generate_204', logo: URLTEST_LOGO_GOOGLE, expectedStatus: 204 },
+    { id: 'cloudflare', label: 'Cloudflare', url: 'https://cp.cloudflare.com/generate_204', logo: URLTEST_LOGO_CLOUDFLARE, expectedStatus: 204 },
+    { id: 'apple', label: 'Apple', url: 'https://captive.apple.com/hotspot-detect.html', logo: URLTEST_LOGO_APPLE, expectedStatus: 200 },
+    { id: 'microsoft', label: 'Microsoft', url: 'https://msftconnecttest.com/connecttest.txt', logo: URLTEST_LOGO_MICROSOFT, expectedStatus: 200 },
+    { id: 'ubuntu', label: 'Ubuntu', url: 'https://connectivity-check.ubuntu.com/', logo: URLTEST_LOGO_UBUNTU, expectedStatus: 200 },
+    { id: 'fedora', label: 'Fedora', url: 'https://fedoraproject.org/static/hotspot.txt', logo: URLTEST_LOGO_FEDORA, expectedStatus: 200 }
+];
+const URLTEST = URLTEST_CHOICES[0].url;
 const URLTEST_INTERVAL = '3m';
 const FETCH_INIT = {
     method: 'GET',
@@ -113,8 +127,7 @@ const FETCH_INIT = {
     redirect: 'follow'
 };
 const PUBLIC_CORS_FALLBACKS = [
-    (x) => 'https://sub.web2core.workers.dev/?url=' + encodeURIComponent(x),
-    (x) => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(x)
+    (x) => 'https://sub.web2core.workers.dev/?url=' + encodeURIComponent(x)
 ];
 
 const CORE_PROTOCOL_SUPPORT = {
@@ -465,6 +478,31 @@ function parseTunSpec(tunSpec) {
             return { name, mode };
         })
         .filter(x => x.name);
+}
+
+function getUrlTestChoice(input) {
+    const candidate = String(input || '').trim();
+    if (!candidate) return URLTEST_CHOICES[0];
+    const found = URLTEST_CHOICES.find((choice) => choice && choice.url === candidate);
+    if (found) return found;
+    if (isHttpUrl(candidate)) {
+        return {
+            id: 'custom',
+            label: candidate.replace(/^https?:\/\//i, ''),
+            url: candidate,
+            logo: '',
+            expectedStatus: candidate.includes('generate_204') ? 204 : 200,
+        };
+    }
+    return URLTEST_CHOICES[0];
+}
+
+function resolveUrlTest(input) {
+    return getUrlTestChoice(input).url;
+}
+
+function resolveUrlTestExpectedStatus(input) {
+    return getUrlTestChoice(input).expectedStatus || 204;
 }
 
 function parseLink(input) {
@@ -1395,14 +1433,18 @@ export {
     SUB_REFRESH_INTERVAL,
     SUB_FALLBACK_RETRIES,
     URLTEST,
+    URLTEST_CHOICES,
     URLTEST_INTERVAL,
     FETCH_INIT,
     PUBLIC_CORS_FALLBACKS,
     computeTag,
     CORE_PROTOCOL_SUPPORT,
     getAllowedCoreProtocols,
+    getUrlTestChoice,
     validateBean,
     buildBeansFromInput,
     parseTunSpec,
-    parseAddrHostPort
+    parseAddrHostPort,
+    resolveUrlTest,
+    resolveUrlTestExpectedStatus
 };

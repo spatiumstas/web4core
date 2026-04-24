@@ -4,6 +4,8 @@ import {
   buildBeansFromInput,
   computeTag,
   getAllowedCoreProtocols,
+  URLTEST,
+  URLTEST_CHOICES,
   validateBean,
 } from './main.js';
 
@@ -20,6 +22,8 @@ globalThis.web4core = Object.assign({}, globalThis.web4core || {}, {
   validateBean,
   computeTag,
   getAllowedCoreProtocols,
+  URLTEST,
+  URLTEST_CHOICES,
   buildSingBoxOutbound,
   buildSingBoxConfig,
   buildXrayOutbound,

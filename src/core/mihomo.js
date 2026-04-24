@@ -1,4 +1,4 @@
-import { computeTag, validateBean, URLTEST, PROXY_FETCH_INTERVAL, SUB_REFRESH_INTERVAL } from '../main.js';
+import { computeTag, validateBean, PROXY_FETCH_INTERVAL, SUB_REFRESH_INTERVAL, resolveUrlTest, resolveUrlTestExpectedStatus, generateSecretHex32 } from '../main.js';
 
 const FASTEST_GROUP_NAME = '⚡ Fastest';
 const GLOBAL_GROUP_NAME = 'GLOBAL';
@@ -18,6 +18,14 @@ function uniqueTargets(...parts) {
         out.push(name);
     });
     return out;
+}
+
+function getUrlTest(opts) {
+    return resolveUrlTest(opts?.urlTest);
+}
+
+function getUrlTestExpectedStatus(opts) {
+    return resolveUrlTestExpectedStatus(opts?.urlTest);
 }
 
 function sanitizeProviderName(name) {
@@ -494,6 +502,8 @@ function deduplicateProxies(beans) {
 }
 
 function buildMihomoConfig(beans, opts) {
+    const urlTest = getUrlTest(opts);
+    const urlTestExpectedStatus = getUrlTestExpectedStatus(opts);
     const dedupedBeans = deduplicateProxies(beans);
     const proxies = dedupedBeans.map(b => buildMihomoProxy(b));
     const used = new Set();
@@ -530,8 +540,9 @@ function buildMihomoConfig(beans, opts) {
                 name: FASTEST_GROUP_NAME,
                 type: 'url-test',
                 proxies: names,
-                url: URLTEST,
-                interval: PROXY_FETCH_INTERVAL
+                url: urlTest,
+                interval: PROXY_FETCH_INTERVAL,
+                'expected-status': urlTestExpectedStatus
             });
             groups.push({
                 name: GLOBAL_GROUP_NAME,
@@ -579,6 +590,8 @@ function buildMihomoConfig(beans, opts) {
 }
 
 function buildMihomoSubscriptionConfig(subscriptionUrls, extraBeans, opts) {
+    const urlTest = getUrlTest(opts);
+    const urlTestExpectedStatus = getUrlTestExpectedStatus(opts);
     if (!Array.isArray(subscriptionUrls) || subscriptionUrls.length === 0) {
         throw new Error('At least one subscription URL is required');
     }
@@ -590,6 +603,9 @@ function buildMihomoSubscriptionConfig(subscriptionUrls, extraBeans, opts) {
         const providerName = computeProviderName(url, index, subscriptionUrls.length, usedProviderNames);
         providers[providerName] = {
             type: 'http',
+            header: {
+                'x-hwid': [generateSecretHex32()]
+            },
             url: url,
             interval: SUB_REFRESH_INTERVAL,
             __comments: {
@@ -598,8 +614,8 @@ function buildMihomoSubscriptionConfig(subscriptionUrls, extraBeans, opts) {
             'health-check': {
                 enable: true,
                 interval: PROXY_FETCH_INTERVAL,
-                url: URLTEST,
-                'expected-status': 204,
+                url: urlTest,
+                'expected-status': urlTestExpectedStatus,
                 __comments: {
                     interval: 'Health-check interval'
                 }
@@ -616,8 +632,9 @@ function buildMihomoSubscriptionConfig(subscriptionUrls, extraBeans, opts) {
             name: FASTEST_GROUP_NAME,
             type: 'url-test',
             use: providerNames,
-            url: URLTEST,
+            url: urlTest,
             interval: PROXY_FETCH_INTERVAL,
+            'expected-status': urlTestExpectedStatus,
             tolerance: 50,
             __comments: {
                 interval: 'Latency probe interval (seconds)',
