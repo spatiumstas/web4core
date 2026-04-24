@@ -1,7 +1,6 @@
 import {
     decodeBase64Url,
     isHttpUrl,
-    parseUrl,
     SUPPORTED_SCHEMES,
     MAX_SUB_REDIRECTS,
     SUB_FETCH_TIMEOUT,
@@ -20,6 +19,12 @@ function looksLikeLinksList(text) {
     if (!t) return false;
     const rx = buildSchemesRegex('i');
     return rx.test(t);
+}
+
+function looksLikeJsonContainer(text) {
+    const t = String(text || '').trim();
+    if (!t) return false;
+    return (t.startsWith('{') && t.endsWith('}')) || (t.startsWith('[') && t.endsWith(']'));
 }
 
 function normalizeSubscriptionBody(raw) {
@@ -49,10 +54,10 @@ function normalizeSubscriptionBody(raw) {
     };
     let body = t;
     const dec1 = tryDecode(t);
-    if (dec1 && (looksLikeLinksList(dec1) || dec1.includes('\n'))) body = dec1;
+    if (dec1 && (looksLikeLinksList(dec1) || dec1.includes('\n') || looksLikeJsonContainer(dec1))) body = dec1;
     if (!looksLikeLinksList(body)) {
         const dec2 = tryDecode(body);
-        if (dec2 && looksLikeLinksList(dec2)) body = dec2;
+        if (dec2 && (looksLikeLinksList(dec2) || looksLikeJsonContainer(dec2))) body = dec2;
     }
     return body.replace(/\r\n/g, '\n');
 }
@@ -98,6 +103,76 @@ function extractLinksFromHtml(html) {
     return out;
 }
 
+function filterSubscriptionLinks(items) {
+    const out = [];
+    const seen = new Set();
+    const re = buildSchemesRegex('i');
+    for (const item of (Array.isArray(items) ? items : [])) {
+        const link = String(item || '').trim();
+        if (!link || seen.has(link)) continue;
+        if (!re.test(link)) continue;
+        seen.add(link);
+        out.push(link);
+    }
+    return out;
+}
+
+function extractLinksFromText(raw) {
+    const out = [];
+    const seen = new Set();
+    const text = String(raw || '').replace(/\\\//g, '/');
+    const re = new RegExp(buildSchemesRegex().source + "[^\\s<>\"'`,\\\\]+", 'ig');
+    let m;
+    while ((m = re.exec(text)) !== null) {
+        const link = String(m[0] || '').trim();
+        if (!link || seen.has(link)) continue;
+        seen.add(link);
+        out.push(link);
+    }
+    return out;
+}
+
+function extractLinksFromEmbeddedPayload(html) {
+    const candidates = [];
+    const addCandidate = (val) => {
+        const s = String(val || '').trim();
+        if (!s || s.length < 64 || s.length > 2_000_000) return;
+        if (/[^A-Za-z0-9+/=_-]/.test(s)) return;
+        if (!candidates.includes(s)) candidates.push(s);
+    };
+
+    const addLinksFrom = (source, out, seen) => {
+        const links = extractLinksFromText(source);
+        for (const link of links) {
+            if (seen.has(link)) continue;
+            seen.add(link);
+            out.push(link);
+        }
+    };
+
+    const htmlText = String(html || '');
+    let m;
+    const reDataAttr = /data-[\w:-]+=["']([^"']{64,})["']/ig;
+    while ((m = reDataAttr.exec(htmlText)) !== null) addCandidate(m[1]);
+
+    const reAtob = /atob\((['"])([A-Za-z0-9+/=_-]{64,})\1\)/ig;
+    while ((m = reAtob.exec(htmlText)) !== null) addCandidate(m[2]);
+
+    const reQuotedB64 = /['"]([A-Za-z0-9+/=_-]{160,})['"]/g;
+    while ((m = reQuotedB64.exec(htmlText)) !== null) addCandidate(m[1]);
+
+    const out = [];
+    const seen = new Set();
+    for (const candidate of candidates) {
+        const decoded = decodeBase64Url(candidate) || '';
+        if (!decoded) continue;
+        addLinksFrom(decoded, out, seen);
+        const nested = normalizeSubscriptionBody(decoded);
+        if (nested && nested !== decoded) addLinksFrom(nested, out, seen);
+    }
+    return out;
+}
+
 function httpReason(status) {
     const map = {
         400: 'Bad Request',
@@ -118,6 +193,7 @@ async function fetchSubscription(url) {
 
     const allowedSchemes = new Set(SUPPORTED_SCHEMES.filter(s => s !== 'http' && s !== 'https'));
     const splitLines = (text) => (text || '').split(/\n/).map(s => s.trim()).filter(Boolean);
+    const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
     const isBrowser = (typeof window !== 'undefined') && (typeof window.document !== 'undefined');
 
     function hasRealSubscriptionLinks(text) {
@@ -131,19 +207,17 @@ async function fetchSubscription(url) {
 
     async function tryFetch(u) {
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), SUB_FETCH_TIMEOUT);
+        const timeoutId = setTimeout(() => controller.abort(), SUB_FETCH_TIMEOUT);
         try {
             const headers = new Headers((FETCH_INIT && FETCH_INIT.headers) ? FETCH_INIT.headers : {});
             if (!headers.has('Accept')) headers.set('Accept', 'text/plain, */*');
             if (!isBrowser) {
-                headers.set('User-Agent', 'web4core (subscription fetch)');
                 if (/github\.com|raw\.githubusercontent\.com/i.test(u)) {
                     headers.set('Referer', 'https://github.com/');
                 }
             }
 
             const resp = await fetch(u, Object.assign({}, FETCH_INIT, { headers, signal: controller.signal }));
-            clearTimeout(timeout);
             if (!resp.ok) {
                 const reason = resp.statusText || httpReason(resp.status) || '';
                 const label = 'HTTP ' + resp.status + (reason ? (' ' + reason) : '');
@@ -152,8 +226,9 @@ async function fetchSubscription(url) {
             const text = await resp.text();
             return {text};
         } catch (e) {
-            clearTimeout(timeout);
             return {error: e};
+        } finally {
+            clearTimeout(timeoutId);
         }
     }
 
@@ -173,6 +248,9 @@ async function fetchSubscription(url) {
         if (msg.includes('NetworkError') || msg.includes('Failed to fetch') || msg.includes('Network request failed')) {
             return 'Network error, check connection';
         }
+        if (msg.includes('Subscription returned no valid links')) {
+            return 'Subscription returned no valid links';
+        }
         return 'CORS error, using fallback proxy';
     }
 
@@ -183,35 +261,47 @@ async function fetchSubscription(url) {
             if (!text || typeof text !== 'string') return null;
             let probe = text;
 
-            if (isLikelyHtml(probe)) {
+            const resolveHtmlProbe = async () => {
+                if (!isLikelyHtml(probe)) return null;
                 const redir = parseMetaRefresh(probe);
                 if (redir) return await fetchWithFallback(redir, depth + 1);
-                const extracted = extractLinksFromHtml(probe);
-                if (extracted && extracted.length) return extracted.join('\n');
-            }
+                const extracted = filterSubscriptionLinks(extractLinksFromHtml(probe));
+                if (extracted.length) return extracted.join('\n');
+                const embedded = extractLinksFromEmbeddedPayload(probe);
+                if (embedded.length) return embedded.join('\n');
+                return null;
+            };
+
+            const htmlPass1 = await resolveHtmlProbe();
+            if (htmlPass1) return htmlPass1;
 
             const dec = normalizeSubscriptionBody(probe);
             if (dec) probe = dec;
 
-            if (isLikelyHtml(probe)) {
-                const redir2 = parseMetaRefresh(probe);
-                if (redir2) return await fetchWithFallback(redir2, depth + 1);
-                const extracted2 = extractLinksFromHtml(probe);
-                if (extracted2 && extracted2.length) return extracted2.join('\n');
-            }
+            const htmlPass2 = await resolveHtmlProbe();
+            if (htmlPass2) return htmlPass2;
 
             if (hasRealSubscriptionLinks(probe)) return probe;
 
-            return probe;
+            const extractedGeneric = extractLinksFromText(probe);
+            if (extractedGeneric.length) return extractedGeneric.join('\n');
+
+            const maybeUrl = splitLines(probe);
+            if (maybeUrl.length === 1 && isHttpUrl(maybeUrl[0])) return maybeUrl[0];
+
+            return null;
         };
 
-        const attempts = [];
-        const direct = isHttpUrl(u) ? await tryFetch(u) : {error: new Error('not-http')};
-        attempts.push(direct);
+        const consumeFetchResult = async (result) => {
+            if (result.error || typeof result.text !== 'string') return null;
+            return await handleResponse(result.text);
+        };
 
-        if (!direct.error && typeof direct.text === 'string') {
-            const res = await handleResponse(direct.text);
-            if (res) return res;
+        const direct = isHttpUrl(u) ? await tryFetch(u) : {error: new Error('not-http')};
+
+        const directResolved = await consumeFetchResult(direct);
+        if (directResolved) return directResolved;
+        if (!direct.error) {
             direct.error = new Error('Subscription returned no valid links');
         }
 
@@ -221,26 +311,20 @@ async function fetchSubscription(url) {
 
         if (direct.error) {
             if (/^HTTP\s+(403|429|5\d\d)/.test(String(direct.error.message || ''))) {
-                await new Promise(resolve => setTimeout(resolve, 350));
+                await sleep(350);
                 const retry = await tryFetch(u);
-                attempts.push(retry);
-                if (!retry.error) {
-                    const res = await handleResponse(retry.text);
-                    if (res) return res;
-                }
+                const retryResolved = await consumeFetchResult(retry);
+                if (retryResolved) return retryResolved;
             }
 
             for (const makeUrl of PUBLIC_CORS_FALLBACKS) {
-                const maxRetries = 1;
+                const maxRetries = Math.max(0, Number(SUB_FALLBACK_RETRIES || 0));
                 for (let retry = 0; retry <= maxRetries; retry++) {
                     const result = await tryFetch(makeUrl(u));
-                    attempts.push(result);
-                    if (!result.error) {
-                        const res = await handleResponse(result.text);
-                        if (res) return res;
-                    }
+                    const resolved = await consumeFetchResult(result);
+                    if (resolved) return resolved;
                     if (result.error && retry < maxRetries) {
-                        await new Promise(resolve => setTimeout(resolve, 500));
+                        await sleep(500);
                     }
                 }
             }

@@ -419,6 +419,9 @@ function buildSingBoxWireGuardEndpoint(bean) {
 
 function buildSingBoxConfig(outboundsWithTags, opts) {
     const effectiveOpts = Object.assign({}, opts || {});
+    const effectiveUrlTest = (typeof effectiveOpts.urlTest === 'string' && effectiveOpts.urlTest.trim())
+        ? effectiveOpts.urlTest.trim()
+        : URLTEST;
     const endpointTags = (effectiveOpts && Array.isArray(effectiveOpts.endpoints))
         ? effectiveOpts.endpoints.map(e => e?.tag).filter(Boolean)
         : [];
@@ -456,7 +459,7 @@ function buildSingBoxConfig(outboundsWithTags, opts) {
                 type: 'urltest',
                 tag: 'auto',
                 outbounds: tags,
-                url: URLTEST,
+                url: effectiveUrlTest,
                 interval: URLTEST_INTERVAL,
                 tolerance: 50,
                 idle_timeout: '30m',
@@ -507,7 +510,7 @@ function buildSingBoxConfig(outboundsWithTags, opts) {
                     type: 'urltest',
                     tag: `auto-${name}`,
                     outbounds: tags,
-                    url: URLTEST,
+                    url: effectiveUrlTest,
                     interval: URLTEST_INTERVAL,
                     tolerance: 50,
                     idle_timeout: '30m',

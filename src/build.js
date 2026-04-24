@@ -1,4 +1,4 @@
-import { buildBeansFromInput, computeTag, getAllowedCoreProtocols, validateBean } from './main.js';
+import { buildBeansFromInput, computeTag, getAllowedCoreProtocols, resolveUrlTest, validateBean } from './main.js';
 import { buildSingBoxConfig, buildSingBoxOutbound, buildSingBoxWireGuardEndpoint } from './core/singbox.js';
 import { buildXrayConfig, buildXrayOutbound } from './core/xray.js';
 import { buildMihomoConfig, buildMihomoSubscriptionConfig } from './core/mihomo.js';
@@ -50,6 +50,7 @@ export function buildFromRequest(req) {
   const optionsIn = (req && typeof req.options === 'object' && req.options) ? req.options : {};
   const options = Object.assign({}, optionsIn);
   const wgBeans = Array.isArray(req?.wgBeans) ? req.wgBeans : [];
+  options.urlTest = resolveUrlTest(options.urlTest);
 
   if (!core) throw new Error('Missing core');
   if (core !== 'singbox' && core !== 'xray' && core !== 'mihomo') throw new Error('Invalid core: ' + core);
@@ -116,6 +117,7 @@ export function buildFromRequest(req) {
       androidMode: !!options.androidMode,
       dnsBeans,
       endpoints,
+      urlTest: options.urlTest,
     });
 
     return { kind: 'json', data: cfg };
@@ -129,7 +131,7 @@ export function buildFromRequest(req) {
       throw new Error('Xray: enable at least one inbound (TUN or SOCKS5)');
     }
     if (allBeans.length === 1) {
-      cfg = buildXrayConfig(buildXrayOutbound(allBeans[0]), { addTun, addSocks });
+      cfg = buildXrayConfig(buildXrayOutbound(allBeans[0]), { addTun, addSocks, urlTest: options.urlTest });
     } else {
       const used = new Set();
       const outbounds = allBeans.map((b) => {
@@ -137,7 +139,7 @@ export function buildFromRequest(req) {
         ob.tag = computeTag(b, used);
         return ob;
       });
-      cfg = buildXrayConfig(outbounds, { enableBalancer: !!options.enableBalancer, addTun, addSocks });
+      cfg = buildXrayConfig(outbounds, { enableBalancer: !!options.enableBalancer, addTun, addSocks, urlTest: options.urlTest });
     }
     return { kind: 'json', data: cfg };
   }
@@ -165,7 +167,7 @@ export function buildFromRequest(req) {
     extraBeans.forEach(validateBean);
     assertCoreSupports(extraBeans, core, 'Mihomo', options);
 
-    const cfg = buildMihomoSubscriptionConfig(subUrls, extraBeans, {addSocks, perProxyPort, perProxyListeners});
+    const cfg = buildMihomoSubscriptionConfig(subUrls, extraBeans, {addSocks, perProxyPort, perProxyListeners, urlTest: options.urlTest});
     const yaml = buildMihomoYaml(cfg.proxies, cfg.groups, cfg.providers, cfg.rules, cfg.listeners, {
       addSocks,
       webUI,
@@ -175,7 +177,7 @@ export function buildFromRequest(req) {
   }
 
   const outBeans = allBeans.filter((b) => b.proto !== 'sdns');
-  const cfg = buildMihomoConfig(outBeans, {addSocks, perProxyPort, perProxyListeners});
+  const cfg = buildMihomoConfig(outBeans, {addSocks, perProxyPort, perProxyListeners, urlTest: options.urlTest});
   const yaml = buildMihomoYaml(cfg.proxies, cfg['proxy-groups'], null, cfg.rules, cfg.listeners, {
     addSocks,
     webUI,
