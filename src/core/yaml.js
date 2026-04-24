@@ -116,7 +116,6 @@ function overlayMihomoYaml(baseYamlText, proxies, groups, providers, rules, list
 
 const MIHOMO_DEFAULT_TEMPLATE = [
     'mixed-port: 7890',
-    'global-ua: clash.meta.router',
     'allow-lan: false',
     'tcp-concurrent: true',
     'mode: rule',
