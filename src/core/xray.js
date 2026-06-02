@@ -21,6 +21,47 @@ function buildXrayOutbound(bean) {
         }
         if (Object.keys(out).length) streamSettingsTarget.finalmask = out;
     };
+    const put = (obj, key, value, check) => {
+        const ok = check || ((v) => v !== '' && v !== undefined && v !== null);
+        if (ok(value)) obj[key] = value;
+    };
+    const buildXmuxSettings = (xmux) => {
+        if (!xmux || typeof xmux !== 'object') return null;
+        const out = {};
+        put(out, 'maxConcurrency', xmux.max_concurrency);
+        put(out, 'maxConnections', xmux.max_connections);
+        put(out, 'cMaxReuseTimes', xmux.c_max_reuse_times);
+        put(out, 'hMaxRequestTimes', xmux.h_max_request_times);
+        put(out, 'hMaxReusableSecs', xmux.h_max_reusable_secs);
+        put(out, 'hKeepAlivePeriod', xmux.h_keep_alive_period, (v) => Number.isFinite(v) && v > 0);
+        return Object.keys(out).length ? out : null;
+    };
+    const applyXhttpExtrasFromStream = (xhttpSettings, source) => {
+        if (!xhttpSettings || !source || typeof source !== 'object') return;
+        put(xhttpSettings, 'xPaddingBytes', source.xhttpXPaddingBytes);
+        if (source.xhttpNoGrpcHeader === true) xhttpSettings.noGRPCHeader = true;
+        if (typeof source.xhttpXPaddingObfsMode === 'boolean') xhttpSettings.xPaddingObfsMode = source.xhttpXPaddingObfsMode;
+        [
+            ['xPaddingKey', 'xhttpXPaddingKey'],
+            ['xPaddingHeader', 'xhttpXPaddingHeader'],
+            ['xPaddingPlacement', 'xhttpXPaddingPlacement'],
+            ['xPaddingMethod', 'xhttpXPaddingMethod'],
+            ['uplinkHTTPMethod', 'xhttpUplinkHttpMethod'],
+            ['sessionPlacement', 'xhttpSessionPlacement'],
+            ['sessionKey', 'xhttpSessionKey'],
+            ['seqPlacement', 'xhttpSeqPlacement'],
+            ['seqKey', 'xhttpSeqKey'],
+            ['uplinkDataPlacement', 'xhttpUplinkDataPlacement'],
+            ['uplinkDataKey', 'xhttpUplinkDataKey'],
+            ['scMaxEachPostBytes', 'xhttpScMaxEachPostBytes'],
+            ['scMinPostsIntervalMs', 'xhttpScMinPostsIntervalMs']
+        ].forEach(([dst, src]) => put(xhttpSettings, dst, source[src]));
+        if (source.xhttpNoSseHeader === true) xhttpSettings.noSSEHeader = true;
+        put(xhttpSettings, 'scMaxBufferedPosts', source.xhttpScMaxBufferedPosts, (v) => Number.isFinite(v) && v > 0);
+        put(xhttpSettings, 'scStreamUpServerSecs', source.xhttpScStreamUpServerSecs);
+        put(xhttpSettings, 'serverMaxHeaderBytes', source.xhttpServerMaxHeaderBytes, (v) => Number.isFinite(v) && v > 0);
+        put(xhttpSettings, 'uplinkChunkSize', source.xhttpUplinkChunkSize, (v) => Number.isFinite(v) && v > 0);
+    };
     const buildDownloadSettings = (download, security, tlsSettings, realitySettings) => {
         if (!download || typeof download !== 'object') return null;
         const dx = download.xmux || {};
@@ -28,17 +69,22 @@ function buildXrayOutbound(bean) {
             download.host ||
             download.path ||
             download.mode ||
+            download.headers ||
             download.x_padding_bytes ||
+            download.no_sse_header ||
             download.sc_max_each_post_bytes ||
             download.sc_min_posts_interval_ms ||
             download.sc_stream_up_server_secs ||
+            download.sc_max_buffered_posts ||
+            download.server_max_header_bytes ||
             download.server ||
             download.server_port ||
             dx.max_concurrency ||
             dx.max_connections ||
             dx.c_max_reuse_times ||
             dx.h_max_request_times ||
-            dx.h_max_reusable_secs
+            dx.h_max_reusable_secs ||
+            dx.h_keep_alive_period
         );
         if (!hasExplicitDownload) return null;
         const address = download.server || bean.host;
@@ -48,10 +94,20 @@ function buildXrayOutbound(bean) {
         if (download.host) xhttpSettings.host = download.host;
         if (download.path) xhttpSettings.path = download.path;
         if (download.mode) xhttpSettings.mode = download.mode;
+        if (download.headers && typeof download.headers === 'object' && Object.keys(download.headers).length) {
+            xhttpSettings.headers = download.headers;
+        }
         if (download.x_padding_bytes) xhttpSettings.xPaddingBytes = download.x_padding_bytes;
+        if (download.no_sse_header === true || download.no_sse_header === 'true' || download.no_sse_header === '1') {
+            xhttpSettings.noSSEHeader = true;
+        }
         if (download.sc_max_each_post_bytes) xhttpSettings.scMaxEachPostBytes = download.sc_max_each_post_bytes;
         if (download.sc_min_posts_interval_ms) xhttpSettings.scMinPostsIntervalMs = download.sc_min_posts_interval_ms;
         if (download.sc_stream_up_server_secs) xhttpSettings.scStreamUpServerSecs = download.sc_stream_up_server_secs;
+        if (download.sc_max_buffered_posts) xhttpSettings.scMaxBufferedPosts = download.sc_max_buffered_posts;
+        if (download.server_max_header_bytes) xhttpSettings.serverMaxHeaderBytes = download.server_max_header_bytes;
+        const downloadXmux = buildXmuxSettings(dx);
+        if (downloadXmux) xhttpSettings.xmux = downloadXmux;
         const config = {
             address,
             port,
@@ -151,18 +207,10 @@ function buildXrayOutbound(bean) {
             streamSettings.xhttpSettings = {};
             if (s.host) streamSettings.xhttpSettings.host = s.host;
             if (s.path) streamSettings.xhttpSettings.path = s.path;
-            if (s.xhttpMode) streamSettings.xhttpSettings.mode = s.xhttpMode; else streamSettings.xhttpSettings.mode = 'stream-up';
-            const xmux = s.xhttpXmux || {};
-            const hasXmux = Object.values(xmux).some(v => v !== '' && v !== 0);
-            if (hasXmux) {
-                streamSettings.xhttpSettings.xmux = {};
-                if (xmux.max_concurrency) streamSettings.xhttpSettings.xmux.maxConcurrency = xmux.max_concurrency;
-                if (xmux.max_connections) streamSettings.xhttpSettings.xmux.maxConnections = xmux.max_connections;
-                if (xmux.c_max_reuse_times) streamSettings.xhttpSettings.xmux.cMaxReuseTimes = xmux.c_max_reuse_times;
-                if (xmux.h_max_request_times) streamSettings.xhttpSettings.xmux.hMaxRequestTimes = xmux.h_max_request_times;
-                if (xmux.h_max_reusable_secs) streamSettings.xhttpSettings.xmux.hMaxReusableSecs = xmux.h_max_reusable_secs;
-                if (xmux.h_keep_alive_period) streamSettings.xhttpSettings.xmux.hKeepAlivePeriod = xmux.h_keep_alive_period;
-            }
+            if (s.xhttpMode) streamSettings.xhttpSettings.mode = s.xhttpMode; else streamSettings.xhttpSettings.mode = 'auto';
+            applyXhttpExtrasFromStream(streamSettings.xhttpSettings, s);
+            const xmuxSettings = buildXmuxSettings(s.xhttpXmux || {});
+            if (xmuxSettings) streamSettings.xhttpSettings.xmux = xmuxSettings;
             const downloadSettings = buildDownloadSettings(s.xhttpDownload, sec, streamSettings.tlsSettings, streamSettings.realitySettings);
             if (downloadSettings) streamSettings.xhttpSettings.downloadSettings = downloadSettings;
         } else if (streamSettings.network === 'grpc') {

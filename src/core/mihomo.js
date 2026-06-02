@@ -101,6 +101,12 @@ function buildMihomoProxy(bean) {
             }
         }
     };
+    const applyPacketEncoding = (obj) => {
+        const packetEncoding = String(s.packet_encoding || '').trim().toLowerCase();
+        if (packetEncoding === 'none') return;
+        if (packetEncoding === 'packet') obj['packet-addr'] = true;
+        else obj.xudp = true;
+    };
     const applyNetwork = (obj) => {
         if (s.network === 'ws') {
             obj.network = 'ws';
@@ -145,8 +151,26 @@ function buildMihomoProxy(bean) {
             if (s.path) obj['xhttp-opts'].path = s.path;
             if (s.host) obj['xhttp-opts'].host = s.host;
             if (s.xhttpMode) obj['xhttp-opts'].mode = s.xhttpMode;
-            else obj['xhttp-opts'].mode = 'stream-up';
-            obj['xhttp-opts']['x-padding-bytes'] = '100-1000';
+            else obj['xhttp-opts'].mode = 'auto';
+            obj['xhttp-opts']['x-padding-bytes'] = s.xhttpXPaddingBytes || '100-1000';
+
+            if (s.xhttpNoGrpcHeader === true) obj['xhttp-opts']['no-grpc-header'] = true;
+            if (s.xhttpNoSseHeader === true) obj['xhttp-opts']['no-sse-header'] = true;
+            if (typeof s.xhttpXPaddingObfsMode === 'boolean') obj['xhttp-opts']['x-padding-obfs-mode'] = s.xhttpXPaddingObfsMode;
+            if (s.xhttpXPaddingKey) obj['xhttp-opts']['x-padding-key'] = s.xhttpXPaddingKey;
+            if (s.xhttpXPaddingHeader) obj['xhttp-opts']['x-padding-header'] = s.xhttpXPaddingHeader;
+            if (s.xhttpXPaddingPlacement) obj['xhttp-opts']['x-padding-placement'] = s.xhttpXPaddingPlacement;
+            if (s.xhttpXPaddingMethod) obj['xhttp-opts']['x-padding-method'] = s.xhttpXPaddingMethod;
+            if (s.xhttpUplinkHttpMethod) obj['xhttp-opts']['uplink-http-method'] = s.xhttpUplinkHttpMethod;
+            if (s.xhttpSessionPlacement) obj['xhttp-opts']['session-placement'] = s.xhttpSessionPlacement;
+            if (s.xhttpSessionKey) obj['xhttp-opts']['session-key'] = s.xhttpSessionKey;
+            if (s.xhttpSeqPlacement) obj['xhttp-opts']['seq-placement'] = s.xhttpSeqPlacement;
+            if (s.xhttpSeqKey) obj['xhttp-opts']['seq-key'] = s.xhttpSeqKey;
+            if (s.xhttpUplinkDataPlacement) obj['xhttp-opts']['uplink-data-placement'] = s.xhttpUplinkDataPlacement;
+            if (s.xhttpUplinkDataKey) obj['xhttp-opts']['uplink-data-key'] = s.xhttpUplinkDataKey;
+            if (Number.isFinite(s.xhttpUplinkChunkSize) && s.xhttpUplinkChunkSize > 0) {
+                obj['xhttp-opts']['uplink-chunk-size'] = s.xhttpUplinkChunkSize;
+            }
 
             if (s.xhttpScMaxEachPostBytes !== '' && s.xhttpScMaxEachPostBytes !== undefined) {
                 obj['xhttp-opts']['sc-max-each-post-bytes'] = s.xhttpScMaxEachPostBytes;
@@ -156,6 +180,12 @@ function buildMihomoProxy(bean) {
             }
             if (s.xhttpScMinPostsIntervalMs !== '' && s.xhttpScMinPostsIntervalMs !== undefined) {
                 obj['xhttp-opts']['sc-min-posts-interval-ms'] = s.xhttpScMinPostsIntervalMs;
+            }
+            if (s.xhttpScStreamUpServerSecs !== '' && s.xhttpScStreamUpServerSecs !== undefined) {
+                obj['xhttp-opts']['sc-stream-up-server-secs'] = s.xhttpScStreamUpServerSecs;
+            }
+            if (Number.isFinite(s.xhttpServerMaxHeaderBytes) && s.xhttpServerMaxHeaderBytes > 0) {
+                obj['xhttp-opts']['server-max-header-bytes'] = s.xhttpServerMaxHeaderBytes;
             }
 
             const xmux = s.xhttpXmux || {};
@@ -171,20 +201,80 @@ function buildMihomoProxy(bean) {
             }
 
             const download = s.xhttpDownload || {};
-            const hasDownload = Object.values(download).some(v => v !== '' && v !== 0);
+            const hasDownload = [
+                download.mode,
+                download.host,
+                download.path,
+                download.x_padding_bytes,
+                download.sc_max_each_post_bytes,
+                download.sc_min_posts_interval_ms,
+                download.sc_stream_up_server_secs,
+                download.sc_max_buffered_posts,
+                download.server_max_header_bytes,
+                download.no_sse_header,
+                download.server,
+                download.server_port,
+                download.security,
+                download.servername,
+                download.client_fingerprint,
+                download.alpn,
+                download.skip_cert_verify,
+                download.detour,
+                download.headers
+            ].some((v) => {
+                if (!v) return false;
+                if (typeof v === 'object') return Object.keys(v).length > 0;
+                return true;
+            }) || Object.values(download.xmux || {}).some(v => v !== '' && v !== 0) ||
+                (download.reality && typeof download.reality === 'object' &&
+                    Object.values(download.reality).some((v) => String(v || '').trim() !== ''));
             if (hasDownload) {
                 obj['xhttp-opts']['download-settings'] = {};
+                if (download.mode) obj['xhttp-opts']['download-settings'].mode = download.mode;
                 if (download.host) obj['xhttp-opts']['download-settings'].host = download.host;
                 if (download.path) obj['xhttp-opts']['download-settings'].path = download.path;
+                if (download.headers && typeof download.headers === 'object' && Object.keys(download.headers).length) {
+                    obj['xhttp-opts']['download-settings'].headers = download.headers;
+                }
                 if (download.x_padding_bytes) obj['xhttp-opts']['download-settings']['x-padding-bytes'] = download.x_padding_bytes;
+                if (download.no_sse_header === true || download.no_sse_header === 'true' || download.no_sse_header === '1') {
+                    obj['xhttp-opts']['download-settings']['no-sse-header'] = true;
+                }
                 if (download.sc_max_each_post_bytes) {
                     obj['xhttp-opts']['download-settings']['sc-max-each-post-bytes'] = download.sc_max_each_post_bytes;
                 }
                 if (download.sc_min_posts_interval_ms) {
                     obj['xhttp-opts']['download-settings']['sc-min-posts-interval-ms'] = download.sc_min_posts_interval_ms;
                 }
+                if (download.sc_stream_up_server_secs) {
+                    obj['xhttp-opts']['download-settings']['sc-stream-up-server-secs'] = download.sc_stream_up_server_secs;
+                }
+                if (download.sc_max_buffered_posts) {
+                    obj['xhttp-opts']['download-settings']['sc-max-buffered-posts'] = download.sc_max_buffered_posts;
+                }
+                if (download.server_max_header_bytes) {
+                    obj['xhttp-opts']['download-settings']['server-max-header-bytes'] = download.server_max_header_bytes;
+                }
                 if (download.server) obj['xhttp-opts']['download-settings'].server = download.server;
                 if (download.server_port) obj['xhttp-opts']['download-settings'].port = download.server_port;
+
+                const downloadSecurity = String(download.security || '').toLowerCase();
+                if (downloadSecurity === 'tls' || downloadSecurity === 'reality') {
+                    obj['xhttp-opts']['download-settings'].tls = true;
+                    if (download.servername) obj['xhttp-opts']['download-settings'].servername = download.servername;
+                    if (download.client_fingerprint) obj['xhttp-opts']['download-settings']['client-fingerprint'] = download.client_fingerprint;
+                    if (Array.isArray(download.alpn) && download.alpn.length) obj['xhttp-opts']['download-settings'].alpn = download.alpn;
+                    if (download.skip_cert_verify === true) obj['xhttp-opts']['download-settings']['skip-cert-verify'] = true;
+                    if (downloadSecurity === 'reality') {
+                        const realitySource = download.reality || {};
+                        const publicKey = realitySource.pbk || realitySource.public_key || '';
+                        const shortID = realitySource.sid || realitySource.short_id || '';
+                        const realityOpts = {};
+                        if (publicKey) realityOpts['public-key'] = publicKey;
+                        if (shortID) realityOpts['short-id'] = shortID;
+                        if (Object.keys(realityOpts).length) obj['xhttp-opts']['download-settings']['reality-opts'] = realityOpts;
+                    }
+                }
 
                 const dx = download.xmux || {};
                 const downloadReuseSettings = {};
@@ -197,6 +287,15 @@ function buildMihomoProxy(bean) {
                 if (Object.keys(downloadReuseSettings).length) {
                     obj['xhttp-opts']['download-settings']['reuse-settings'] = downloadReuseSettings;
                 }
+            }
+        } else if (s.network === 'httpupgrade') {
+            obj.network = 'httpupgrade';
+            obj['ws-opts'] = {};
+            if (s.path) obj['ws-opts'].path = s.path;
+            if (s.host) obj['ws-opts'].headers = { Host: s.host };
+            if (s.wsEarlyData && s.wsEarlyData.max_early_data) {
+                obj['ws-opts']['v2ray-http-upgrade-fast-open'] = true;
+                if (s.wsEarlyData.early_data_header_name) obj['ws-opts']['early-data-header-name'] = s.wsEarlyData.early_data_header_name;
             }
         } else if (s.network === 'tcp' && s.headerType === 'http') {
             obj.network = 'tcp';
@@ -218,6 +317,7 @@ function buildMihomoProxy(bean) {
         const p = { ...base, type: 'vmess', uuid: bean.auth.uuid, cipher: bean.auth.security || 'auto', alterId: 0 };
         applyTls(p);
         applyNetwork(p);
+        applyPacketEncoding(p);
         applyCommon(p);
         return p;
     }
@@ -229,6 +329,7 @@ function buildMihomoProxy(bean) {
         }
         applyTls(p);
         applyNetwork(p);
+        applyPacketEncoding(p);
         applyCommon(p);
         return p;
     }
