@@ -1287,6 +1287,34 @@ function buildStreamFromQuery(q, isTrojan) {
         const n = asInt(t, 0);
         return n > 0 ? n : '';
     };
+    const toObject = (raw) => {
+        if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+        return raw;
+    };
+    const toIntValue = (raw) => {
+        const n = asInt(String(raw ?? '').trim(), 0);
+        return n > 0 ? n : 0;
+    };
+    const toStringValue = (raw) => {
+        if (raw === undefined || raw === null) return '';
+        return String(raw).trim();
+    };
+    const mergeXmuxSettings = (target, source, prefix = '') => {
+        const xmux = toObject(source);
+        if (!xmux) return;
+        const setInt = (srcKey, dstKey) => {
+            const n = toIntValue(xmux[srcKey]);
+            if (n > 0 && (target[dstKey] === '' || target[dstKey] === 0 || target[dstKey] === undefined || target[dstKey] === null)) {
+                target[dstKey] = n;
+            }
+        };
+        setInt(prefix + 'maxConnections', 'max_connections');
+        setInt(prefix + 'maxConcurrency', 'max_concurrency');
+        setInt(prefix + 'cMaxReuseTimes', 'c_max_reuse_times');
+        setInt(prefix + 'hMaxRequestTimes', 'h_max_request_times');
+        setInt(prefix + 'hMaxReusableSecs', 'h_max_reusable_secs');
+        setInt(prefix + 'hKeepAlivePeriod', 'h_keep_alive_period');
+    };
     let type = (q.get('type') || 'tcp').toLowerCase();
     const mode = (q.get('mode') || '').toLowerCase();
     if (mode === 'gun') type = 'grpc';
@@ -1308,6 +1336,7 @@ function buildStreamFromQuery(q, isTrojan) {
     const verifyPeerCertByName = (q.get('verifyPeerCertByName') || q.get('verify-peer-cert-by-name') || '').trim();
     const {certificatePublicKeySha256, ech} = parseTlsQueryExtras(q);
     const fp = q.get('fp') || '';
+    const packetEncoding = (q.get('packetEncoding') || q.get('packet_encoding') || '').trim();
     const reality = {
         pbk: q.get('pbk') || '',
         sid: (q.get('sid') || '').split(',')[0] || '',
@@ -1335,7 +1364,7 @@ function buildStreamFromQuery(q, isTrojan) {
         headerType: '',
         host: '',
         path: '',
-        packet_encoding: '',
+        packet_encoding: packetEncoding,
         xhttpMode: '',
         xhttpXmux: {},
         xhttpDownload: {}
@@ -1354,6 +1383,7 @@ function buildStreamFromQuery(q, isTrojan) {
         stream.path = q.get('path') || '';
         stream.host = q.get('host') || '';
         stream.xhttpMode = q.get('xmode') || q.get('mode') || '';
+        stream.xhttpXPaddingBytes = q.get('x_padding_bytes') || q.get('x-padding-bytes') || '';
         stream.xhttpXmux = {
             max_concurrency: q.get('xmux_max_concurrency') || q.get('reuse_max_concurrency') || '',
             max_connections: q.get('xmux_max_connections') || q.get('reuse_max_connections') || '',
@@ -1365,6 +1395,9 @@ function buildStreamFromQuery(q, isTrojan) {
         stream.xhttpScMaxEachPostBytes = parseIntOrRange(q.get('sc-max-each-post-bytes') || q.get('sc_max_each_post_bytes'));
         stream.xhttpScMaxBufferedPosts = asInt(q.get('sc-max-buffered-posts') || q.get('sc_max_buffered_posts'), 0);
         stream.xhttpScMinPostsIntervalMs = parseIntOrRange(q.get('sc-min-posts-interval-ms') || q.get('sc_min_posts_interval_ms'));
+        stream.xhttpScStreamUpServerSecs = parseIntOrRange(q.get('sc-stream-up-server-secs') || q.get('sc_stream_up_server_secs'));
+        stream.xhttpNoSseHeader = (q.get('no_sse_header') || '').toLowerCase() === 'true' || q.get('no_sse_header') === '1';
+        stream.xhttpServerMaxHeaderBytes = asInt(q.get('server_max_header_bytes') || q.get('server-max-header-bytes'), 0);
         stream.xhttpDownload = {
             mode: q.get('download_mode') || '',
             host: q.get('download_host') || '',
@@ -1373,25 +1406,167 @@ function buildStreamFromQuery(q, isTrojan) {
             sc_max_each_post_bytes: q.get('download_sc_max_each_post_bytes') || '',
             sc_min_posts_interval_ms: q.get('download_sc_min_posts_interval_ms') || '',
             sc_stream_up_server_secs: q.get('download_sc_stream_up_server_secs') || '',
+            sc_max_buffered_posts: asInt(q.get('download_sc_max_buffered_posts'), 0),
+            server_max_header_bytes: asInt(q.get('download_server_max_header_bytes'), 0),
             no_sse_header: q.get('download_no_sse_header') || '',
             server: q.get('download_server') || '',
             server_port: asInt(q.get('download_server_port'), 0),
+            security: (q.get('download_security') || '').toLowerCase(),
+            servername: q.get('download_servername') || q.get('download_sni') || '',
+            client_fingerprint: q.get('download_client_fingerprint') || q.get('download_fp') || '',
+            skip_cert_verify: (q.get('download_skip_cert_verify') || '').toLowerCase() === 'true' || q.get('download_skip_cert_verify') === '1',
+            alpn: splitCSV(q.get('download_alpn') || ''),
+            reality: {
+                public_key: q.get('download_pbk') || '',
+                short_id: (q.get('download_sid') || '').split(',')[0] || ''
+            },
             detour: q.get('download_detour') || '',
             xmux: {
                 max_concurrency: q.get('download_xmux_max_concurrency') || q.get('download_reuse_max_concurrency') || '',
                 max_connections: q.get('download_xmux_max_connections') || q.get('download_reuse_max_connections') || '',
                 c_max_reuse_times: q.get('download_xmux_c_max_reuse_times') || q.get('download_reuse_c_max_reuse_times') || '',
                 h_max_request_times: q.get('download_xmux_h_max_request_times') || q.get('download_reuse_h_max_request_times') || '',
-                h_max_reusable_secs: q.get('download_xmux_h_max_reusable_secs') || q.get('download_reuse_h_max_reusable_secs') || ''
+                h_max_reusable_secs: q.get('download_xmux_h_max_reusable_secs') || q.get('download_reuse_h_max_reusable_secs') || '',
+                h_keep_alive_period: asInt(q.get('download_xmux_h_keep_alive_period') || q.get('download_reuse_h_keep_alive_period'), 0)
             }
         };
+
+        const xhttpExtra = toObject(tryJSON(q.get('extra') || ''));
+        if (xhttpExtra) {
+            if (!stream.xhttpXPaddingBytes) {
+                const xPaddingBytes = toStringValue(xhttpExtra.xPaddingBytes);
+                if (xPaddingBytes) stream.xhttpXPaddingBytes = xPaddingBytes;
+            }
+            if (xhttpExtra.noGRPCHeader === true) stream.xhttpNoGrpcHeader = true;
+            if (typeof xhttpExtra.xPaddingObfsMode === 'boolean') stream.xhttpXPaddingObfsMode = xhttpExtra.xPaddingObfsMode;
+
+            const xPaddingKey = toStringValue(xhttpExtra.xPaddingKey);
+            if (xPaddingKey) stream.xhttpXPaddingKey = xPaddingKey;
+            const xPaddingHeader = toStringValue(xhttpExtra.xPaddingHeader);
+            if (xPaddingHeader) stream.xhttpXPaddingHeader = xPaddingHeader;
+            const xPaddingPlacement = toStringValue(xhttpExtra.xPaddingPlacement);
+            if (xPaddingPlacement) stream.xhttpXPaddingPlacement = xPaddingPlacement;
+            const xPaddingMethod = toStringValue(xhttpExtra.xPaddingMethod);
+            if (xPaddingMethod) stream.xhttpXPaddingMethod = xPaddingMethod;
+            const uplinkHttpMethod = toStringValue(xhttpExtra.uplinkHttpMethod);
+            if (uplinkHttpMethod) stream.xhttpUplinkHttpMethod = uplinkHttpMethod;
+            const sessionPlacement = toStringValue(xhttpExtra.sessionPlacement);
+            if (sessionPlacement) stream.xhttpSessionPlacement = sessionPlacement;
+            const sessionKey = toStringValue(xhttpExtra.sessionKey);
+            if (sessionKey) stream.xhttpSessionKey = sessionKey;
+            const seqPlacement = toStringValue(xhttpExtra.seqPlacement);
+            if (seqPlacement) stream.xhttpSeqPlacement = seqPlacement;
+            const seqKey = toStringValue(xhttpExtra.seqKey);
+            if (seqKey) stream.xhttpSeqKey = seqKey;
+            const uplinkDataPlacement = toStringValue(xhttpExtra.uplinkDataPlacement);
+            if (uplinkDataPlacement) stream.xhttpUplinkDataPlacement = uplinkDataPlacement;
+            const uplinkDataKey = toStringValue(xhttpExtra.uplinkDataKey);
+            if (uplinkDataKey) stream.xhttpUplinkDataKey = uplinkDataKey;
+            const uplinkChunkSize = toIntValue(xhttpExtra.uplinkChunkSize);
+            if (uplinkChunkSize > 0) stream.xhttpUplinkChunkSize = uplinkChunkSize;
+
+            if (!stream.xhttpScMaxEachPostBytes) {
+                const scMaxEachPostBytes = parseIntOrRange(xhttpExtra.scMaxEachPostBytes);
+                if (scMaxEachPostBytes !== '') stream.xhttpScMaxEachPostBytes = scMaxEachPostBytes;
+            }
+            if (!stream.xhttpScMinPostsIntervalMs) {
+                const scMinPostsIntervalMs = parseIntOrRange(xhttpExtra.scMinPostsIntervalMs);
+                if (scMinPostsIntervalMs !== '') stream.xhttpScMinPostsIntervalMs = scMinPostsIntervalMs;
+            }
+            if (!stream.xhttpScStreamUpServerSecs) {
+                const scStreamUpServerSecs = parseIntOrRange(xhttpExtra.scStreamUpServerSecs);
+                if (scStreamUpServerSecs !== '') stream.xhttpScStreamUpServerSecs = scStreamUpServerSecs;
+            }
+            if (!stream.xhttpScMaxBufferedPosts) {
+                const scMaxBufferedPosts = toIntValue(xhttpExtra.scMaxBufferedPosts);
+                if (scMaxBufferedPosts > 0) stream.xhttpScMaxBufferedPosts = scMaxBufferedPosts;
+            }
+            if (!stream.xhttpServerMaxHeaderBytes) {
+                const serverMaxHeaderBytes = toIntValue(xhttpExtra.serverMaxHeaderBytes);
+                if (serverMaxHeaderBytes > 0) stream.xhttpServerMaxHeaderBytes = serverMaxHeaderBytes;
+            }
+            if (typeof xhttpExtra.noSSEHeader === 'boolean') stream.xhttpNoSseHeader = xhttpExtra.noSSEHeader;
+
+            mergeXmuxSettings(stream.xhttpXmux, xhttpExtra.xmux);
+
+            const downloadSettings = toObject(xhttpExtra.downloadSettings);
+            if (downloadSettings) {
+                const downloadAddress = toStringValue(downloadSettings.address);
+                if (downloadAddress && !stream.xhttpDownload.server) stream.xhttpDownload.server = downloadAddress;
+                const downloadPort = toIntValue(downloadSettings.port);
+                if (downloadPort > 0 && !stream.xhttpDownload.server_port) stream.xhttpDownload.server_port = downloadPort;
+                const downloadSecurity = toStringValue(downloadSettings.security).toLowerCase();
+                if (downloadSecurity && !stream.xhttpDownload.security) stream.xhttpDownload.security = downloadSecurity;
+
+                const tlsSettings = toObject(downloadSettings.tlsSettings);
+                if (tlsSettings) {
+                    const downloadServerName = toStringValue(tlsSettings.serverName);
+                    if (downloadServerName && !stream.xhttpDownload.servername) stream.xhttpDownload.servername = downloadServerName;
+                    const downloadFingerprint = toStringValue(tlsSettings.fingerprint);
+                    if (downloadFingerprint && !stream.xhttpDownload.client_fingerprint) stream.xhttpDownload.client_fingerprint = downloadFingerprint;
+                    if (tlsSettings.allowInsecure === true) stream.xhttpDownload.skip_cert_verify = true;
+                    if ((!stream.xhttpDownload.alpn || !stream.xhttpDownload.alpn.length) && Array.isArray(tlsSettings.alpn)) {
+                        stream.xhttpDownload.alpn = tlsSettings.alpn.filter(v => typeof v === 'string' && v.trim());
+                    }
+                }
+
+                const realitySettings = toObject(downloadSettings.realitySettings);
+                if (realitySettings) {
+                    const downloadRealityPublicKey = toStringValue(realitySettings.publicKey);
+                    if (downloadRealityPublicKey) stream.xhttpDownload.reality.public_key = downloadRealityPublicKey;
+                    const downloadRealityShortID = toStringValue(realitySettings.shortId);
+                    if (downloadRealityShortID) stream.xhttpDownload.reality.short_id = downloadRealityShortID;
+                }
+
+                const xhttpSettings = toObject(downloadSettings.xhttpSettings);
+                if (xhttpSettings) {
+                    const downloadHost = toStringValue(xhttpSettings.host);
+                    if (downloadHost && !stream.xhttpDownload.host) stream.xhttpDownload.host = downloadHost;
+                    const downloadPath = toStringValue(xhttpSettings.path);
+                    if (downloadPath && !stream.xhttpDownload.path) stream.xhttpDownload.path = downloadPath;
+                    const downloadMode = toStringValue(xhttpSettings.mode);
+                    if (downloadMode && !stream.xhttpDownload.mode) stream.xhttpDownload.mode = downloadMode;
+                    const downloadXPaddingBytes = toStringValue(xhttpSettings.xPaddingBytes);
+                    if (downloadXPaddingBytes && !stream.xhttpDownload.x_padding_bytes) stream.xhttpDownload.x_padding_bytes = downloadXPaddingBytes;
+                    const downloadScMaxEachPostBytes = parseIntOrRange(xhttpSettings.scMaxEachPostBytes);
+                    if (downloadScMaxEachPostBytes !== '' && !stream.xhttpDownload.sc_max_each_post_bytes) stream.xhttpDownload.sc_max_each_post_bytes = downloadScMaxEachPostBytes;
+                    const downloadScMinPostsIntervalMs = parseIntOrRange(xhttpSettings.scMinPostsIntervalMs);
+                    if (downloadScMinPostsIntervalMs !== '' && !stream.xhttpDownload.sc_min_posts_interval_ms) stream.xhttpDownload.sc_min_posts_interval_ms = downloadScMinPostsIntervalMs;
+                    const downloadScStreamUpServerSecs = parseIntOrRange(xhttpSettings.scStreamUpServerSecs);
+                    if (downloadScStreamUpServerSecs !== '' && !stream.xhttpDownload.sc_stream_up_server_secs) stream.xhttpDownload.sc_stream_up_server_secs = downloadScStreamUpServerSecs;
+                    const downloadScMaxBufferedPosts = toIntValue(xhttpSettings.scMaxBufferedPosts);
+                    if (downloadScMaxBufferedPosts > 0 && !stream.xhttpDownload.sc_max_buffered_posts) stream.xhttpDownload.sc_max_buffered_posts = downloadScMaxBufferedPosts;
+                    const downloadServerMaxHeaderBytes = toIntValue(xhttpSettings.serverMaxHeaderBytes);
+                    if (downloadServerMaxHeaderBytes > 0 && !stream.xhttpDownload.server_max_header_bytes) stream.xhttpDownload.server_max_header_bytes = downloadServerMaxHeaderBytes;
+                    if ((xhttpSettings.noSSEHeader === true) && !stream.xhttpDownload.no_sse_header) {
+                        stream.xhttpDownload.no_sse_header = 'true';
+                    }
+
+                    const downloadHeaders = toObject(xhttpSettings.headers);
+                    if (!stream.xhttpDownload.headers && downloadHeaders && Object.keys(downloadHeaders).length) {
+                        stream.xhttpDownload.headers = downloadHeaders;
+                    }
+
+                    const downloadExtra = toObject(xhttpSettings.extra);
+                    if (downloadExtra) mergeXmuxSettings(stream.xhttpDownload.xmux, downloadExtra.xmux);
+                }
+            }
+        }
+
         const xhttpQParams = tryJSON(q.get('quicParams') || q.get('quic_params') || '') || {};
+        const xhttpFm = toObject(tryJSON(q.get('fm') || q.get('finalmask') || '')) || {};
         const xhttpFinalmask = {};
-        const xhttpTcp = tryJSON(q.get('finalmask_tcp') || q.get('finalmask-tcp') || '') || [];
-        const xhttpUdp = tryJSON(q.get('finalmask_udp') || q.get('finalmask-udp') || '') || [];
+        const xhttpTcp = tryJSON(q.get('finalmask_tcp') || q.get('finalmask-tcp') || '') || xhttpFm.tcp || [];
+        const xhttpUdp = tryJSON(q.get('finalmask_udp') || q.get('finalmask-udp') || '') || xhttpFm.udp || [];
         if (Array.isArray(xhttpTcp) && xhttpTcp.length) xhttpFinalmask.tcp = xhttpTcp;
         if (Array.isArray(xhttpUdp) && xhttpUdp.length) xhttpFinalmask.udp = xhttpUdp;
-        const xhttpQuicParams = (xhttpQParams && typeof xhttpQParams === 'object') ? { ...xhttpQParams } : {};
+        const xhttpQuicParams = {};
+        if (xhttpFm.quicParams && typeof xhttpFm.quicParams === 'object' && !Array.isArray(xhttpFm.quicParams)) {
+            Object.assign(xhttpQuicParams, xhttpFm.quicParams);
+        }
+        if (xhttpQParams && typeof xhttpQParams === 'object' && !Array.isArray(xhttpQParams)) {
+            Object.assign(xhttpQuicParams, xhttpQParams);
+        }
         const xhttpCongestion = (q.get('congestion') || '').trim().toLowerCase();
         const xhttpBrutalUp = (q.get('brutal_up') || q.get('brutalUp') || q.get('up') || '').trim();
         const xhttpBrutalDown = (q.get('brutal_down') || q.get('brutalDown') || q.get('down') || '').trim();
