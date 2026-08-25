@@ -28,8 +28,11 @@ function buildXrayOutbound(bean) {
     const buildXmuxSettings = (xmux) => {
         if (!xmux || typeof xmux !== 'object') return null;
         const out = {};
-        put(out, 'maxConcurrency', xmux.max_concurrency);
-        put(out, 'maxConnections', xmux.max_connections);
+        if (xmux.max_concurrency !== '' && xmux.max_concurrency !== undefined && xmux.max_concurrency !== null) {
+            put(out, 'maxConcurrency', xmux.max_concurrency);
+        } else {
+            put(out, 'maxConnections', xmux.max_connections);
+        }
         put(out, 'cMaxReuseTimes', xmux.c_max_reuse_times);
         put(out, 'hMaxRequestTimes', xmux.h_max_request_times);
         put(out, 'hMaxReusableSecs', xmux.h_max_reusable_secs);

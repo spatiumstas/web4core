@@ -81,19 +81,59 @@ function buildSingBoxOutbound(bean, opts) {
                 if (stream.path) t.path = stream.path;
                 if (stream.host) t.host = stream.host;
                 if (stream.xhttpMode) t.mode = stream.xhttpMode;
-                t.x_padding_bytes = '100-1000';
+                t.x_padding_bytes = stream.xhttpXPaddingBytes || '100-1000';
+                if (stream.xhttpNoGrpcHeader === true) t.no_grpc_header = true;
+                if (typeof stream.xhttpXPaddingObfsMode === 'boolean') t.x_padding_obfs_mode = stream.xhttpXPaddingObfsMode;
+                [
+                    ['x_padding_key', 'xhttpXPaddingKey'],
+                    ['x_padding_header', 'xhttpXPaddingHeader'],
+                    ['x_padding_placement', 'xhttpXPaddingPlacement'],
+                    ['x_padding_method', 'xhttpXPaddingMethod'],
+                    ['uplink_http_method', 'xhttpUplinkHttpMethod'],
+                    ['session_placement', 'xhttpSessionPlacement'],
+                    ['session_key', 'xhttpSessionKey'],
+                    ['seq_placement', 'xhttpSeqPlacement'],
+                    ['seq_key', 'xhttpSeqKey'],
+                    ['uplink_data_placement', 'xhttpUplinkDataPlacement'],
+                    ['uplink_data_key', 'xhttpUplinkDataKey'],
+                    ['uplink_chunk_size', 'xhttpUplinkChunkSize'],
+                    ['sc_max_each_post_bytes', 'xhttpScMaxEachPostBytes'],
+                    ['sc_min_posts_interval_ms', 'xhttpScMinPostsIntervalMs']
+                ].forEach(([key, field]) => {
+                    if (stream[field] !== '' && stream[field] !== undefined && stream[field] !== null) t[key] = stream[field];
+                });
 
                 const xmux = stream.xhttpXmux || {};
                 const resolvedXmux = buildExtendedXhttpXmux(xmux);
                 if (resolvedXmux) t.xmux = resolvedXmux;
 
                 const download = stream.xhttpDownload || {};
-                const hasDownload = Object.values(download).some(v => v !== '' && v !== 0);
+                const downloadXmux = buildExtendedXhttpXmux(download.xmux || {});
+                const hasDownload = [
+                    download.mode,
+                    download.host,
+                    download.path,
+                    download.x_padding_bytes,
+                    download.headers,
+                    download.sc_max_each_post_bytes,
+                    download.sc_min_posts_interval_ms,
+                    download.sc_stream_up_server_secs,
+                    download.sc_max_buffered_posts,
+                    download.server_max_header_bytes,
+                    download.server,
+                    download.server_port,
+                    download.detour,
+                    downloadXmux
+                ].some(v => v !== '' && v !== 0 && v !== undefined && v !== null);
                 if (hasDownload) {
                     t.download = {};
+                    if (download.mode) t.download.mode = download.mode;
                     if (download.host) t.download.host = download.host;
                     if (download.path) t.download.path = download.path;
-                    if (download.x_padding_bytes) t.download.x_padding_bytes = download.x_padding_bytes;
+                    if (download.headers && typeof download.headers === 'object' && Object.keys(download.headers).length) {
+                        t.download.headers = download.headers;
+                    }
+                    t.download.x_padding_bytes = download.x_padding_bytes || '100-1000';
                     if (download.sc_max_each_post_bytes) t.download.sc_max_each_post_bytes = download.sc_max_each_post_bytes;
                     if (download.sc_min_posts_interval_ms) t.download.sc_min_posts_interval_ms = download.sc_min_posts_interval_ms;
                     if (download.sc_stream_up_server_secs) t.download.sc_stream_up_server_secs = download.sc_stream_up_server_secs;
@@ -101,8 +141,8 @@ function buildSingBoxOutbound(bean, opts) {
                     if (download.server_port) t.download.server_port = download.server_port;
                     if (download.detour) t.download.detour = download.detour;
 
-                    if (resolvedXmux) {
-                        t.download.xmux = resolvedXmux;
+                    if (downloadXmux) {
+                        t.download.xmux = downloadXmux;
                     }
                 }
             } else if (stream.network === 'grpc') {
@@ -632,5 +672,4 @@ export {
     buildSingBoxWireGuardEndpoint,
     buildSingBoxConfig,
 };
-
 

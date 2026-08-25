@@ -139,7 +139,7 @@ const CORE_PROTOCOL_SUPPORT = {
         base: ['vmess', 'vless', 'trojan', 'ss', 'socks', 'http', 'hy2'],
     },
     mihomo: {
-        base: ['vmess', 'vless', 'trojan', 'ss', 'socks', 'http', 'hy2', 'tuic', 'wireguard', 'masque', 'mieru', 'trusttunnel'],
+        base: ['vmess', 'vless', 'trojan', 'anytls', 'ss', 'socks', 'http', 'hy2', 'tuic', 'wireguard', 'masque', 'mieru', 'trusttunnel'],
     }
 };
 
@@ -535,6 +535,11 @@ function parseMasque(urlStr) {
     };
     const dnsRaw = q.get('dns') || '';
     const dns = dnsRaw ? dnsRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
+    const ipStack = {};
+    const ipStackMode = (q.get('ip-stack') || q.get('ip_stack') || q.get('ip-stack-mode') || q.get('ip_stack_mode') || '').trim();
+    const ipStackCongestionController = (q.get('ip-stack-congestion-controller') || q.get('ip_stack_congestion_controller') || '').trim();
+    if (ipStackMode) ipStack.mode = ipStackMode;
+    if (ipStackCongestionController) ipStack['congestion-controller'] = ipStackCongestionController;
     return {
         proto: 'masque',
         host: u.hostname,
@@ -553,6 +558,10 @@ function parseMasque(urlStr) {
             congestionController: (q.get('congestion-controller') || '').trim(),
             bbrProfile: (q.get('bbr-profile') || q.get('bbr_profile') || '').trim(),
             cwnd: asInt(q.get('cwnd'), 0),
+            handshakeTimeout: asInt(q.get('handshake-timeout') || q.get('handshake_timeout'), 0),
+            allowInsecure: getBool('allow-insecure') || getBool('allowInsecure') || getBool('insecure'),
+            nameCertVerify: (q.get('name-cert-verify') || q.get('nameCertVerify') || '').trim(),
+            ipStack,
             remoteDnsResolve: getBool('remote-dns-resolve'),
             dns
         }
@@ -634,6 +643,13 @@ function parseAnyTLS(urlStr) {
         name: safeDecodeURIComponent(u.hash.replace('#', '')),
         auth: { password: pwd },
         stream: buildStreamFromQuery(q, false),
+        anytls: {
+            clientMetadata: (q.get('client-metadata') || q.get('client_metadata') || '').trim(),
+            idleSessionCheckInterval: asInt(q.get('idle-session-check-interval') || q.get('idle_session_check_interval'), 0),
+            idleSessionTimeout: asInt(q.get('idle-session-timeout') || q.get('idle_session_timeout'), 0),
+            minIdleSession: asInt(q.get('min-idle-session') || q.get('min_idle_session'), 0),
+            disableReuse: ['1', 'true', 'yes'].includes((q.get('disable-reuse') || q.get('disable_reuse') || '').toLowerCase())
+        },
         udp: q.get('udp') === '1' || q.get('udp') === 'true',
         udpOverTcp: q.get('udp-over-tcp') === '1' || q.get('udp-over-tcp') === 'true',
         ipVersion: q.get('ip-version') || ''
@@ -940,10 +956,15 @@ function parseHysteria2(urlStr) {
         name: safeDecodeURIComponent(u.hash.replace('#', '')),
         auth: { password: pwd },
         hysteria2: {
+            obfs: q.get('obfs') || '',
             obfsPassword: q.get('obfs-password') || '',
             hopPort: q.get('mport') || '',
             hopInterval: (q.get('hop_interval') || ''),
             bbrProfile: q.get('bbr-profile') || q.get('bbr_profile') || '',
+            obfsMinPacketSize: asInt(q.get('obfs-min-packet-size') || q.get('obfs_min_packet_size'), 0),
+            obfsMaxPacketSize: asInt(q.get('obfs-max-packet-size') || q.get('obfs_max_packet_size'), 0),
+            udpMtu: asInt(q.get('udp-mtu') || q.get('udp_mtu'), 0),
+            handshakeTimeout: asInt(q.get('handshake-timeout') || q.get('handshake_timeout'), 0),
             alpn: q.get('alpn') || 'h3',
             sni: q.get('sni') || '',
             allowInsecure: ['1', 'true', 'yes'].includes(((q.get('allowInsecure') || q.get('insecure') || '')).toLowerCase()),
@@ -1450,10 +1471,14 @@ function buildStreamFromQuery(q, isTrojan) {
             if (xPaddingMethod) stream.xhttpXPaddingMethod = xPaddingMethod;
             const uplinkHttpMethod = toStringValue(xhttpExtra.uplinkHttpMethod);
             if (uplinkHttpMethod) stream.xhttpUplinkHttpMethod = uplinkHttpMethod;
-            const sessionPlacement = toStringValue(xhttpExtra.sessionPlacement);
+            const sessionPlacement = toStringValue(xhttpExtra.sessionPlacement || xhttpExtra.sessionIDPlacement);
             if (sessionPlacement) stream.xhttpSessionPlacement = sessionPlacement;
-            const sessionKey = toStringValue(xhttpExtra.sessionKey);
+            const sessionKey = toStringValue(xhttpExtra.sessionKey || xhttpExtra.sessionIDKey);
             if (sessionKey) stream.xhttpSessionKey = sessionKey;
+            const sessionTable = toStringValue(xhttpExtra.sessionTable || xhttpExtra.sessionIDTable);
+            if (sessionTable) stream.xhttpSessionTable = sessionTable;
+            const sessionLength = toIntValue(xhttpExtra.sessionLength || xhttpExtra.sessionIDLength);
+            if (sessionLength > 0) stream.xhttpSessionLength = sessionLength;
             const seqPlacement = toStringValue(xhttpExtra.seqPlacement);
             if (seqPlacement) stream.xhttpSeqPlacement = seqPlacement;
             const seqKey = toStringValue(xhttpExtra.seqKey);
@@ -1495,10 +1520,11 @@ function buildStreamFromQuery(q, isTrojan) {
                 if (downloadAddress && !stream.xhttpDownload.server) stream.xhttpDownload.server = downloadAddress;
                 const downloadPort = toIntValue(downloadSettings.port);
                 if (downloadPort > 0 && !stream.xhttpDownload.server_port) stream.xhttpDownload.server_port = downloadPort;
-                const downloadSecurity = toStringValue(downloadSettings.security).toLowerCase();
+                const downloadStreamSettings = toObject(downloadSettings.streamSettings) || {};
+                const downloadSecurity = toStringValue(downloadSettings.security || downloadStreamSettings.security).toLowerCase();
                 if (downloadSecurity && !stream.xhttpDownload.security) stream.xhttpDownload.security = downloadSecurity;
 
-                const tlsSettings = toObject(downloadSettings.tlsSettings);
+                const tlsSettings = toObject(downloadSettings.tlsSettings) || toObject(downloadStreamSettings.tlsSettings);
                 if (tlsSettings) {
                     const downloadServerName = toStringValue(tlsSettings.serverName);
                     if (downloadServerName && !stream.xhttpDownload.servername) stream.xhttpDownload.servername = downloadServerName;
@@ -1510,7 +1536,7 @@ function buildStreamFromQuery(q, isTrojan) {
                     }
                 }
 
-                const realitySettings = toObject(downloadSettings.realitySettings);
+                const realitySettings = toObject(downloadSettings.realitySettings) || toObject(downloadStreamSettings.realitySettings);
                 if (realitySettings) {
                     const downloadRealityPublicKey = toStringValue(realitySettings.publicKey);
                     if (downloadRealityPublicKey) stream.xhttpDownload.reality.public_key = downloadRealityPublicKey;
@@ -1518,7 +1544,7 @@ function buildStreamFromQuery(q, isTrojan) {
                     if (downloadRealityShortID) stream.xhttpDownload.reality.short_id = downloadRealityShortID;
                 }
 
-                const xhttpSettings = toObject(downloadSettings.xhttpSettings);
+                const xhttpSettings = toObject(downloadSettings.xhttpSettings) || toObject(downloadStreamSettings.xhttpSettings);
                 if (xhttpSettings) {
                     const downloadHost = toStringValue(xhttpSettings.host);
                     if (downloadHost && !stream.xhttpDownload.host) stream.xhttpDownload.host = downloadHost;

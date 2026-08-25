@@ -131,7 +131,6 @@ function buildMihomoProxy(bean) {
             obj.network = 'grpc';
             obj['grpc-opts'] = {};
             if (s.path) obj['grpc-opts']['grpc-service-name'] = s.path;
-            if (s.authority) obj['grpc-opts'].authority = s.authority;
             if (s.grpcUserAgent) obj['grpc-opts']['grpc-user-agent'] = s.grpcUserAgent;
             if (Number.isFinite(s.grpcPingInterval) && s.grpcPingInterval > 0) {
                 obj['grpc-opts']['ping-interval'] = s.grpcPingInterval;
@@ -164,6 +163,10 @@ function buildMihomoProxy(bean) {
             if (s.xhttpUplinkHttpMethod) obj['xhttp-opts']['uplink-http-method'] = s.xhttpUplinkHttpMethod;
             if (s.xhttpSessionPlacement) obj['xhttp-opts']['session-placement'] = s.xhttpSessionPlacement;
             if (s.xhttpSessionKey) obj['xhttp-opts']['session-key'] = s.xhttpSessionKey;
+            if (s.xhttpSessionTable) obj['xhttp-opts']['session-table'] = s.xhttpSessionTable;
+            if (Number.isFinite(s.xhttpSessionLength) && s.xhttpSessionLength > 0) {
+                obj['xhttp-opts']['session-length'] = s.xhttpSessionLength;
+            }
             if (s.xhttpSeqPlacement) obj['xhttp-opts']['seq-placement'] = s.xhttpSeqPlacement;
             if (s.xhttpSeqKey) obj['xhttp-opts']['seq-key'] = s.xhttpSeqKey;
             if (s.xhttpUplinkDataPlacement) obj['xhttp-opts']['uplink-data-placement'] = s.xhttpUplinkDataPlacement;
@@ -377,10 +380,18 @@ function buildMihomoProxy(bean) {
         if (bean.hysteria2?.alpn) p.alpn = bean.hysteria2.alpn.split(',').filter(Boolean);
         if (bean.hysteria2?.sni) p.sni = bean.hysteria2.sni;
         if (bean.hysteria2?.allowInsecure) p['skip-cert-verify'] = true;
+        if (bean.hysteria2?.obfs) p.obfs = bean.hysteria2.obfs;
         if (bean.hysteria2?.obfsPassword) {
-            p.obfs = 'salamander';
+            if (!p.obfs) p.obfs = 'salamander';
             p['obfs-password'] = bean.hysteria2.obfsPassword;
         }
+        if (Number.isFinite(bean.hysteria2?.obfsMinPacketSize) && bean.hysteria2.obfsMinPacketSize > 0) {
+            p['obfs-min-packet-size'] = bean.hysteria2.obfsMinPacketSize;
+        }
+        if (Number.isFinite(bean.hysteria2?.obfsMaxPacketSize) && bean.hysteria2.obfsMaxPacketSize > 0) {
+            p['obfs-max-packet-size'] = bean.hysteria2.obfsMaxPacketSize;
+        }
+        if (bean.hysteria2?.hopPort) p.ports = String(bean.hysteria2.hopPort).trim();
         if (bean.hysteria2?.hopInterval) {
             const hi = String(bean.hysteria2.hopInterval).trim();
             const range = hi.match(/^(\d+)\s*-\s*(\d+)$/);
@@ -394,6 +405,10 @@ function buildMihomoProxy(bean) {
             }
         }
         if (bean.hysteria2?.bbrProfile) p['bbr-profile'] = bean.hysteria2.bbrProfile;
+        if (Number.isFinite(bean.hysteria2?.udpMtu) && bean.hysteria2.udpMtu > 0) p['udp-mtu'] = bean.hysteria2.udpMtu;
+        if (Number.isFinite(bean.hysteria2?.handshakeTimeout) && bean.hysteria2.handshakeTimeout > 0) {
+            p['handshake-timeout'] = bean.hysteria2.handshakeTimeout;
+        }
         applyCommon(p);
         return p;
     }
@@ -454,6 +469,7 @@ function buildMihomoProxy(bean) {
         if (Number.isFinite(wg.persistentKeepalive) && wg.persistentKeepalive > 0) p['persistent-keepalive'] = wg.persistentKeepalive;
         if (wg.reserved !== undefined) p.reserved = wg.reserved;
         if (hasPeers) p.peers = peers.map(mapPeer).filter(Boolean);
+        if (wg.ipStack && typeof wg.ipStack === 'object' && Object.keys(wg.ipStack).length) p['ip-stack'] = wg.ipStack;
         if (wg['amnezia-wg-option'] && typeof wg['amnezia-wg-option'] === 'object') {
             p['amnezia-wg-option'] = wg['amnezia-wg-option'];
         }
@@ -478,8 +494,31 @@ function buildMihomoProxy(bean) {
         if (mq.congestionController) p['congestion-controller'] = mq.congestionController;
         if (mq.bbrProfile) p['bbr-profile'] = mq.bbrProfile;
         if (Number.isFinite(mq.cwnd) && mq.cwnd > 0) p.cwnd = mq.cwnd;
+        if (Number.isFinite(mq.handshakeTimeout) && mq.handshakeTimeout > 0) p['handshake-timeout'] = mq.handshakeTimeout;
+        if (mq.allowInsecure) p['skip-cert-verify'] = true;
+        if (mq.nameCertVerify) p['name-cert-verify'] = mq.nameCertVerify;
+        if (mq.ipStack && typeof mq.ipStack === 'object' && Object.keys(mq.ipStack).length) p['ip-stack'] = mq.ipStack;
         if (mq.remoteDnsResolve) p['remote-dns-resolve'] = true;
         if (Array.isArray(mq.dns) && mq.dns.length) p.dns = mq.dns;
+        applyCommon(p);
+        return p;
+    }
+    if (bean.proto === 'anytls') {
+        const anytls = bean.anytls || {};
+        const p = { ...base, type: 'anytls', password: bean.auth.password };
+        if (s.sni) p.sni = s.sni;
+        if (s.alpn && s.alpn.length) p.alpn = s.alpn;
+        if (s.allowInsecure) p['skip-cert-verify'] = true;
+        if (s.fp) p['client-fingerprint'] = s.fp;
+        if (anytls.clientMetadata) p['client-metadata'] = anytls.clientMetadata;
+        if (Number.isFinite(anytls.idleSessionCheckInterval) && anytls.idleSessionCheckInterval > 0) {
+            p['idle-session-check-interval'] = anytls.idleSessionCheckInterval;
+        }
+        if (Number.isFinite(anytls.idleSessionTimeout) && anytls.idleSessionTimeout > 0) {
+            p['idle-session-timeout'] = anytls.idleSessionTimeout;
+        }
+        if (Number.isFinite(anytls.minIdleSession) && anytls.minIdleSession > 0) p['min-idle-session'] = anytls.minIdleSession;
+        if (anytls.disableReuse) p['disable-reuse'] = true;
         applyCommon(p);
         return p;
     }
@@ -577,6 +616,7 @@ function deduplicateProxies(beans) {
             `udp=${toKeyPart(wg?.udp)}`,
             `remoteDnsResolve=${toKeyPart(wg?.remoteDnsResolve)}`,
             `dns=${dns}`,
+            `ipStack=${stableObjectKey(wg?.ipStack)}`,
             `refreshServerIPInterval=${toKeyPart(wg?.refreshServerIPInterval)}`,
             `workers=${toKeyPart(wg?.workers)}`,
             `awg=${stableObjectKey(wg?.['amnezia-wg-option'])}`,
@@ -704,6 +744,7 @@ function buildMihomoSubscriptionConfig(subscriptionUrls, extraBeans, opts) {
         const providerName = computeProviderName(url, index, subscriptionUrls.length, usedProviderNames);
         providers[providerName] = {
             type: 'http',
+            proxy: 'DIRECT',
             header: {
                 'x-hwid': [generateSecretHex32()]
             },
@@ -737,6 +778,7 @@ function buildMihomoSubscriptionConfig(subscriptionUrls, extraBeans, opts) {
             interval: PROXY_FETCH_INTERVAL,
             'expected-status': urlTestExpectedStatus,
             tolerance: 50,
+            'empty-fallback': 'REJECT',
             __comments: {
                 interval: 'Latency probe interval (seconds)',
                 tolerance: 'Switch threshold (ms)'
@@ -749,7 +791,8 @@ function buildMihomoSubscriptionConfig(subscriptionUrls, extraBeans, opts) {
             groups.push({
                 name: `SUB-${providerName}`,
                 type: 'select',
-                use: [providerName]
+                use: [providerName],
+                'empty-fallback': 'REJECT'
             });
         });
     }

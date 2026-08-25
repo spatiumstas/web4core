@@ -11,6 +11,31 @@ function writeJson(p, obj) {
   fs.writeFileSync(p, JSON.stringify(obj, null, 2));
 }
 
+function assert(condition, message) {
+  if (!condition) throw new Error(message);
+}
+
+function buildXrayConfig(web4core, input) {
+  const out = web4core.buildFromRequest
+    ? web4core.buildFromRequest({ core: 'xray', input, options: { addTun: false, addSocks: true } })
+    : { kind: 'json', data: web4core.buildXrayConfig(web4core.buildXrayOutbound((web4core.buildBeansFromInput(input) || [])[0]), { addTun: false, addSocks: true }) };
+  if (!out || out.kind !== 'json') throw new Error('Unexpected output kind for Xray');
+  return out.data;
+}
+
+function testXhttpXmuxFixture(web4core, links) {
+  const fixture = links.find((line) => line.includes('#fixture-xhttp-full'));
+  assert(fixture, 'CONFIGS is missing fixture-xhttp-full');
+  const cfg = buildXrayConfig(web4core, fixture);
+  const outbound = cfg.outbounds.find((item) => item.tag === 'fixture-xhttp-full');
+  const xmux = outbound && outbound.streamSettings && outbound.streamSettings.xhttpSettings && outbound.streamSettings.xhttpSettings.xmux;
+
+  assert(xmux, 'XHTTP fixture: missing xmux settings');
+  assert(xmux.maxConcurrency === 8, 'XHTTP fixture: maxConcurrency was not preserved');
+  assert(!Object.hasOwn(xmux, 'maxConnections'), 'XHTTP fixture: Xray must not receive maxConnections with maxConcurrency');
+  console.log('✅ Xray XHTTP xmux compatibility fixture ok');
+}
+
 function main() {
   const web4core = loadWeb4core();
   const allLinks = splitLinksFromEnv('CONFIGS');
@@ -26,6 +51,7 @@ function main() {
   ));
   console.log(`Found ${links.length} test links (excluding tuic/anytls/masque/tt/mieru/sdns for Xray)`);
   if (!links.length) throw new Error('No Xray-compatible links in CONFIGS');
+  testXhttpXmuxFixture(web4core, links);
 
   let ok = 0;
   let fail = 0;
@@ -36,12 +62,7 @@ function main() {
     console.log(`Testing Xray config ${i + 1}/${links.length}: ${label}`);
 
     try {
-      const out = web4core.buildFromRequest
-        ? web4core.buildFromRequest({ core: 'xray', input: link, options: { addTun: false, addSocks: true } })
-        : { kind: 'json', data: web4core.buildXrayConfig(web4core.buildXrayOutbound((web4core.buildBeansFromInput(link) || [])[0]), { addTun: false, addSocks: true }) };
-
-      if (!out || out.kind !== 'json') throw new Error('Unexpected output kind for Xray');
-      const cfg = out.data;
+      const cfg = buildXrayConfig(web4core, link);
 
       const f = `test_xray_${i}.json`;
       writeJson(f, cfg);

@@ -51,14 +51,29 @@ function parseWireGuardConf(confText, nameHint) {
             j2: 'j2',
             j3: 'j3',
             itime: 'itime',
+            version: 'version',
+            headerprotectionkey: 'header-protection-key',
+            contentpaddingaddition: 'content-padding-addition',
+            rekeyaftertime: 'rekey-after-time',
+            rekeytimeout: 'rekey-timeout',
+            rejectaftertime: 'reject-after-time',
+            keepalivetimeout: 'keepalive-timeout',
+            maxhandshakeattempts: 'max-handshake-attempts',
+            randomtrailers: 'random-trailers',
+            disablecookies: 'disable-cookies',
         };
         if (!map[k]) return false;
         if (!target['amnezia-wg-option']) target['amnezia-wg-option'] = {};
         const outKey = map[k];
         const raw = String(value || '').trim();
-        const numericKeys = new Set(['jc', 'jmin', 'jmax', 's1', 's2', 's3', 's4', 'itime']);
+        const numericKeys = new Set(['version', 'jc', 'jmin', 'jmax', 's1', 's2', 's3', 's4', 'itime']);
+        const booleanKeys = new Set(['random-trailers', 'disable-cookies']);
         if (numericKeys.has(outKey) && /^-?\d+$/.test(raw)) {
             target['amnezia-wg-option'][outKey] = parseInt(raw, 10);
+        } else if (booleanKeys.has(outKey)) {
+            const boolValue = raw.toLowerCase();
+            if (!['1', 'true', 'yes', '0', 'false', 'no'].includes(boolValue)) return false;
+            target['amnezia-wg-option'][outKey] = ['1', 'true', 'yes'].includes(boolValue);
         } else {
             target['amnezia-wg-option'][outKey] = raw;
         }
@@ -106,6 +121,13 @@ function parseWireGuardConf(confText, nameHint) {
             else if (keyLower === 'dns') iface.dns = parseCsv(value);
             else if (keyLower === 'mtu') iface.mtu = /^\d+$/.test(value) ? parseInt(value, 10) : undefined;
             else if (keyLower === 'name') iface.name = value;
+            else if (keyLower === 'ipstack' || keyLower === 'ipstackmode') {
+                if (!iface.ipStack) iface.ipStack = {};
+                iface.ipStack.mode = value;
+            } else if (keyLower === 'ipstackcongestioncontroller') {
+                if (!iface.ipStack) iface.ipStack = {};
+                iface.ipStack['congestion-controller'] = value;
+            }
         } else if (section === 'peer' && curPeer) {
             if (keyLower === 'publickey') curPeer.publicKey = value;
             else if (keyLower === 'presharedkey') curPeer.preSharedKey = value;
@@ -173,6 +195,7 @@ function parseWireGuardConf(confText, nameHint) {
             peers: peersFiltered.length >= 2 ? peersFiltered : undefined,
             dns: Array.isArray(iface.dns) && iface.dns.length ? iface.dns : [],
             remoteDnsResolve: Array.isArray(iface.dns) && iface.dns.length ? true : false,
+            ipStack: (iface.ipStack && typeof iface.ipStack === 'object') ? iface.ipStack : undefined,
             mtu: iface.mtu,
             persistentKeepalive: keepalive
         }
