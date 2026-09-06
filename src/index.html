@@ -2,25 +2,28 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="style.css">
-    <link rel="icon" type="image/svg+xml" href="favicon.png">
+    <link rel="icon" type="image/png" href="favicon.png">
     <link rel="apple-touch-icon" href="favicon.png">
     <title>web4core | Generate configs</title>
 </head>
 
 <body>
-    <header id="asciiHeader">
-        <pre>
-                __    __ __                     
- _      _____  / /_  / // / _________  ________ 
+    <nav class="site-nav" aria-label="Main navigation">
+        <a class="wordmark" href="./" aria-label="web4core home"><span class="brand-icon" aria-hidden="true">w4</span>web4core</a>
+        <a id="apiLink" class="api-link" href="https://api.web2core.workers.dev/" target="_blank" rel="noopener noreferrer">API docs <span aria-hidden="true">↗</span></a>
+    </nav>
+    <header class="hero">
+        <button id="asciiHeader" class="ascii-logo" type="button" aria-label="web4core — reload page" title="Reload web4core"><pre aria-hidden="true">
+                __    __ __
+ _      _____  / /_  / // / _________  ________
 | | /| / / _ \/ __ \/ // /_/ ___/ __ \/ ___/ _ \
 | |/ |/ /  __/ /_/ /__  __/ /__/ /_/ / /  /  __/
-|__/|__/\___/_.___/  /_/  \___/\____/_/   \___/ 
-    </pre>
-        <a id="apiLink" class="api-link api-link--header" href="https://api.web2core.workers.dev/" target="_blank"
-           rel="noopener noreferrer" title="API docs">API
-        </a>
+|__/|__/\___/_.___/  /_/  \___/\____/_/   \___/
+    </pre></button>
+        <h1>Your connections. Configured.</h1>
+        <p>Turn your proxy links into a ready-to-use configuration.</p>
     </header>
     <svg xmlns="http://www.w3.org/2000/svg" style="display:none">
         <symbol id="copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
@@ -41,26 +44,30 @@
             <path d="M6 9l6 6 6-6"/>
         </symbol>
     </svg>
-    <main class="container container--stretch">
+    <main class="container container--stretch" aria-label="Configuration generator">
+        <div class="section-heading"><span class="eyebrow">CONFIGURATION</span><span class="section-note">Three cores. One workspace.</span></div>
         <div class="row row--left gap-12 toolbar">
             <div id="coreToggle" class="core-toggle" aria-label="Core selector" role="radiogroup">
-                <div class="knob"></div>
+                <div class="knob" aria-hidden="true"></div>
                 <div class="labels">
-                    <span id="lblMihomo" data-core="mihomo" role="radio">Mihomo</span>
-                    <span id="lblSing" data-core="singbox" role="radio">sing-box</span>
-                    <span id="lblXray" data-core="xray" role="radio">Xray</span>
+                    <button type="button" id="lblMihomo" data-core="mihomo" role="radio">Mihomo</button>
+                    <button type="button" id="lblSing" data-core="singbox" role="radio">sing-box</button>
+                    <button type="button" id="lblXray" data-core="xray" role="radio">Xray</button>
                 </div>
             </div>
             <div class="toolbar-actions">
                 <button id="btnChevron" class="chevron-toggle" type="button" aria-label="Settings" aria-expanded="false"
                     aria-controls="settingsPanel">
+                    <span>Settings</span>
                     <svg width="18" height="18" aria-hidden="true">
                         <use href="#chevron-down"></use>
                     </svg>
                 </button>
             </div>
         </div>
-        <div id="settingsPanel" class="settings-panel settings-panel--collapsed">
+        <div id="settingsPanel" class="settings-panel settings-panel--collapsed" inert>
+            <div class="settings-panel__inner">
+            <div class="settings-heading">Core settings <span>Fine-tune your configuration</span></div>
             <div class="settings-panel__chips">
                 <label class="custom-checkbox chip">
                     <input type="checkbox" id="cbSocks" checked />
@@ -160,35 +167,42 @@
                 </div>
             </div>
             <div class="settings-panel__field">
+                <label for="tunName">TUN interfaces <span class="optional">Optional</span></label>
                 <input class="input" type="text" id="tunName"
                     placeholder="Interface(s): (tun0,tun1 or tun0:select,tun1:auto)" />
             </div>
         </div>
-        <div class="full">
-            <textarea id="links" class="input full"></textarea>
+        </div>
+        <div class="full source-field">
+            <div class="field-heading"><label for="links">Source links</label><span class="field-meta">INPUT</span></div>
+            <textarea id="links" class="input full" aria-describedby="sourceHint errorText" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea>
+            <p id="sourceHint" class="field-hint">Paste a subscription URL or proxy links, one per line.</p>
         </div>
         <div id="errorBlock" class="row row--left" role="status" aria-live="polite">
             <div id="errorText"></div>
         </div>
-        <div class="button-row">
-            <input type="submit" id="gen" value="Generate" class="is-hidden" />
+        <div class="button-row generate-row">
+            <span class="shortcut-hint"><kbd id="shortcutModifier">Ctrl</kbd> <kbd>S</kbd> to generate</span>
+            <input type="submit" id="gen" value="Generate config" disabled />
         </div>
         <div id="outBlock" class="hidden full">
-            <textarea id="out" class="input full" readonly></textarea>
+            <div class="field-heading"><label for="out">Your configuration</label><span id="outputFormat" class="field-meta">OUTPUT</span></div>
+            <textarea id="out" class="input full" readonly spellcheck="false"></textarea>
             <div class="button-row mt-8 full">
                 <button id="btnCopy" class="circle-btn" title="Copy" aria-label="Copy">
                     <svg width="22" height="22" aria-hidden="true">
                         <use href="#copy"></use>
-                    </svg>
+                    </svg><span id="copyLabel" aria-live="polite">Copy</span>
                 </button>
                 <button id="btnDownload" class="circle-btn" title="Download" aria-label="Download">
                     <svg width="22" height="22" aria-hidden="true">
                         <use href="#download-file"></use>
-                    </svg>
+                    </svg><span>Download</span>
                 </button>
             </div>
         </div>
     </main>
+    <footer class="site-footer"><span>One input. Your preferred core.</span><span>Mihomo <span aria-hidden="true">/</span> sing-box <span aria-hidden="true">/</span> Xray</span></footer>
     <script src="web4core.runtime.js"></script>
     <script src="ui.js"></script>
 </body>
