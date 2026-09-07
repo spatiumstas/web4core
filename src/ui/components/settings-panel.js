@@ -57,6 +57,7 @@ export function initSettingsPanel({ validateField, updatePlaceholder, closeUrlTe
             if (state.urlTestMenuOpen) closeUrlTestMenu?.();
             const collapsed = el.settingsPanel.classList.toggle('settings-panel--collapsed');
             el.btnChevron.setAttribute('aria-expanded', String(!collapsed));
+            el.settingsPanel.inert = collapsed;
         });
     }
 

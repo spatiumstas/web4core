@@ -40,8 +40,24 @@ export function setCore(core) {
 }
 
 export function initCoreToggle({ validateField, updatePlaceholder }) {
+    el.coreToggle?.addEventListener('keydown', (event) => {
+        const items = el.coreItems;
+        const index = items.indexOf(document.activeElement);
+        if (index < 0) return;
+        let next;
+        if (event.key === 'ArrowRight' || event.key === 'ArrowDown') next = (index + 1) % items.length;
+        if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') next = (index - 1 + items.length) % items.length;
+        if (event.key === 'Home') next = 0;
+        if (event.key === 'End') next = items.length - 1;
+        if (next === undefined) return;
+        event.preventDefault();
+        setCore(items[next].dataset.core);
+        items[next].focus();
+        updatePlaceholder();
+        validateField(false);
+    });
     el.coreToggle?.addEventListener('click', (e) => {
-        const target = e.target?.closest?.('[data-core]');
+        const target = e.target?.closest?.('[role="radio"][data-core]');
         const core = target?.dataset?.core || '';
         if (!core) return;
         e.stopPropagation();

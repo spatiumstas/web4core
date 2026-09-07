@@ -1,5 +1,4 @@
 import { el } from '../dom.js';
-import { toggleHidden } from '../utils/dom-utils.js';
 
 export function setError(msg) {
     if (el.errorText) el.errorText.textContent = msg || '';
@@ -8,16 +7,20 @@ export function setError(msg) {
 export function setGenerateEnabled(enabled) {
     if (!el.gen) return;
     el.gen.disabled = !enabled;
-    toggleHidden(el.gen, !enabled);
+    el.gen.classList.remove('is-hidden');
 }
 
 export function setInputLoading(loading) {
     if (!el.links) return;
     el.links.classList.toggle('input-loading', !!loading);
+    el.links.setAttribute('aria-busy', String(!!loading));
+    if (el.gen) el.gen.value = loading ? 'Generating…' : 'Generate config';
 }
 
 export function renderOutput(text) {
     if (el.out) el.out.value = text || '';
+    const format = document.getElementById('outputFormat');
+    if (format) format.textContent = el.coreToggle?.dataset.core === 'mihomo' ? 'YAML' : 'JSON';
     setError('');
     el.outBlock?.classList.remove('hidden');
 }
@@ -29,7 +32,7 @@ export function hideOutput() {
 export function scrollOutIntoView() {
     const block = el.outBlock;
     if (block?.scrollIntoView) {
-        block.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+        block.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth', block: 'center', inline: 'nearest' });
     }
     if (el.out?.focus) {
         try {
@@ -42,6 +45,7 @@ export function scrollOutIntoView() {
 
 export function markInputError(enabled) {
     el.links?.classList.toggle('input-error', !!enabled);
+    el.links?.setAttribute('aria-invalid', String(!!enabled));
 }
 
 function fallbackCopy(txt, onSuccess) {
@@ -71,6 +75,11 @@ export function initOutputActions({ getCore }) {
         if (!text) return;
 
         const copySuccess = () => {
+            const label = document.getElementById('copyLabel');
+            if (label) {
+                label.textContent = 'Copied';
+                setTimeout(() => { label.textContent = 'Copy'; }, 2000);
+            }
             const useEl = el.btnCopy?.querySelector('use');
             if (useEl) {
                 useEl.setAttribute('href', '#check-mark-small');
