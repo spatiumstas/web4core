@@ -6,7 +6,7 @@ export function initShortcuts() {
     document.addEventListener('keydown', (e) => {
         if ((e.ctrlKey || e.metaKey) && e.code === 'KeyS') {
             e.preventDefault();
-            el.gen?.click();
+            if (el.coreToggle?.dataset.core !== 'amnezia') el.gen?.click();
         }
     });
 }

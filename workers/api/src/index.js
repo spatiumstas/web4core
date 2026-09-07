@@ -1,7 +1,11 @@
+import { handleAmnezia } from './amnezia.js';
 const CONFIG = {
   ALLOWED_ORIGINS: [
     'https://web2core.workers.dev',
     'https://api.web2core.workers.dev',
+    'https://dan0102dan.github.io',
+    'http://localhost:4173',
+    'http://127.0.0.1:4173',
   ],
   SUBSCRIPTION_TIMEOUT: 15000,
   MAX_PAYLOAD_SIZE: 1024 * 1024,
@@ -151,6 +155,7 @@ export default {
 
     if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405, cors);
     if (origin && !ALLOWED_ORIGINS.has(origin)) return json({ error: 'CORS origin not allowed' }, 403, cors);
+    if (url.pathname === '/amnezia') return handleAmnezia(request, cors);
     if (url.pathname !== '/api' && url.pathname !== '/') return json({ error: 'Not found' }, 404, cors);
 
     const contentType = request.headers.get('Content-Type') || '';

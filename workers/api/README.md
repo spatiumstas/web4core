@@ -100,3 +100,45 @@ curl -sS -X POST "https://api.web2core.workers.dev/" ^
   --data "{\"core\":\"mihomo\",\"input\":\"https://example.com/sub1\\nhttps://example.com/sub2\",\"options\":{\"mihomoSubscriptionMode\":true,\"webUI\":true}}"
 ```
 
+
+### Amnezia WARP
+
+`POST /amnezia` creates one fresh Cloudflare WARP registration and returns an
+AmneziaWG configuration. It does not provision an independent VPN server.
+
+```json
+{ "version": "2.0", "domain": "example.com" }
+```
+
+`version` is `"1.5"` or `"2.0"`. `domain` is a hostname (IDNs are accepted),
+without a scheme, port, or path. It is encoded in TLS ClientHello SNI inside
+uppercase `I1`; the domain itself is never contacted. Both versions use the
+upstream WARP-compatible packet types and zero padding. The output routes IPv4
+traffic through WARP (`0.0.0.0/0`) and uses `engage.cloudflareclient.com:4500`.
+
+The JSON response contains `content`, `filename`, `version`, and normalized
+`domain`. `content` includes a private key: responses are `no-store`; the
+application does not log or persist keys. Copy/download is handled locally.
+Generation has a 25-second upstream deadline. Errors use JSON `{ "error": "…" }`:
+400 invalid input, 413 oversized body, 415 unsupported content type, 429 rate
+limit, 502 upstream error. There are no automatic registration retries, to avoid
+creating duplicate devices on ambiguous network failures.
+
+A best-effort per-isolate limiter allows 10 requests/minute per Cloudflare client
+IP. For public deployments, configure an edge rate-limit rule for this endpoint
+if a globally enforced limit is required.
+
+Build and test: `npm run test:amnezia`. Deploy the updated API Worker alongside
+the frontend; deploying only the static page will leave generation unavailable.
+The frontend endpoint is configured by `<meta name="amnezia-api">` in
+`src/index.html`. For local development, serve `src` on port 4173, run the built
+Worker using Wrangler on port 8787, and temporarily set this meta value to
+`http://localhost:8787/amnezia`. The allowed origins include localhost:4173,
+127.0.0.1:4173, the existing workers.dev site, and dan0102dan.github.io.
+
+The adapted generator is from
+[HereIamGosu/amnezia-config-gen](https://github.com/HereIamGosu/amnezia-config-gen).
+Its pinned revision, adaptation details, and AGPL-3.0 license are in
+`src/vendor/amnezia/NOTICE.md` and `src/vendor/amnezia/LICENSE`.
+The combined Worker includes AGPL code; provide corresponding source for the
+version deployed. Keep the UI source link current when deploying a fork.

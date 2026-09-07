@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8" />
+    <meta name="amnezia-api" content="https://api.web2core.workers.dev/amnezia">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="style.css">
     <link rel="icon" type="image/png" href="favicon.png">
@@ -47,6 +48,7 @@
                     <button type="button" id="lblMihomo" data-core="mihomo" role="radio">Mihomo</button>
                     <button type="button" id="lblSing" data-core="singbox" role="radio">sing-box</button>
                     <button type="button" id="lblXray" data-core="xray" role="radio">Xray</button>
+                    <button type="button" id="lblAmnezia" data-core="amnezia" role="radio">Amnezia</button>
                 </div>
             </div>
             <div class="toolbar-actions">
@@ -59,6 +61,7 @@
                 </button>
             </div>
         </div>
+        <div id="proxyPanel">
         <div id="settingsPanel" class="settings-panel settings-panel--collapsed" inert>
             <div class="settings-panel__inner">
             <div class="settings-panel__chips">
@@ -194,6 +197,26 @@
                 </button>
             </div>
         </div>
+        </div>
+        <section id="amneziaPanel" class="hidden" aria-label="Amnezia WARP">
+            <div class="field-heading"><label for="amneziaDomain">Домен для I1</label></div>
+            <input id="amneziaDomain" class="input" type="text" value="www.google.com" placeholder="example.com" spellcheck="false" autocapitalize="off" autocomplete="off" aria-describedby="amneziaHint amneziaStatus">
+            <p id="amneziaHint" class="field-hint">SNI в пакете I1. Конфигурация для Cloudflare WARP.</p>
+            <div class="button-row amnezia-actions">
+                <button type="button" class="btn-primary" data-awg-version="1.5">Сгенерировать AWG 1.5</button>
+                <button type="button" class="btn-primary" data-awg-version="2.0">Сгенерировать AWG 2.0</button>
+            </div>
+            <p id="amneziaStatus" class="field-hint" role="status" aria-live="polite"></p>
+            <div id="amneziaOutput" class="hidden">
+                <div class="field-heading"><label for="amneziaConfig">Конфигурация</label><span id="amneziaFormat" class="field-meta"></span></div>
+                <textarea id="amneziaConfig" class="input" readonly spellcheck="false"></textarea>
+                <div class="button-row mt-8">
+                    <button id="amneziaCopy" type="button" class="circle-btn"><svg width="15" height="15" aria-hidden="true"><use href="#copy"></use></svg><span>Копировать</span></button>
+                    <button id="amneziaDownload" type="button" class="circle-btn"><svg width="15" height="15" aria-hidden="true"><use href="#download-file"></use></svg><span>Скачать .conf</span></button>
+                </div>
+            </div>
+            <p class="amnezia-credit"><a href="https://github.com/HereIamGosu/amnezia-config-gen" target="_blank" rel="noopener noreferrer">amnezia-config-gen</a> · <a href="https://github.com/dan0102dan/web4core" target="_blank" rel="noopener noreferrer">Исходный код</a> · <a href="vendor/amnezia/LICENSE">AGPL-3.0</a></p>
+        </section>
     </main>
     <footer class="site-footer">
         <a id="apiLink" class="api-link" href="https://api.web2core.workers.dev/" target="_blank" rel="noopener noreferrer">API docs <span aria-hidden="true">↗</span></a>

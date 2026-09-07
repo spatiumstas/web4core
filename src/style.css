@@ -124,3 +124,23 @@ input[type="submit"]:disabled { background: #2a2d34; border-color: #373a42; colo
 @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
+
+#amneziaPanel { margin-top: 26px; }
+.amnezia-actions { margin-top: 20px; justify-content: flex-start; flex-wrap: wrap; }
+.btn-primary { min-height: 44px; padding: 10px 18px; border: 1px solid #41444d; border-radius: 8px; background: var(--surface-raised); color: var(--text); font-size: 13px; font-weight: 500; }
+.btn-primary:hover:not(:disabled) { background: #30343d; border-color: #626773; }
+.btn-primary:disabled { opacity: .5; cursor: wait; }
+#amneziaStatus:empty { display: none; }
+#amneziaStatus.is-error { color: var(--error); }
+#amneziaOutput { border-top: 1px solid var(--border); padding-top: 24px; margin-top: 24px; }
+#amneziaConfig { height: 340px; min-height: 160px; }
+.amnezia-credit { margin: 20px 0 0; color: var(--muted); font-size: 11px; }
+.amnezia-credit a { text-decoration-color: var(--border); text-underline-offset: 3px; }
+.amnezia-credit a:hover { color: var(--text); }
+@media (max-width: 600px) {
+    .toolbar { flex-wrap: wrap; }
+    .toolbar .core-toggle { flex-basis: 100%; }
+    .toolbar-actions { margin-left: auto; }
+    .amnezia-actions { flex-direction: column; align-items: stretch; }
+    #amneziaConfig { height: 300px; }
+}

@@ -1,3 +1,4 @@
+import { setUrlTestMenuOpen } from './url-test-picker.js';
 import { el } from '../dom.js';
 import { state } from '../state.js';
 import { setSettingsVisibilityForCore } from './settings-panel.js';
@@ -31,9 +32,14 @@ export function setCore(core) {
         n.tabIndex = selected ? 0 : -1;
     });
 
-    setSettingsVisibilityForCore(core);
+    const amnezia = core === 'amnezia';
+    document.getElementById('proxyPanel')?.classList.toggle('hidden', amnezia);
+    document.getElementById('amneziaPanel')?.classList.toggle('hidden', !amnezia);
+    el.btnChevron?.parentElement?.classList.toggle('hidden', amnezia);
+    setUrlTestMenuOpen(false);
+    if (!amnezia) setSettingsVisibilityForCore(core);
 
-    if (core !== 'mihomo' && core !== 'singbox') {
+    if (core === 'xray') {
         resetWireGuardUploads();
     }
     updateWgButtonState(Array.isArray(state.wgBeans) ? state.wgBeans.length : 0);

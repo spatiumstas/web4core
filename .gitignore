@@ -1,3 +1,5 @@
 /src/ui.js
 /src/web4core.runtime.js
 /tested
+/node_modules/
+/workers/api/dist/

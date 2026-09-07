@@ -1,3 +1,4 @@
+import { initAmneziaPanel } from './components/amnezia-panel.js';
 import { el } from './dom.js';
 import { state } from './state.js';
 import { debounce } from './utils/dom-utils.js';
@@ -23,6 +24,7 @@ function initTextValidation() {
 
 function initApp() {
     initShortcuts();
+    initAmneziaPanel();
     initCoreToggle({ validateField, updatePlaceholder });
     initSettingsPanel({
         validateField,

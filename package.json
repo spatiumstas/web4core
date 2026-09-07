@@ -9,6 +9,11 @@
     "build:web:ui": "esbuild src/ui/app.js --bundle --format=iife --platform=browser --outfile=src/ui.js",
     "build:web": "npm run build:web:runtime && npm run build:web:ui",
     "build:worker": "esbuild workers/api/src/index.js --bundle --format=esm --platform=browser --loader:.md=text --outfile=workers/api/dist/worker.mjs",
-    "build": "npm run build:web && npm run build:worker"
+    "build": "npm run build:web && npm run build:worker",
+    "test:amnezia": "npm run build:worker && node --test tools/tests/amnezia.test.mjs"
+  },
+  "dependencies": {
+    "buffer": "^6.0.3",
+    "tweetnacl": "^1.0.3"
   }
 }

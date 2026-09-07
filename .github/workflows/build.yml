@@ -10,6 +10,17 @@ permissions:
   id-token: write
 
 jobs:
+  Validate-amnezia:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - run: npm ci --no-fund --no-audit
+      - run: npm run test:amnezia
+
   Validate-singbox:
     runs-on: ubuntu-latest
     steps:
@@ -39,7 +50,7 @@ jobs:
           LATEST_RELEASE=$(curl -s https://api.github.com/repos/SagerNet/sing-box/releases/latest)
           DOWNLOAD_URL=$(echo $LATEST_RELEASE | jq -r '.assets[] | select(.name | contains("linux-amd64.tar.gz")) | .browser_download_url')
           VERSION=$(echo $LATEST_RELEASE | jq -r '.tag_name')
-          
+
           echo "Downloading sing-box $VERSION from $DOWNLOAD_URL"
           wget -O sing-box.tar.gz "$DOWNLOAD_URL"
           tar -xzf sing-box.tar.gz
@@ -81,7 +92,7 @@ jobs:
           LATEST_RELEASE=$(curl -s https://api.github.com/repos/shtorm-7/sing-box-extended/releases/latest)
           DOWNLOAD_URL=$(echo $LATEST_RELEASE | jq -r '.assets[] | select(.name | contains("linux-amd64.tar.gz")) | .browser_download_url')
           VERSION=$(echo $LATEST_RELEASE | jq -r '.tag_name')
-          
+
           echo "Downloading sing-box extended $VERSION from $DOWNLOAD_URL"
           wget -O sing-box-extended.tar.gz "$DOWNLOAD_URL"
           tar -xzf sing-box-extended.tar.gz
@@ -127,7 +138,7 @@ jobs:
           LATEST_RELEASE=$(curl -s https://api.github.com/repos/XTLS/Xray-core/releases/latest)
           DOWNLOAD_URL=$(echo $LATEST_RELEASE | jq -r '.assets[] | select(.name == "Xray-linux-64.zip") | .browser_download_url')
           VERSION=$(echo $LATEST_RELEASE | jq -r '.tag_name')
-          
+
           echo "Downloading Xray $VERSION from $DOWNLOAD_URL"
           wget -O xray.zip "$DOWNLOAD_URL"
           rm -rf /tmp/xray && mkdir -p /tmp/xray
@@ -188,7 +199,7 @@ jobs:
 
   Build:
     runs-on: ubuntu-latest
-    needs: [ Validate-singbox, Validate-singbox-extended, Validate-xray, Validate-mihomo ]
+    needs: [ Validate-singbox, Validate-singbox-extended, Validate-xray, Validate-mihomo, Validate-amnezia ]
     if: github.ref == 'refs/heads/main'
 
     concurrency:
@@ -236,7 +247,7 @@ jobs:
   deploy-worker-api:
     name: Deploy Cloudflare Worker
     runs-on: ubuntu-latest
-    needs: [ Validate-singbox, Validate-singbox-extended, Validate-xray, Validate-mihomo ]
+    needs: [ Validate-singbox, Validate-singbox-extended, Validate-xray, Validate-mihomo, Validate-amnezia ]
     if: github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v7
