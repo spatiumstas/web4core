@@ -11,7 +11,6 @@ import { initGenerateController } from './controllers/generate.js';
 import { validateField } from './controllers/validation.js';
 import { initHeaderReload } from './effects/header-reload.js';
 import { initShortcuts } from './effects/shortcuts.js';
-import { initSnowfall } from './effects/snowfall.js';
 
 function updatePlaceholder() {
     updateLinksPlaceholder(getCore(), !!el.cbExtended?.checked);
@@ -36,7 +35,6 @@ function initApp() {
     initGenerateController();
     initTextValidation();
     initHeaderReload();
-    initSnowfall();
 
     state.core = getDefaultCore();
     setCore(state.core);

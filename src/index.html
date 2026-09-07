@@ -11,7 +11,6 @@
 
 <body>
     <nav class="site-nav" aria-label="Main navigation">
-        <a class="wordmark" href="./" aria-label="web4core home"><span class="brand-icon" aria-hidden="true">w4</span>web4core</a>
         <a id="apiLink" class="api-link" href="https://api.web2core.workers.dev/" target="_blank" rel="noopener noreferrer">API docs <span aria-hidden="true">↗</span></a>
     </nav>
     <header class="hero">
@@ -22,8 +21,7 @@
 | |/ |/ /  __/ /_/ /__  __/ /__/ /_/ / /  /  __/
 |__/|__/\___/_.___/  /_/  \___/\____/_/   \___/
     </pre></button>
-        <h1>Your connections. Configured.</h1>
-        <p>Turn your proxy links into a ready-to-use configuration.</p>
+        <h1 class="sr-only">web4core configuration generator</h1>
     </header>
     <svg xmlns="http://www.w3.org/2000/svg" style="display:none">
         <symbol id="copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
@@ -45,7 +43,6 @@
         </symbol>
     </svg>
     <main class="container container--stretch" aria-label="Configuration generator">
-        <div class="section-heading"><span class="eyebrow">CONFIGURATION</span><span class="section-note">Three cores. One workspace.</span></div>
         <div class="row row--left gap-12 toolbar">
             <div id="coreToggle" class="core-toggle" aria-label="Core selector" role="radiogroup">
                 <div class="knob" aria-hidden="true"></div>
@@ -67,7 +64,6 @@
         </div>
         <div id="settingsPanel" class="settings-panel settings-panel--collapsed" inert>
             <div class="settings-panel__inner">
-            <div class="settings-heading">Core settings <span>Fine-tune your configuration</span></div>
             <div class="settings-panel__chips">
                 <label class="custom-checkbox chip">
                     <input type="checkbox" id="cbSocks" checked />
@@ -174,19 +170,19 @@
         </div>
         </div>
         <div class="full source-field">
-            <div class="field-heading"><label for="links">Source links</label><span class="field-meta">INPUT</span></div>
+            <div class="field-heading"><label for="links">Source links</label></div>
             <textarea id="links" class="input full" aria-describedby="sourceHint errorText" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea>
-            <p id="sourceHint" class="field-hint">Paste a subscription URL or proxy links, one per line.</p>
+            <p id="sourceHint" class="field-hint">One URL or proxy link per line.</p>
         </div>
         <div id="errorBlock" class="row row--left" role="status" aria-live="polite">
             <div id="errorText"></div>
         </div>
         <div class="button-row generate-row">
-            <span class="shortcut-hint"><kbd id="shortcutModifier">Ctrl</kbd> <kbd>S</kbd> to generate</span>
+            <span class="shortcut-hint" title="Generate config" aria-label="Keyboard shortcut: Control or Command S"><kbd id="shortcutModifier">Ctrl</kbd> <kbd>S</kbd></span>
             <input type="submit" id="gen" value="Generate config" disabled />
         </div>
         <div id="outBlock" class="hidden full">
-            <div class="field-heading"><label for="out">Your configuration</label><span id="outputFormat" class="field-meta">OUTPUT</span></div>
+            <div class="field-heading"><label for="out">Configuration</label><span id="outputFormat" class="field-meta">OUTPUT</span></div>
             <textarea id="out" class="input full" readonly spellcheck="false"></textarea>
             <div class="button-row mt-8 full">
                 <button id="btnCopy" class="circle-btn" title="Copy" aria-label="Copy">
@@ -202,7 +198,6 @@
             </div>
         </div>
     </main>
-    <footer class="site-footer"><span>One input. Your preferred core.</span><span>Mihomo <span aria-hidden="true">/</span> sing-box <span aria-hidden="true">/</span> Xray</span></footer>
     <script src="web4core.runtime.js"></script>
     <script src="ui.js"></script>
 </body>
