@@ -114,7 +114,9 @@ AmneziaWG configuration. It does not provision an independent VPN server.
 without a scheme, port, or path. If omitted or blank, the generator chooses a
 hostname from the upstream TLS domain pool. The selected domain is returned
 in the response. It is encoded in TLS ClientHello SNI inside
-uppercase `I1`; the domain itself is never contacted. Both versions use the
+uppercase `I1`–`I5`. Each of the five packets is a separately randomized TLS
+ClientHello with the same SNI domain, in both AWG 1.5 and 2.0. The domain
+itself is never contacted. Both versions use the
 upstream WARP-compatible packet types and zero padding. The output routes IPv4
 traffic through WARP (`0.0.0.0/0`) and uses `engage.cloudflareclient.com:4500`.
 

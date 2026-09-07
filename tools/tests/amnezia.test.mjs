@@ -66,6 +66,21 @@ test('TLS lengths and SNI remain valid across random payloads and long domains',
     assert.notDeepEqual(generateTlsPayload('example.com'), generateTlsPayload('example.com'));
 });
 
+function assertCpsPackets(content, domain) {
+    const interfaceBlock = content.split('[Peer]')[0];
+    const fields = [...interfaceBlock.matchAll(/^I([1-5]) = <b 0x([a-f0-9]+)>$/gm)];
+    assert.deepEqual(fields.map(match => match[1]), ['1', '2', '3', '4', '5']);
+    assert.equal(new Set(fields.map(match => match[2])).size, 5, 'packets must have independent randomness');
+    for (const [, , hex] of fields) {
+        assert.equal(hex.length % 2, 0);
+        const packet = Buffer.from(hex, 'hex');
+        assert(packet.length <= 1000);
+        assert.equal(readSni(packet), domain);
+    }
+    assert(!/^i[1-5] = /m.test(content));
+    assert(!/^I[1-5] = /m.test(content.split('[Peer]')[1]));
+}
+
 for (const version of ['1.5', '2.0']) test(`AWG ${version}: registration, keys and WARP-safe config`, async () => {
     const calls = [];
     const result = await generateAmneziaConfig({ version, domain: 'example.com' }, fakeCloudflare(calls));
@@ -84,7 +99,7 @@ for (const version of ['1.5', '2.0']) test(`AWG ${version}: registration, keys a
     for (let n = 1; n <= (version === '2.0' ? 4 : 2); n++) assert.equal(fields['S'+n], '0');
     if (version === '1.5') assert.equal(fields.S3, undefined);
     else { assert(Number(fields.Jmin) >= 64); assert(Number(fields.Jmax) > Number(fields.Jmin)); assert(Number(fields.Jmax) <= 1024); }
-    assert.equal(readSni(Buffer.from(fields.I1.slice(5, -1), 'hex')), 'example.com');
+    assertCpsPackets(result.content, 'example.com');
     assert.equal(fields.i1, undefined);
     assert(!result.content.includes('test-token'));
     assert.equal(result.filename, `amnezia-awg-${version}.conf`);
@@ -112,7 +127,7 @@ test('Worker: CORS, body limits, validation and no-store responses', async () =>
         assert.equal(response.status, 200);
         assert.equal(response.headers.get('Cache-Control'), 'no-store');
         assert.equal(response.headers.get('Access-Control-Allow-Origin'), 'https://web2core.workers.dev');
-        assert((await response.json()).content.includes('I1 = <b 0x'));
+        assertCpsPackets((await response.json()).content, 'example.com');
     } finally { globalThis.fetch = originalFetch; }
 });
 
@@ -122,7 +137,14 @@ for (const version of ['1.5', '2.0']) test(`AWG ${version}: empty or omitted dom
         const result = await generateAmneziaConfig({ version, domain }, fakeCloudflare([]));
         assert.equal(normalizeAmneziaDomain(result.domain), result.domain);
         assert(result.domain.length > 0);
-        const i1 = result.content.match(/^I1 = <b 0x([a-f0-9]+)>$/m)[1];
-        assert.equal(readSni(Buffer.from(i1, 'hex')), result.domain);
+        assertCpsPackets(result.content, result.domain);
+    }
+});
+
+for (const version of ['1.5', '2.0']) test(`AWG ${version}: all five packets carry normalized IDN or long SNI`, async () => {
+    const longDomain = ['a'.repeat(63), 'b'.repeat(63), 'c'.repeat(63), 'd'.repeat(61)].join('.');
+    for (const domain of ['пример.рф', longDomain]) {
+        const result = await generateAmneziaConfig({ version, domain }, fakeCloudflare([]));
+        assertCpsPackets(result.content, normalizeAmneziaDomain(domain));
     }
 });

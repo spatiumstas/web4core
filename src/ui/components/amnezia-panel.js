@@ -51,7 +51,7 @@ export function initAmneziaPanel() {
             });
             const result = await response.json();
             if (!response.ok) throw new Error(result.error || 'Не удалось создать конфигурацию.');
-            if (typeof result.content !== 'string' || !result.content.startsWith('[Interface]') || !result.content.includes('\nI1 = ')) {
+            if (typeof result.content !== 'string' || !result.content.startsWith('[Interface]') || ![1, 2, 3, 4, 5].every(index => new RegExp(`^I${index} = <b 0x[0-9a-f]+>$`, 'm').test(result.content))) {
                 throw new Error('Сервер вернул некорректную конфигурацию.');
             }
             config.value = result.content;

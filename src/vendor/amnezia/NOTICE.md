@@ -12,7 +12,10 @@ configuration construction from `api/warp.js`.
 Changes for web4core: ESM, Web Crypto randomness, Workers fetch and timeouts,
 validated user-provided SNI, IPv4 full-tunnel output, no routing presets,
 no telemetry, and no endpoint probing. The original WARP-safe S/H values
-and uppercase I1 are preserved.
+and uppercase CPS field names are preserved. Both versions emit I1–I5 as
+independently randomized TLS ClientHello packets with the same SNI. This
+uses the adapted TLS generator for all five fields instead of the upstream
+optional I2–I5 random-byte packets (which do not carry a domain).
 
 These adapted modules are AGPL-3.0-only. The existing BSD notice is retained
 for original web4core code; it does not replace the AGPL terms for the

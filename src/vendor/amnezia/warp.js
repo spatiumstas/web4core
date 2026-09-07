@@ -9,7 +9,7 @@ import { generateTlsPayload, randomInt } from './tls.js';
 import { validateAmneziaRequest } from '../../core/amnezia.js';
 
 const API = 'https://api.cloudflareclient.com/v0i1909051800/';
-const DEFAULT_I1_DOMAINS = ['www.google.com', 'cloudflare.com', 'discord.com', 'api.telegram.org', 'youtube.com'];
+const DEFAULT_CPS_DOMAINS = ['www.google.com', 'cloudflare.com', 'discord.com', 'api.telegram.org', 'youtube.com'];
 const FALLBACK_PEER = 'bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo=';
 
 export function buildAmneziaConfig({ version, domain, privateKey, peerKey, address }) {
@@ -23,8 +23,13 @@ export function buildAmneziaConfig({ version, domain, privateKey, peerKey, addre
     ];
     if (version === '2.0') lines.push('S3 = 0', 'S4 = 0');
     // Cloudflare is a stock WireGuard peer: retain packet types 1..4 and zero padding.
-    lines.push('H1 = 1', 'H2 = 2', 'H3 = 3', 'H4 = 4',
-        `I1 = <b 0x${generateTlsPayload(domain).toString('hex')}>`, '', '[Peer]',
+    lines.push('H1 = 1', 'H2 = 2', 'H3 = 3', 'H4 = 4');
+    // Both AWG 1.5 and 2.0 support I1–I5. Each packet has its own TLS
+    // randomness, while SNI consistently uses the requested/selected domain.
+    for (let index = 1; index <= 5; index++) {
+        lines.push(`I${index} = <b 0x${generateTlsPayload(domain).toString('hex')}>`);
+    }
+    lines.push('', '[Peer]',
         `PublicKey = ${peerKey}`, 'AllowedIPs = 0.0.0.0/0',
         'Endpoint = engage.cloudflareclient.com:4500', 'PersistentKeepalive = 25', '');
     return lines.join('\n');
@@ -32,7 +37,7 @@ export function buildAmneziaConfig({ version, domain, privateKey, peerKey, addre
 
 export async function generateAmneziaConfig(body, fetchFn = fetch) {
     const { version, domain: requestedDomain } = validateAmneziaRequest(body);
-    const domain = requestedDomain || DEFAULT_I1_DOMAINS[randomInt(0, DEFAULT_I1_DOMAINS.length)];
+    const domain = requestedDomain || DEFAULT_CPS_DOMAINS[randomInt(0, DEFAULT_CPS_DOMAINS.length)];
     const keys = nacl.box.keyPair.fromSecretKey(crypto.getRandomValues(new Uint8Array(32)));
     const privateKey = Buffer.from(keys.secretKey).toString('base64');
     const publicKey = Buffer.from(keys.publicKey).toString('base64');
