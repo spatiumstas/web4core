@@ -6,6 +6,8 @@ export const el = {
     errorText: document.getElementById('errorText'),
     links: document.getElementById('links'),
     tunName: document.getElementById('tunName'),
+    mihomoExcludeFilter: document.getElementById('mihomoExcludeFilter'),
+    mihomoExcludeFilterField: document.getElementById('mihomoExcludeFilterField'),
     urlTestButton: document.getElementById('urlTestButton'),
     urlTestMenu: document.getElementById('urlTestMenu'),
     gen: document.getElementById('gen'),

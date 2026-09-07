@@ -3,6 +3,7 @@ function toYamlScalar(value, key) {
     if (typeof value === 'boolean') return value ? 'true' : 'false';
     if (typeof value === 'number') return String(value);
     const s = String(value);
+    if (key === 'exclude-filter') return JSON.stringify(s);
     if (key === 'grpc-service-name') {
         return '"' + s.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
     }

@@ -26,7 +26,12 @@ export function setSingboxPerProxyTunVisible(visible) {
     toggleHidden(el.lblPerTunMixed, !show);
 }
 
+function syncExcludeFilterVisibility(core = state.core) {
+    toggleHidden(el.mihomoExcludeFilterField, core !== 'mihomo' || !el.cbMihomoSub?.checked);
+}
+
 export function setSettingsVisibilityForCore(core) {
+    syncExcludeFilterVisibility(core);
     const hideSing = core !== 'singbox';
     toggleHidden(el.cbTun?.parentElement, hideSing);
     toggleHidden(el.cbSocks?.parentElement, hideSing);
@@ -52,11 +57,17 @@ export function setSettingsVisibilityForCore(core) {
 }
 
 export function initSettingsPanel({ validateField, updatePlaceholder, closeUrlTestMenu }) {
+    el.cbMihomoSub?.addEventListener('change', () => syncExcludeFilterVisibility());
+    el.mihomoExcludeFilter?.addEventListener('input', () => {
+        el.outBlock?.classList.add('hidden');
+        validateField(false);
+    });
     if (el.btnChevron && el.settingsPanel) {
         el.btnChevron.addEventListener('click', () => {
             if (state.urlTestMenuOpen) closeUrlTestMenu?.();
             const collapsed = el.settingsPanel.classList.toggle('settings-panel--collapsed');
             el.btnChevron.setAttribute('aria-expanded', String(!collapsed));
+            el.settingsPanel.inert = collapsed;
         });
     }
 
