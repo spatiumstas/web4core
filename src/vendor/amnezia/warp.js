@@ -9,6 +9,7 @@ import { generateTlsPayload, randomInt } from './tls.js';
 import { validateAmneziaRequest } from '../../core/amnezia.js';
 
 const API = 'https://api.cloudflareclient.com/v0i1909051800/';
+const DEFAULT_I1_DOMAINS = ['www.google.com', 'cloudflare.com', 'discord.com', 'api.telegram.org', 'youtube.com'];
 const FALLBACK_PEER = 'bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo=';
 
 export function buildAmneziaConfig({ version, domain, privateKey, peerKey, address }) {
@@ -30,7 +31,8 @@ export function buildAmneziaConfig({ version, domain, privateKey, peerKey, addre
 }
 
 export async function generateAmneziaConfig(body, fetchFn = fetch) {
-    const { version, domain } = validateAmneziaRequest(body);
+    const { version, domain: requestedDomain } = validateAmneziaRequest(body);
+    const domain = requestedDomain || DEFAULT_I1_DOMAINS[randomInt(0, DEFAULT_I1_DOMAINS.length)];
     const keys = nacl.box.keyPair.fromSecretKey(crypto.getRandomValues(new Uint8Array(32)));
     const privateKey = Buffer.from(keys.secretKey).toString('base64');
     const publicKey = Buffer.from(keys.publicKey).toString('base64');

@@ -52,7 +52,7 @@
                 </div>
             </div>
             <div class="toolbar-actions">
-                <button id="btnChevron" class="chevron-toggle" type="button" aria-label="Settings" aria-expanded="false"
+                <button id="btnChevron" class="chevron-toggle" type="button" aria-label="Settings" title="Settings" aria-expanded="false"
                     aria-controls="settingsPanel">
                     <span>Settings</span>
                     <svg width="18" height="18" aria-hidden="true">
@@ -199,9 +199,8 @@
         </div>
         </div>
         <section id="amneziaPanel" class="hidden" aria-label="Amnezia WARP">
-            <div class="field-heading"><label for="amneziaDomain">Домен для I1</label></div>
-            <input id="amneziaDomain" class="input" type="text" value="www.google.com" placeholder="example.com" spellcheck="false" autocapitalize="off" autocomplete="off" aria-describedby="amneziaHint amneziaStatus">
-            <p id="amneziaHint" class="field-hint">SNI в пакете I1. Конфигурация для Cloudflare WARP.</p>
+            <div class="field-heading"><label for="amneziaDomain">Домен для I1–I5</label></div>
+            <input id="amneziaDomain" class="input" type="text" placeholder="github.com (необязательно)" spellcheck="false" autocapitalize="off" autocomplete="off" aria-describedby="amneziaStatus">
             <div class="button-row amnezia-actions">
                 <button type="button" class="btn-primary" data-awg-version="1.5">Сгенерировать AWG 1.5</button>
                 <button type="button" class="btn-primary" data-awg-version="2.0">Сгенерировать AWG 2.0</button>
@@ -215,7 +214,7 @@
                     <button id="amneziaDownload" type="button" class="circle-btn"><svg width="15" height="15" aria-hidden="true"><use href="#download-file"></use></svg><span>Скачать .conf</span></button>
                 </div>
             </div>
-            <p class="amnezia-credit"><a href="https://github.com/HereIamGosu/amnezia-config-gen" target="_blank" rel="noopener noreferrer">amnezia-config-gen</a> · <a href="https://github.com/dan0102dan/web4core" target="_blank" rel="noopener noreferrer">Исходный код</a> · <a href="vendor/amnezia/LICENSE">AGPL-3.0</a></p>
+            <p class="amnezia-credit"><a href="https://github.com/HereIamGosu/amnezia-config-gen" target="_blank" rel="noopener noreferrer">Исходный код</a></p>
         </section>
     </main>
     <footer class="site-footer">

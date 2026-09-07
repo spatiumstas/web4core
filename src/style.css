@@ -37,14 +37,20 @@ main.container { width: calc(100% - 40px); max-width: var(--form-max); margin: 0
 .field-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .field-meta { font: 10px var(--mono); letter-spacing: 1.5px; color: var(--muted); }
 .row, .button-row { display: flex; align-items: center; gap: 12px; }
-.toolbar { justify-content: space-between; }
-.toolbar-actions { flex-shrink: 0; }
-.core-toggle { --core-count: 3; --core-index: 0; position: relative; display: grid; grid-template-columns: repeat(var(--core-count), 1fr); flex: 1; height: 46px; padding: 4px; border: 1px solid #292b30; border-radius: 10px; background: var(--bg-dark); }
+.toolbar { --settings-width: 106px; --toolbar-gap: 12px; --settings-space: calc(var(--settings-width) + var(--toolbar-gap)); position: relative; justify-content: space-between; gap: var(--toolbar-gap); transition: gap .28s var(--ease); }
+.toolbar.toolbar--without-settings { --settings-space: 0px; gap: 0; }
+.toolbar-actions { flex-shrink: 0; width: var(--settings-width); overflow: hidden; opacity: 1; visibility: visible; transition: width .28s var(--ease), opacity .18s ease, visibility 0s; }
+.toolbar-actions .chevron-toggle { width: var(--settings-width); justify-content: center; white-space: nowrap; }
+.toolbar-actions .chevron-toggle:focus-visible { outline-offset: -3px; }
+.toolbar--without-settings .toolbar-actions { width: 0; opacity: 0; visibility: hidden; transition: width .28s var(--ease), opacity .18s ease, visibility 0s .28s; }
+.core-toggle { --core-count: 3; --core-index: 0; display: grid; grid-template-columns: repeat(var(--core-count), 1fr); flex: 1; height: 46px; padding: 4px; border: 1px solid #292b30; border-radius: 10px; background: var(--bg-dark); }
 .core-toggle .labels { display: contents; }
 .core-toggle .labels button { z-index: 1; background: transparent; border: 0; border-radius: 6px; color: var(--muted); font-size: 13px; font-weight: 550; padding: 0 8px; }
 .core-toggle .labels button:hover { color: var(--text); }
 .core-toggle .labels button[aria-checked="true"] { color: var(--text); }
-.core-toggle .knob { position: absolute; top: 4px; bottom: 4px; width: calc((100% - 8px) / var(--core-count)); left: 4px; transform: translateX(calc(var(--core-index) * 100%)); border: 1px solid #3a3c42; background: #292b30; border-radius: 6px; box-shadow: 0 2px 4px #0002; transition: transform .18s ease-out; }
+/* Anchor the indicator to the stable toolbar, so its target geometry does not
+   change every frame while the core selector expands or contracts. */
+.core-toggle .knob { position: absolute; top: 5px; bottom: 5px; width: calc((100% - var(--settings-space) - 10px) / var(--core-count)); left: calc(5px + (100% - var(--settings-space) - 10px) * var(--core-index) / var(--core-count)); border: 1px solid #3a3c42; background: #292b30; border-radius: 6px; box-shadow: 0 2px 4px #0002; transition: left .28s var(--ease), width .28s var(--ease); }
 .chevron-toggle { height: 46px; display: flex; align-items: center; gap: 9px; padding: 0 14px; border: 1px solid var(--border); border-radius: 10px; background: transparent; color: #babdc5; font-size: 13px; }
 .chevron-toggle:hover, .chevron-toggle[aria-expanded="true"] { background: var(--surface-raised); color: var(--text); border-color: #454851; }
 .chevron-toggle svg, .probe-picker__chevron { transition: transform .18s ease-out; }
@@ -108,7 +114,7 @@ input[type="submit"]:disabled { background: #2a2d34; border-color: #373a42; colo
 @media (max-width: 600px) {
     .hero { padding: 36px 16px 24px; }
     main.container { width: calc(100% - 24px); padding: 20px 16px; border-radius: 14px; }
-    .toolbar { gap: 8px; }
+    .toolbar { --settings-width: 90px; --toolbar-gap: 8px; }
     .chevron-toggle { padding: 0 10px; gap: 5px; font-size: 12px; }
     .core-toggle .labels button { font-size: 12px; padding: 0 4px; }
     .custom-checkbox { min-height: 40px; }
@@ -138,9 +144,15 @@ input[type="submit"]:disabled { background: #2a2d34; border-color: #373a42; colo
 .amnezia-credit a { text-decoration-color: var(--border); text-underline-offset: 3px; }
 .amnezia-credit a:hover { color: var(--text); }
 @media (max-width: 600px) {
-    .toolbar { flex-wrap: wrap; }
-    .toolbar .core-toggle { flex-basis: 100%; }
-    .toolbar-actions { margin-left: auto; }
+    .toolbar { flex-wrap: nowrap; }
+    .toolbar .core-toggle { min-width: 0; }
+    .core-toggle .labels button { min-width: 0; padding: 0 2px; }
     .amnezia-actions { flex-direction: column; align-items: stretch; }
     #amneziaConfig { height: 300px; }
+}
+
+@media (max-width: 400px) {
+    .toolbar { --settings-width: 44px; }
+    .chevron-toggle { width: 44px; justify-content: center; padding: 0; }
+    .chevron-toggle span { display: none; }
 }

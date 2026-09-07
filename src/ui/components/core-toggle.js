@@ -35,7 +35,9 @@ export function setCore(core) {
     const amnezia = core === 'amnezia';
     document.getElementById('proxyPanel')?.classList.toggle('hidden', amnezia);
     document.getElementById('amneziaPanel')?.classList.toggle('hidden', !amnezia);
-    el.btnChevron?.parentElement?.classList.toggle('hidden', amnezia);
+    const toolbarActions = el.btnChevron?.parentElement;
+    if (toolbarActions) toolbarActions.inert = amnezia;
+    el.coreToggle?.closest('.toolbar')?.classList.toggle('toolbar--without-settings', amnezia);
     setUrlTestMenuOpen(false);
     if (!amnezia) setSettingsVisibilityForCore(core);
 

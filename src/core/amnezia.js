@@ -1,8 +1,10 @@
 // Shared request validation. Domains become SNI bytes only; they are never fetched.
 export function normalizeAmneziaDomain(value) {
+    if (value == null) return '';
     if (typeof value !== 'string') throw new Error('Укажите домен для I1.');
     const raw = value.trim();
-    if (!raw || /[\s/:@?#\\]/u.test(raw)) throw new Error('Введите домен без протокола, порта и пути.');
+    if (!raw) return '';
+    if (/[\s/:@?#\\]/u.test(raw)) throw new Error('Введите домен без протокола, порта и пути.');
     let domain;
     try { domain = new URL(`https://${raw}`).hostname.replace(/\.$/, ''); }
     catch { throw new Error('Некорректный домен.'); }

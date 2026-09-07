@@ -49,7 +49,7 @@ function fakeCloudflare(calls) {
 test('domain validation normalizes IDN and rejects URLs, IPs and config injection', () => {
     assert.equal(normalizeAmneziaDomain(' Example.COM. '), 'example.com');
     assert.equal(normalizeAmneziaDomain('пример.рф'), 'xn--e1afmkfd.xn--p1ai');
-    for (const value of ['', 'https://example.com', 'example.com:443', 'example.com/path',
+    for (const value of ['https://example.com', 'example.com:443', 'example.com/path',
         'a@b.com', '127.0.0.1', '[::1]', 'localhost', '-a.com', 'a..com', 'a'.repeat(64)+'.com',
         'a.com\nPrivateKey = bad']) assert.throws(() => normalizeAmneziaDomain(value));
 });
@@ -114,4 +114,15 @@ test('Worker: CORS, body limits, validation and no-store responses', async () =>
         assert.equal(response.headers.get('Access-Control-Allow-Origin'), 'https://web2core.workers.dev');
         assert((await response.json()).content.includes('I1 = <b 0x'));
     } finally { globalThis.fetch = originalFetch; }
+});
+
+for (const version of ['1.5', '2.0']) test(`AWG ${version}: empty or omitted domain selects valid SNI automatically`, async () => {
+    for (const domain of [undefined, null, '', '   ']) {
+        assert.equal(normalizeAmneziaDomain(domain), '');
+        const result = await generateAmneziaConfig({ version, domain }, fakeCloudflare([]));
+        assert.equal(normalizeAmneziaDomain(result.domain), result.domain);
+        assert(result.domain.length > 0);
+        const i1 = result.content.match(/^I1 = <b 0x([a-f0-9]+)>$/m)[1];
+        assert.equal(readSni(Buffer.from(i1, 'hex')), result.domain);
+    }
 });
