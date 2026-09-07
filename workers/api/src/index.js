@@ -1,7 +1,7 @@
+import { handleAmnezia } from './amnezia.js';
 const CONFIG = {
   ALLOWED_ORIGINS: [
-    'https://web2core.workers.dev',
-    'https://api.web2core.workers.dev',
+    'https://spatiumstas.github.io',
   ],
   SUBSCRIPTION_TIMEOUT: 15000,
   MAX_PAYLOAD_SIZE: 1024 * 1024,
@@ -41,6 +41,19 @@ import README_MD from '../README.md';
 
 const ALLOWED_ORIGINS = new Set(CONFIG.ALLOWED_ORIGINS);
 
+function isAllowedOrigin(origin) {
+  if (ALLOWED_ORIGINS.has(origin)) return true;
+  try {
+    const url = new URL(origin);
+    return url.protocol === 'https:' && (
+      url.hostname === 'web2core.workers.dev' ||
+      url.hostname.endsWith('.web2core.workers.dev')
+    );
+  } catch {
+    return false;
+  }
+}
+
 function corsHeadersFor(origin) {
   const headers = {
     'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
@@ -49,7 +62,7 @@ function corsHeadersFor(origin) {
     'Vary': 'Origin',
   };
   if (!origin) return headers;
-  if (ALLOWED_ORIGINS.has(origin)) headers['Access-Control-Allow-Origin'] = origin;
+  if (isAllowedOrigin(origin)) headers['Access-Control-Allow-Origin'] = origin;
   return headers;
 }
 
@@ -129,14 +142,14 @@ function text(body, contentType, status = 200, extraHeaders = {}) {
 }
 
 export default {
-  async fetch(request) {
+  async fetch(request, env) {
     const url = new URL(request.url);
     const originHeader = request.headers.get('Origin');
     const origin = originHeader === 'null' ? '' : (originHeader || '');
     const cors = corsHeadersFor(origin);
 
     if (request.method === 'OPTIONS') {
-      if (origin && !ALLOWED_ORIGINS.has(origin)) {
+      if (origin && !isAllowedOrigin(origin)) {
         return new Response(null, { status: 403, headers: cors });
       }
       return new Response(null, { status: 204, headers: cors });
@@ -150,7 +163,8 @@ export default {
     }
 
     if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405, cors);
-    if (origin && !ALLOWED_ORIGINS.has(origin)) return json({ error: 'CORS origin not allowed' }, 403, cors);
+    if (origin && !isAllowedOrigin(origin)) return json({ error: 'CORS origin not allowed' }, 403, cors);
+    if (url.pathname === '/amnezia') return handleAmnezia(request, cors, env);
     if (url.pathname !== '/api' && url.pathname !== '/') return json({ error: 'Not found' }, 404, cors);
 
     const contentType = request.headers.get('Content-Type') || '';
@@ -192,5 +206,3 @@ export default {
     }
   },
 };
-
-

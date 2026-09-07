@@ -1,3 +1,4 @@
+import { setUrlTestMenuOpen } from './url-test-picker.js';
 import { el } from '../dom.js';
 import { state } from '../state.js';
 import { setSettingsVisibilityForCore } from './settings-panel.js';
@@ -31,17 +32,40 @@ export function setCore(core) {
         n.tabIndex = selected ? 0 : -1;
     });
 
-    setSettingsVisibilityForCore(core);
+    const amnezia = core === 'amnezia';
+    document.getElementById('proxyPanel')?.classList.toggle('hidden', amnezia);
+    document.getElementById('amneziaPanel')?.classList.toggle('hidden', !amnezia);
+    const toolbarActions = el.btnChevron?.parentElement;
+    if (toolbarActions) toolbarActions.inert = amnezia;
+    el.coreToggle?.closest('.toolbar')?.classList.toggle('toolbar--without-settings', amnezia);
+    setUrlTestMenuOpen(false);
+    if (!amnezia) setSettingsVisibilityForCore(core);
 
-    if (core !== 'mihomo' && core !== 'singbox') {
+    if (core === 'xray') {
         resetWireGuardUploads();
     }
     updateWgButtonState(Array.isArray(state.wgBeans) ? state.wgBeans.length : 0);
 }
 
 export function initCoreToggle({ validateField, updatePlaceholder }) {
+    el.coreToggle?.addEventListener('keydown', (event) => {
+        const items = el.coreItems;
+        const index = items.indexOf(document.activeElement);
+        if (index < 0) return;
+        let next;
+        if (event.key === 'ArrowRight' || event.key === 'ArrowDown') next = (index + 1) % items.length;
+        if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') next = (index - 1 + items.length) % items.length;
+        if (event.key === 'Home') next = 0;
+        if (event.key === 'End') next = items.length - 1;
+        if (next === undefined) return;
+        event.preventDefault();
+        setCore(items[next].dataset.core);
+        items[next].focus();
+        updatePlaceholder();
+        validateField(false);
+    });
     el.coreToggle?.addEventListener('click', (e) => {
-        const target = e.target?.closest?.('[data-core]');
+        const target = e.target?.closest?.('[role="radio"][data-core]');
         const core = target?.dataset?.core || '';
         if (!core) return;
         e.stopPropagation();
