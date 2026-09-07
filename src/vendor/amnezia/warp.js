@@ -53,8 +53,8 @@ export async function generateAmneziaConfig(body, fetchFn = fetch) {
         });
         if (!response.ok) {
             const error = new Error(response.status === 429
-                ? 'Cloudflare ограничил запросы. Попробуйте позже.'
-                : 'Не удалось получить конфигурацию от Cloudflare. Попробуйте позже.');
+                ? 'Cloudflare rate limit reached. Please try again later.'
+                : 'Could not retrieve the configuration from Cloudflare. Please try again later.');
             error.status = response.status === 429 ? 429 : 502;
             throw error;
         }
@@ -66,7 +66,7 @@ export async function generateAmneziaConfig(body, fetchFn = fetch) {
             fcm_token: '', type: 'ios', locale: 'en_US',
         });
         const { id, token, config: initialConfig } = registration.result || {};
-        if (!id || typeof token !== 'string' || !token) throw new Error('Некорректный ответ регистрации Cloudflare.');
+        if (!id || typeof token !== 'string' || !token) throw new Error('Invalid registration response from Cloudflare.');
         const activated = await request('PATCH', `reg/${encodeURIComponent(id)}`, { warp_enabled: true }, token);
         const config = activated.result?.config || initialConfig;
         const address = config?.interface?.addresses?.v4;
@@ -74,14 +74,14 @@ export async function generateAmneziaConfig(body, fetchFn = fetch) {
         if (typeof address !== 'string' || !/^\d{1,3}(\.\d{1,3}){3}$/.test(address) ||
             address.split('.').some(n => Number(n) > 255) ||
             !/^[A-Za-z0-9+/]{43}=$/.test(peerKey) || !config?.peers?.length) {
-            throw new Error('Cloudflare вернул неполную конфигурацию.');
+            throw new Error('Cloudflare returned an incomplete configuration.');
         }
         return {
             content: buildAmneziaConfig({ version, domain, privateKey, peerKey, address }),
             filename: `amnezia-awg-${version}.conf`, version, domain,
         };
     } catch (error) {
-        if (controller.signal.aborted) throw new Error('Cloudflare не ответил вовремя. Попробуйте ещё раз.');
+        if (controller.signal.aborted) throw new Error('Cloudflare request timed out. Please try again.');
         throw error;
     } finally { clearTimeout(timer); }
 }

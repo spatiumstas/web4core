@@ -39,7 +39,7 @@ export function initAmneziaPanel() {
         panel.setAttribute('aria-busy', 'true');
         output.classList.add('hidden');
         config.value = '';
-        setStatus('Генерация…');
+        setStatus('Generating…');
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 30000);
         try {
@@ -50,9 +50,9 @@ export function initAmneziaPanel() {
                 signal: controller.signal, cache: 'no-store', credentials: 'omit',
             });
             const result = await response.json();
-            if (!response.ok) throw new Error(result.error || 'Не удалось создать конфигурацию.');
+            if (!response.ok) throw new Error(result.error || 'Could not generate the configuration.');
             if (typeof result.content !== 'string' || !result.content.startsWith('[Interface]') || ![1, 2, 3, 4, 5].every(index => new RegExp(`^I${index} = <b 0x[0-9a-f]+>$`, 'm').test(result.content))) {
-                throw new Error('Сервер вернул некорректную конфигурацию.');
+                throw new Error('The server returned an invalid configuration.');
             }
             config.value = result.content;
             filename = `amnezia-awg-${button.dataset.awgVersion}.conf`;
@@ -61,9 +61,9 @@ export function initAmneziaPanel() {
             setStatus();
             if (!panel.classList.contains('hidden')) config.focus({ preventScroll: true });
         } catch (error) {
-            setStatus(error.name === 'AbortError' ? 'Время ожидания истекло. Попробуйте ещё раз.'
+            setStatus(error.name === 'AbortError' ? 'Request timed out. Please try again.'
                 : error instanceof TypeError || error instanceof SyntaxError
-                    ? 'API недоступен. Проверьте подключение и попробуйте ещё раз.' : error.message, true);
+                    ? 'API unavailable. Check your connection and try again.' : error.message, true);
         } finally {
             clearTimeout(timeout);
             pending = false;
@@ -81,8 +81,8 @@ export function initAmneziaPanel() {
                 config.select();
                 if (!document.execCommand('copy')) throw new Error('copy failed');
             }
-            setStatus('Скопировано.');
-        } catch { setStatus('Не удалось скопировать. Выделите и скопируйте конфигурацию вручную.', true); }
+            setStatus('Copied.');
+        } catch { setStatus('Could not copy. Select and copy the configuration manually.', true); }
     });
     document.getElementById('amneziaDownload').addEventListener('click', () => {
         if (!config.value) return;

@@ -109,8 +109,8 @@ test('invalid input never registers a device; upstream errors and malformed conf
     let called = false;
     await assert.rejects(generateAmneziaConfig({ version: '3', domain: 'example.com' }, () => { called = true; }));
     assert.equal(called, false);
-    await assert.rejects(generateAmneziaConfig({ version: '2.0', domain: 'example.com' }, async()=>new Response('', {status:429})), /ограничил/);
-    await assert.rejects(generateAmneziaConfig({ version: '2.0', domain: 'example.com' }, async()=>Response.json({result:{id:'id',token:'token',config:{}}})), /неполную/);
+    await assert.rejects(generateAmneziaConfig({ version: '2.0', domain: 'example.com' }, async()=>new Response('', {status:429})), /rate limit/);
+    await assert.rejects(generateAmneziaConfig({ version: '2.0', domain: 'example.com' }, async()=>Response.json({result:{id:'id',token:'token',config:{}}})), /incomplete/);
 });
 
 test('Worker: CORS, body limits, validation and no-store responses', async () => {
