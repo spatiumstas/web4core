@@ -2,6 +2,10 @@ name = "api"
 main = "dist/worker.mjs"
 compatibility_date = "2025-01-01"
 
+[[services]]
+binding = "JUNK"
+service = "junk"
+
 [observability]
 enabled = true
 

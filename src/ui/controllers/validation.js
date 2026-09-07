@@ -151,6 +151,7 @@ function validateMihomoSubscriptionMode(raw, showOutput, options) {
 }
 
 export function validateField(showOutput) {
+    if (getCore() === 'amnezia') return false;
     const raw = el.links?.value || '';
     const hasText = !!raw.trim();
     const core = getCore();
