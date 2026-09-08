@@ -57,8 +57,9 @@ main.container { width: calc(100% - 40px); max-width: var(--form-max); margin: 0
 .chevron-toggle[aria-expanded="true"] svg, .probe-picker__button[aria-expanded="true"] svg { transform: rotate(180deg); }
 .settings-panel { display: grid; grid-template-rows: 1fr; opacity: 1; transition: grid-template-rows .18s ease-out, opacity .15s; }
 .settings-panel--collapsed { grid-template-rows: 0fr; opacity: 0; pointer-events: none; }
-.settings-panel__inner { min-height: 0; overflow: hidden; }
-.settings-panel__chips { display: flex; flex-wrap: wrap; gap: 8px; padding: 20px 4px 4px; margin: 0 -4px -4px; }
+.settings-panel__inner { min-width: 0; min-height: 0; overflow: hidden; }
+.settings-panel__chips { position: relative; display: flex; flex-wrap: nowrap; align-items: center; gap: 6px; padding: 20px 4px 5px; margin: 0 -4px -5px; overflow-x: auto; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+.settings-panel__chips > .custom-checkbox, .settings-panel__chips > .probe-picker { flex: 0 0 auto; white-space: nowrap; }
 .custom-checkbox { position: relative; display: inline-flex; align-items: center; gap: 7px; min-height: 36px; padding: 7px 10px; border: 1px solid var(--border); border-radius: 7px; color: #b9bcc5; background: transparent; cursor: pointer; user-select: none; font-size: 12px; }
 .custom-checkbox:hover { background: #26282d; border-color: #51555e; }
 .custom-checkbox input { position: absolute; width: 1px; height: 1px; opacity: 0; }
@@ -155,4 +156,11 @@ input[type="submit"]:disabled { background: #2a2d34; border-color: #373a42; colo
     .toolbar { --settings-width: 44px; }
     .chevron-toggle { width: 44px; justify-content: center; padding: 0; }
     .chevron-toggle span { display: none; }
+}
+
+.settings-filter { flex: 1 1 128px; min-width: 112px; max-width: 160px; }
+.settings-filter .input { height: 36px; padding: 7px 10px; border-radius: 7px; font-size: 12px; }
+@media (max-width: 600px) {
+    .settings-filter { flex: 0 0 150px; }
+    .settings-filter .input { height: 40px; font-size: 16px; }
 }

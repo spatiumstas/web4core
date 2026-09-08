@@ -51,6 +51,7 @@ function getFormOptions(core) {
 
     return {
         tunName: el.tunName?.value.trim() || '',
+        excludeFilter: core === 'mihomo' ? el.mihomoExcludeFilter?.value.trim() || '' : '',
         addTun,
         addSocks,
         genClashSecret: !!el.cbClashSecret?.checked,
@@ -131,6 +132,7 @@ function validateMihomoSubscriptionMode(raw, showOutput, options) {
         addSocks: options.mihomoSocksEnabled,
         perProxyPort,
         perProxyListeners: perProxyPort || options.mihomoPerProxyTun,
+        excludeFilter: options.excludeFilter,
         urlTest: options.urlTest,
     });
     if (!config) throw new Error('Failed to build subscription config');
@@ -221,6 +223,7 @@ export function validateField(showOutput) {
                 mihomoPerProxyTun: options.mihomoPerProxyTun,
                 perProxyPort: !!el.cbMihomoPerProxyPort?.checked,
                 mihomoSubscriptionMode: isMihomoSubscriptionMode(),
+                excludeFilter: options.excludeFilter,
                 urlTest: options.urlTest,
             },
         });
