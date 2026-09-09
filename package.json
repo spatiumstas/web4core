@@ -11,5 +11,8 @@
     "build:worker": "esbuild workers/api/src/index.js --bundle --format=esm --platform=browser --loader:.md=text --outfile=workers/api/dist/worker.mjs",
     "build": "npm run build:web && npm run build:worker",
     "test:amnezia": "npm run build:worker && node --test tools/tests/amnezia.test.mjs"
+  },
+  "dependencies": {
+    "qrcode": "^1.5.4"
   }
 }

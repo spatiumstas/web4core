@@ -205,13 +205,25 @@
         <section id="amneziaPanel" class="hidden" aria-label="Amnezia WARP">
             <div class="field-heading"><label for="amneziaDomain">I1–I5 domain</label></div>
             <input id="amneziaDomain" class="input" type="text" placeholder="github.com (optional)" spellcheck="false" autocapitalize="off" autocomplete="off" aria-describedby="amneziaStatus">
-            <div class="button-row amnezia-actions">
-                <button type="button" class="btn-primary" data-awg-version="1.5">Generate AWG 1.5</button>
-                <button type="button" class="btn-primary" data-awg-version="2.0">Generate AWG 2.0</button>
-                <button type="button" class="btn-primary" data-awg-version="3.0">Generate AWG 3.0</button>
-                <button type="button" class="btn-primary" data-awg-version="3.1" aria-describedby="amneziaExperimental">Generate AWG 3.1</button>
+            <div class="button-row generate-row amnezia-actions">
+                <div class="amnezia-version">
+                    <div class="field-heading"><label id="amneziaVersionLabel" for="amneziaVersion">AWG version</label></div>
+                    <div class="probe-picker" id="amneziaVersionPicker">
+                        <button id="amneziaVersion" type="button" value="2.0" class="custom-checkbox probe-picker__button" aria-haspopup="menu" aria-expanded="false" aria-controls="amneziaVersionMenu" aria-labelledby="amneziaVersionLabel amneziaVersionText" aria-describedby="amneziaExperimental">
+                            <span id="amneziaVersionText">AWG 2.0</span>
+                            <svg class="probe-picker__chevron" width="16" height="16" aria-hidden="true"><use href="#chevron-down"></use></svg>
+                        </button>
+                        <div id="amneziaVersionMenu" class="probe-menu hidden" role="menu" aria-labelledby="amneziaVersionLabel">
+                            <button type="button" class="probe-menu__item" role="menuitemradio" data-awg-version="1.5" aria-checked="false" tabindex="-1"><span class="probe-menu__title">AWG 1.5</span><span class="probe-menu__check" aria-hidden="true">✓</span></button>
+                            <button type="button" class="probe-menu__item is-selected" role="menuitemradio" data-awg-version="2.0" aria-checked="true" tabindex="-1"><span class="probe-menu__title">AWG 2.0</span><span class="probe-menu__check" aria-hidden="true">✓</span></button>
+                            <button type="button" class="probe-menu__item" role="menuitemradio" data-awg-version="3.0" aria-checked="false" tabindex="-1"><span class="probe-menu__title">AWG 3.0</span><span class="probe-menu__check" aria-hidden="true">✓</span></button>
+                            <button type="button" class="probe-menu__item" role="menuitemradio" data-awg-version="3.1" aria-checked="false" tabindex="-1"><span class="probe-menu__title">AWG 3.1</span><span class="probe-menu__check" aria-hidden="true">✓</span></button>
+                        </div>
+                    </div>
+                </div>
+                <button id="amneziaGenerate" type="button" class="btn-primary">Generate config</button>
             </div>
-            <p id="amneziaExperimental" class="field-hint">AWG 3.x requires a compatible client.</p>
+            <p id="amneziaExperimental" class="field-hint hidden">AWG 3.x requires a compatible client.</p>
             <p id="amneziaStatus" class="field-hint" role="status" aria-live="polite"></p>
             <div id="amneziaOutput" class="hidden">
                 <div class="field-heading"><label for="amneziaConfig">Configuration</label><span id="amneziaFormat" class="field-meta"></span></div>
@@ -219,11 +231,31 @@
                 <div class="button-row mt-8">
                     <button id="amneziaCopy" type="button" class="circle-btn"><svg width="15" height="15" aria-hidden="true"><use href="#copy"></use></svg><span>Copy</span></button>
                     <button id="amneziaDownload" type="button" class="circle-btn"><svg width="15" height="15" aria-hidden="true"><use href="#download-file"></use></svg><span>Download .conf</span></button>
+                    <button id="amneziaQrToggle" type="button" class="circle-btn" aria-haspopup="dialog" aria-controls="amneziaQr">Show QR</button>
                 </div>
+
             </div>
             <p class="amnezia-credit"><a href="https://github.com/HereIamGosu/amnezia-config-gen" target="_blank" rel="noopener noreferrer">Base profile generator</a></p>
         </section>
     </main>
+    <dialog id="amneziaQr" class="qr-dialog" aria-labelledby="amneziaQrTitle" aria-describedby="amneziaQrHint">
+        <div class="qr-dialog__heading">
+            <div>
+                <span id="amneziaQrFormat" class="field-meta"></span>
+                <h2 id="amneziaQrTitle">Scan to import</h2>
+            </div>
+            <button id="amneziaQrClose" type="button" class="qr-dialog__close" aria-label="Close QR code" autofocus>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
+            </button>
+        </div>
+        <div class="qr-dialog__stage">
+            <div class="qr-dialog__code">
+                <canvas id="amneziaQrCanvas" role="img" aria-label="Amnezia configuration QR code"></canvas>
+            </div>
+        </div>
+        <p id="amneziaQrState" class="qr-dialog__state" role="status" aria-live="polite"></p>
+        <p id="amneziaQrHint" class="field-hint">Open the QR scanner in your compatible Amnezia client and point it at this code.</p>
+    </dialog>
     <footer class="site-footer">
         <a id="apiLink" class="api-link" href="https://api.web2core.workers.dev/" target="_blank" rel="noopener noreferrer">API docs <span aria-hidden="true">↗</span></a>
     </footer>
