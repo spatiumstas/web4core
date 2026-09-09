@@ -763,6 +763,8 @@ function buildMihomoSubscriptionConfig(subscriptionUrls, extraBeans, opts) {
                 }
             }
         };
+        const excludeFilter = typeof opts?.excludeFilter === 'string' ? opts.excludeFilter.trim() : '';
+        if (excludeFilter) providers[providerName]['exclude-filter'] = excludeFilter;
         providerNames.push(providerName);
     });
 

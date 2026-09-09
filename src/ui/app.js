@@ -1,3 +1,4 @@
+import { initAmneziaPanel } from './components/amnezia-panel.js';
 import { el } from './dom.js';
 import { state } from './state.js';
 import { debounce } from './utils/dom-utils.js';
@@ -11,7 +12,6 @@ import { initGenerateController } from './controllers/generate.js';
 import { validateField } from './controllers/validation.js';
 import { initHeaderReload } from './effects/header-reload.js';
 import { initShortcuts } from './effects/shortcuts.js';
-import { initSnowfall } from './effects/snowfall.js';
 
 function updatePlaceholder() {
     updateLinksPlaceholder(getCore(), !!el.cbExtended?.checked);
@@ -24,6 +24,7 @@ function initTextValidation() {
 
 function initApp() {
     initShortcuts();
+    initAmneziaPanel();
     initCoreToggle({ validateField, updatePlaceholder });
     initSettingsPanel({
         validateField,
@@ -36,7 +37,6 @@ function initApp() {
     initGenerateController();
     initTextValidation();
     initHeaderReload();
-    initSnowfall();
 
     state.core = getDefaultCore();
     setCore(state.core);

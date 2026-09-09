@@ -10,6 +10,17 @@ permissions:
   id-token: write
 
 jobs:
+  Validate-amnezia:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - run: npm ci --no-fund --no-audit
+      - run: npm run test:amnezia
+
   Validate-singbox:
     runs-on: ubuntu-latest
     steps:
@@ -39,7 +50,7 @@ jobs:
           LATEST_RELEASE=$(curl -s https://api.github.com/repos/SagerNet/sing-box/releases/latest)
           DOWNLOAD_URL=$(echo $LATEST_RELEASE | jq -r '.assets[] | select(.name | contains("linux-amd64.tar.gz")) | .browser_download_url')
           VERSION=$(echo $LATEST_RELEASE | jq -r '.tag_name')
-          
+
           echo "Downloading sing-box $VERSION from $DOWNLOAD_URL"
           wget -O sing-box.tar.gz "$DOWNLOAD_URL"
           tar -xzf sing-box.tar.gz
@@ -81,7 +92,7 @@ jobs:
           LATEST_RELEASE=$(curl -s https://api.github.com/repos/shtorm-7/sing-box-extended/releases/latest)
           DOWNLOAD_URL=$(echo $LATEST_RELEASE | jq -r '.assets[] | select(.name | contains("linux-amd64.tar.gz")) | .browser_download_url')
           VERSION=$(echo $LATEST_RELEASE | jq -r '.tag_name')
-          
+
           echo "Downloading sing-box extended $VERSION from $DOWNLOAD_URL"
           wget -O sing-box-extended.tar.gz "$DOWNLOAD_URL"
           tar -xzf sing-box-extended.tar.gz
@@ -127,7 +138,7 @@ jobs:
           LATEST_RELEASE=$(curl -s https://api.github.com/repos/XTLS/Xray-core/releases/latest)
           DOWNLOAD_URL=$(echo $LATEST_RELEASE | jq -r '.assets[] | select(.name == "Xray-linux-64.zip") | .browser_download_url')
           VERSION=$(echo $LATEST_RELEASE | jq -r '.tag_name')
-          
+
           echo "Downloading Xray $VERSION from $DOWNLOAD_URL"
           wget -O xray.zip "$DOWNLOAD_URL"
           rm -rf /tmp/xray && mkdir -p /tmp/xray
@@ -188,7 +199,7 @@ jobs:
 
   Build:
     runs-on: ubuntu-latest
-    needs: [ Validate-singbox, Validate-singbox-extended, Validate-xray, Validate-mihomo ]
+    needs: [ Validate-singbox, Validate-singbox-extended, Validate-xray, Validate-mihomo, Validate-amnezia ]
     if: github.ref == 'refs/heads/main'
 
     concurrency:
@@ -209,7 +220,7 @@ jobs:
           cp -r src/* _site/
           SHA="${GITHUB_SHA::7}"
           export SHA
-          ASSETS=("web4core.runtime.js" "ui.js" "style.css" "favicon.png")
+          ASSETS=("web4core.runtime.js" "ui.js" "style.css" "favicon.svg")
           for f in "${ASSETS[@]}"; do
             src="_site/$f"
             [ -f "$src" ] || continue
@@ -217,7 +228,7 @@ jobs:
             base="${f%.*}"
             mv "$src" "_site/${base}-${SHA}.${ext}"
           done
-          node -e 'const fs=require("fs"); const sha=process.env.SHA||""; if(!sha) throw new Error("Missing SHA env"); const files=["style.css","web4core.runtime.js","ui.js","favicon.png"]; let s=fs.readFileSync("_site/index.html","utf8"); for(const f of files){ const i=f.lastIndexOf("."); const base=i>=0?f.slice(0,i):f; const ext=i>=0?f.slice(i+1):""; const to=ext?(base+"-"+sha+"."+ext):(base+"-"+sha); s=s.split(f).join(to); } fs.writeFileSync("_site/index.html", s);'
+          node -e 'const fs=require("fs"); const sha=process.env.SHA||""; if(!sha) throw new Error("Missing SHA env"); const files=["style.css","web4core.runtime.js","ui.js","favicon.svg"]; let s=fs.readFileSync("_site/index.html","utf8"); for(const f of files){ const i=f.lastIndexOf("."); const base=i>=0?f.slice(0,i):f; const ext=i>=0?f.slice(i+1):""; const to=ext?(base+"-"+sha+"."+ext):(base+"-"+sha); s=s.split(f).join(to); } fs.writeFileSync("_site/index.html", s);'
           echo "$SHA" > _site/version.txt
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v5
@@ -227,7 +238,7 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
-    needs: build
+    needs: Build
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
@@ -236,7 +247,7 @@ jobs:
   deploy-worker-api:
     name: Deploy Cloudflare Worker
     runs-on: ubuntu-latest
-    needs: [ Validate-singbox, Validate-singbox-extended, Validate-xray, Validate-mihomo ]
+    needs: [ Validate-singbox, Validate-singbox-extended, Validate-xray, Validate-mihomo, Validate-amnezia ]
     if: github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v7
