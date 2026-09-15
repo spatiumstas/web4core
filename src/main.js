@@ -170,6 +170,16 @@ function getFirstTrimmedQueryValue(q, keys) {
     return '';
 }
 
+function parseOptionalBoolean(value) {
+    if (value === true || value === 1) return true;
+    if (value === false || value === 0) return false;
+    if (value === undefined || value === null) return undefined;
+    const normalized = String(value).trim();
+    if (/^(?:1|t|true)$/i.test(normalized)) return true;
+    if (/^(?:0|f|false)$/i.test(normalized)) return false;
+    return undefined;
+}
+
 function parseTlsQueryExtras(q) {
     return {
         certificatePublicKeySha256: getFirstTrimmedQueryValue(q, [
@@ -782,7 +792,15 @@ function parseVMess(urlStr) {
             allowInsecure: false,
             fp: obj.fp || '',
             packet_encoding: obj.pac_enc || '',
-            reality: { pbk: obj.pbk || '', sid: obj.sid || '', spx: obj.spx || '' }
+            reality: {
+                pbk: obj.pbk || '',
+                sid: obj.sid || '',
+                spx: obj.spx || '',
+                pqv: obj.pqv || '',
+                supportX25519MLKEM768: parseOptionalBoolean(
+                    obj['support-x25519mlkem768'] ?? obj.supportX25519MLKEM768
+                )
+            }
         };
         const bean = {
             proto: 'vmess',
@@ -1355,14 +1373,17 @@ function buildStreamFromQuery(q, isTrojan) {
     const allowInsecure = ['1', 'true', 'yes'].includes(aiRaw);
     const pinnedPeerCertSha256 = (q.get('pinnedPeerCertSha256') || q.get('pinned-peer-cert-sha256') || q.get('pinSHA256') || q.get('pin-sha256') || '').trim();
     const verifyPeerCertByName = (q.get('verifyPeerCertByName') || q.get('verify-peer-cert-by-name') || '').trim();
-    const {certificatePublicKeySha256, ech} = parseTlsQueryExtras(q);
+    const { certificatePublicKeySha256, ech } = parseTlsQueryExtras(q);
     const fp = q.get('fp') || '';
     const packetEncoding = (q.get('packetEncoding') || q.get('packet_encoding') || '').trim();
     const reality = {
         pbk: q.get('pbk') || '',
         sid: (q.get('sid') || '').split(',')[0] || '',
         spx: q.get('spx') || '',
-        pqv: q.get('pqv') || ''
+        pqv: q.get('pqv') || '',
+        supportX25519MLKEM768: q.has('support-x25519mlkem768')
+            ? parseOptionalBoolean(q.get('support-x25519mlkem768'))
+            : undefined
     };
     const stream = {
         network: type,

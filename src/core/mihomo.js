@@ -96,7 +96,9 @@ function buildMihomoProxy(bean) {
                 const ro = { 'public-key': s.reality.pbk };
                 if (s.reality.sid) ro['short-id'] = s.reality.sid;
                 if (s.reality.spx) ro['spider-x'] = s.reality.spx;
-                if (s.reality.pqv) ro.pqv = s.reality.pqv;
+                if (typeof s.reality.supportX25519MLKEM768 === 'boolean') {
+                    ro['support-x25519mlkem768'] = s.reality.supportX25519MLKEM768;
+                }
                 obj['reality-opts'] = ro;
             }
         }
@@ -307,8 +309,8 @@ function buildMihomoProxy(bean) {
                 httpOpts.path = [s.path].filter(Boolean);
             }
             if (s.host) {
-                httpOpts.headers = { 
-                    Host: Array.isArray(s.host) ? s.host : [s.host] 
+                httpOpts.headers = {
+                    Host: Array.isArray(s.host) ? s.host : [s.host]
                 };
             }
             obj['http-opts'] = httpOpts;
@@ -629,13 +631,15 @@ function deduplicateProxies(beans) {
         const network = b.stream?.network || 'tcp';
         const security = b.stream?.security || '';
         const flow = b.auth?.flow || '';
-        const pqv = b.stream?.reality?.pqv || '';
-        const pqvKey = pqv ? pqv.substring(0, 50) : '';
+        const supportX25519MLKEM768 = b.stream?.reality?.supportX25519MLKEM768;
+        const mlkemKey = typeof supportX25519MLKEM768 === 'boolean'
+            ? String(supportX25519MLKEM768)
+            : '';
         let extra = '';
         if (b.proto === 'wireguard') {
             extra = wireguardExtraKey(b.wireguard || {});
         }
-        const key = `${b.proto}|${b.host}|${b.port}|${auth}|${network}|${security}|${flow}|${pqvKey}|${extra}`;
+        const key = `${b.proto}|${b.host}|${b.port}|${auth}|${network}|${security}|${flow}|${mlkemKey}|${extra}`;
         if (seen.has(key)) return false;
         seen.add(key);
         return true;
@@ -699,7 +703,7 @@ function buildMihomoConfig(beans, opts) {
             });
         }
     }
-    
+
     const basePort = (opts && opts.basePort) || 7890;
     const listeners = [];
     if (addSocks && usePerProxyPort && proxies.length > 0) {
@@ -742,13 +746,17 @@ function buildMihomoSubscriptionConfig(subscriptionUrls, extraBeans, opts) {
     const usedProviderNames = new Set();
     subscriptionUrls.forEach((url, index) => {
         const providerName = computeProviderName(url, index, subscriptionUrls.length, usedProviderNames);
+        const deviceModel = typeof opts?.deviceModel === 'string' ? opts.deviceModel.trim() : '';
+        const excludeFilter = typeof opts?.excludeFilter === 'string' ? opts.excludeFilter.trim() : '';
         providers[providerName] = {
             type: 'http',
             proxy: 'DIRECT',
             header: {
-                'x-hwid': [generateSecretHex32()]
+                'x-hwid': [generateSecretHex32()],
+                ...(deviceModel ? { 'x-device-model': [deviceModel] } : {})
             },
             url: url,
+            ...(excludeFilter ? { 'exclude-filter': excludeFilter } : {}),
             interval: SUB_REFRESH_INTERVAL,
             __comments: {
                 interval: 'Subscription refresh interval'
@@ -763,8 +771,6 @@ function buildMihomoSubscriptionConfig(subscriptionUrls, extraBeans, opts) {
                 }
             }
         };
-        const excludeFilter = typeof opts?.excludeFilter === 'string' ? opts.excludeFilter.trim() : '';
-        if (excludeFilter) providers[providerName]['exclude-filter'] = excludeFilter;
         providerNames.push(providerName);
     });
 

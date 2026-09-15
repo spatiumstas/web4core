@@ -4,5 +4,4 @@ export const state = {
     urlTest: '',
     urlTestMenuOpen: false,
     urlTestChoices: [],
-    urlTestMenuMounted: false,
 };

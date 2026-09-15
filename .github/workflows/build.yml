@@ -228,7 +228,7 @@ jobs:
             base="${f%.*}"
             mv "$src" "_site/${base}-${SHA}.${ext}"
           done
-          node -e 'const fs=require("fs"); const sha=process.env.SHA||""; if(!sha) throw new Error("Missing SHA env"); const files=["style.css","web4core.runtime.js","ui.js","favicon.svg"]; let s=fs.readFileSync("_site/index.html","utf8"); for(const f of files){ const i=f.lastIndexOf("."); const base=i>=0?f.slice(0,i):f; const ext=i>=0?f.slice(i+1):""; const to=ext?(base+"-"+sha+"."+ext):(base+"-"+sha); s=s.split(f).join(to); } fs.writeFileSync("_site/index.html", s);'
+          node -e 'const fs=require("fs"); const sha=process.env.SHA||""; if(!sha) throw new Error("Missing SHA env"); const files=["style.css","web4core.runtime.js","ui.js","favicon.svg"]; const rewrite=(path)=>{let s=fs.readFileSync(path,"utf8"); for(const f of files){const i=f.lastIndexOf("."); const base=i>=0?f.slice(0,i):f; const ext=i>=0?f.slice(i+1):""; const to=ext?(base+"-"+sha+"."+ext):(base+"-"+sha); s=s.split(f).join(to);} fs.writeFileSync(path,s);}; rewrite("_site/index.html"); rewrite("_site/manifest.json");'
           echo "$SHA" > _site/version.txt
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v5

@@ -24,6 +24,7 @@ import {
     setGenerateEnabled,
 } from '../components/output-panel.js';
 import {
+    getMihomoTunStack,
     setMihomoPerProxyPortVisible,
     setMihomoPerProxyTunVisible,
     setSingboxPerProxyTunVisible,
@@ -48,19 +49,23 @@ function getFormOptions(core) {
     const mihomoTunEnabled = core === 'mihomo' ? !!el.cbMihomoTun?.checked : false;
     const mihomoPerProxyTun = core === 'mihomo' ? !!el.cbMihomoPerProxyTun?.checked : false;
     const mihomoSocksEnabled = core === 'mihomo' ? !!el.cbMihomoSocks?.checked : false;
+    const mihomoTunStack = core === 'mihomo' ? getMihomoTunStack() : 'gvisor';
 
     return {
         tunName: el.tunName?.value.trim() || '',
         excludeFilter: core === 'mihomo' ? el.mihomoExcludeFilter?.value.trim() || '' : '',
+        deviceModel: core === 'mihomo' ? el.mihomoDeviceModel?.value.trim() || '' : '',
         addTun,
         addSocks,
         genClashSecret: !!el.cbClashSecret?.checked,
         useExtended: !!el.cbExtended?.checked,
-        webUI: core === 'mihomo' ? !!el.cbMihomoWebUI?.checked : false,
         mihomoTunEnabled,
         mihomoPerProxyTun,
+        mihomoTunStack,
         mihomoSocksEnabled,
-        mihomoTunOpts: mihomoTunEnabled ? { mode: (mihomoPerProxyTun ? 'listeners' : 'tun') } : null,
+        mihomoTunOpts: mihomoTunEnabled
+            ? { mode: (mihomoPerProxyTun ? 'listeners' : 'tun'), stack: mihomoTunStack }
+            : null,
         urlTest: getUrlTest(),
     };
 }
@@ -133,6 +138,7 @@ function validateMihomoSubscriptionMode(raw, showOutput, options) {
         perProxyPort,
         perProxyListeners: perProxyPort || options.mihomoPerProxyTun,
         excludeFilter: options.excludeFilter,
+        deviceModel: options.deviceModel,
         urlTest: options.urlTest,
     });
     if (!config) throw new Error('Failed to build subscription config');
@@ -143,7 +149,7 @@ function validateMihomoSubscriptionMode(raw, showOutput, options) {
         config.providers,
         config.rules,
         config.listeners,
-        { webUI: options.webUI, tun: options.mihomoTunOpts, addSocks: options.mihomoSocksEnabled },
+        { tun: options.mihomoTunOpts, addSocks: options.mihomoSocksEnabled },
     );
 
     renderOutput(yaml);
@@ -219,11 +225,12 @@ export function validateField(showOutput) {
                 androidMode: !!el.cbAndroidMode?.checked,
                 detour: !!el.cbDetour?.checked,
                 enableBalancer: !!el.cbXrayBalancer?.checked,
-                webUI: options.webUI,
                 mihomoPerProxyTun: options.mihomoPerProxyTun,
+                mihomoTunStack: options.mihomoTunStack,
                 perProxyPort: !!el.cbMihomoPerProxyPort?.checked,
                 mihomoSubscriptionMode: isMihomoSubscriptionMode(),
                 excludeFilter: options.excludeFilter,
+                deviceModel: options.deviceModel,
                 urlTest: options.urlTest,
             },
         });

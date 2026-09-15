@@ -53,16 +53,16 @@ function toYAML(obj, indent = 0) {
 function upsertSection(lines, key, sectionYaml) {
     const findSection = () => {
         const start = lines.findIndex(l => new RegExp('^' + key + '\\s*:\\s*$', 'i').test(l));
-        if (start === -1) return {start: -1, end: -1};
+        if (start === -1) return { start: -1, end: -1 };
         let end = start + 1;
         while (end < lines.length) {
             if (/^[^\s#][^:]*:\s*/.test(lines[end])) break;
             end++;
         }
-        return {start, end};
+        return { start, end };
     };
 
-    const {start, end} = findSection();
+    const { start, end } = findSection();
 
     const inject = [
         key + ':',
@@ -122,6 +122,10 @@ const MIHOMO_DEFAULT_TEMPLATE = [
     'mode: rule',
     'log-level: info',
     'ipv6: false',
+    'external-controller: 0.0.0.0:9090',
+    'external-ui: ui',
+    'external-ui-url: https://github.com/MetaCubeX/metacubexd/releases/latest/download/compressed-dist.tgz',
+    'secret: ',
     'unified-delay: true',
     'profile:',
     '  store-selected: true',
@@ -132,10 +136,20 @@ const MIHOMO_DEFAULT_TEMPLATE = [
     '  - "MATCH,GLOBAL"'
 ].join('\n');
 
+const MIHOMO_TUN_STACKS = new Set(['gvisor', 'system', 'mixed', 'mips']);
+
+function resolveMihomoTunStack(tunOpt) {
+    const raw = tunOpt && typeof tunOpt === 'object' ? tunOpt.stack : '';
+    const stack = String(raw || 'gvisor').trim().toLowerCase();
+    if (!MIHOMO_TUN_STACKS.has(stack)) {
+        throw new Error(`Mihomo: invalid TUN stack "${stack}"`);
+    }
+    return stack;
+}
+
 function buildMihomoYaml(proxies, groups, providers, rules, listeners, opts) {
     opts = opts || {};
     const addSocks = opts.addSocks !== false;
-    const webUI = opts.webUI === true;
     const tunOpt = opts.tun;
     const perProxyGroupName = (name) => `🔒 ${name}`;
     let template = MIHOMO_DEFAULT_TEMPLATE;
@@ -145,23 +159,11 @@ function buildMihomoYaml(proxies, groups, providers, rules, listeners, opts) {
             .filter(line => !/^mixed-port\s*:/i.test(line))
             .join('\n');
     }
-    if (webUI) {
-        const lines = template.split('\n');
-        const ipv6Index = lines.findIndex(l => /^ipv6\s*:/i.test(l));
-        if (ipv6Index !== -1) {
-            lines.splice(ipv6Index + 1, 0,
-                'external-controller: 0.0.0.0:9090',
-                'external-ui: ui',
-                'external-ui-url: https://github.com/MetaCubeX/metacubexd/releases/latest/download/compressed-dist.tgz',
-                'secret: '
-            );
-            template = lines.join('\n');
-        }
-    }
     if (tunOpt) {
         const lines = template.split('\n');
         const proxiesIndex = lines.findIndex(l => /^proxy-groups\s*:/i.test(l));
         const mode = (tunOpt && typeof tunOpt === 'object' && tunOpt.mode) ? String(tunOpt.mode) : 'tun';
+        const stack = resolveMihomoTunStack(tunOpt);
         if (mode === 'listeners') {
             const buildTunListener = (idx, proxyName) => {
                 const offset = idx * 4 + 1;
@@ -172,7 +174,7 @@ function buildMihomoYaml(proxies, groups, providers, rules, listeners, opts) {
                     name: `mihomo-tun-${idx + 1}`,
                     type: 'tun',
                     device: `mitun${idx}`,
-                    stack: 'gvisor',
+                    stack,
                     'auto-route': false,
                     'auto-detect-interface': false,
                     'inet4-address': [inet4],
@@ -228,7 +230,7 @@ function buildMihomoYaml(proxies, groups, providers, rules, listeners, opts) {
         } else {
             const tun = {
                 enable: true,
-                stack: 'gvisor',
+                stack,
                 'auto-route': false,
                 'auto-detect-interface': true,
                 device: 'mitun0',

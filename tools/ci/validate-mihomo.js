@@ -19,7 +19,7 @@ function pickMihomoCompatibleLink(web4core, links) {
       if (b.proto === 'sdns') continue;
       if (b.proto === 'socks' && b.socks && b.socks.type === 'socks4') continue;
       return l;
-    } catch {}
+    } catch { }
   }
   return '';
 }
@@ -28,6 +28,22 @@ function buildYaml(web4core, input, options, wgBeans) {
   const out = web4core.buildFromRequest({ core: 'mihomo', input, options, wgBeans });
   if (!out || out.kind !== 'yaml') throw new Error('Unexpected output kind for Mihomo');
   return out.data;
+}
+
+function testMihomoRealityOptions(web4core) {
+  const pqv = Buffer.alloc(1952, 7).toString('base64url');
+  const link = `vless://11111111-1111-4111-8111-111111111111@example.com:443` +
+    `?security=reality&pbk=${Buffer.alloc(32, 1).toString('base64url')}` +
+    `&support-x25519mlkem768=true&pqv=${pqv}#reality-v11931`;
+  const yaml = buildYaml(web4core, link, { addTun: false, addSocks: true });
+  assert(/\n      support-x25519mlkem768: true\n/.test(yaml), 'REALITY: Mihomo ML-KEM flag is missing');
+  assert(!/\n\s+pqv:/.test(yaml), 'REALITY: Xray pqv leaked into Mihomo YAML');
+  validateMihomoYaml(yaml, 'mihomo_contract_reality_mlkem.yaml');
+
+  const xray = web4core.buildFromRequest({ core: 'xray', input: link, options: { addSocks: true } });
+  const outbound = xray.data.outbounds.find(item => item.protocol === 'vless');
+  assert(outbound.streamSettings.realitySettings.mldsa65Verify === pqv,
+    'REALITY: Xray pqv was not preserved as mldsa65Verify');
 }
 
 function testLatestMihomoFixtures(web4core, links) {
@@ -39,7 +55,7 @@ function testLatestMihomoFixtures(web4core, links) {
     const bean = beans && beans[0];
     assert(bean, `Fixture did not produce a bean: ${link}`);
     web4core.validateBean(bean);
-    const yaml = buildYaml(web4core, link, { webUI: false, addTun: false });
+    const yaml = buildYaml(web4core, link, { addTun: false });
 
     if (bean.name === 'fixture-hy2-hop-range') {
       assert(/\n    ports: 20000-20100\n/.test(yaml), 'HY2 fixture: missing ports range');
@@ -112,6 +128,7 @@ function assert(condition, message) {
 
 function main() {
   const web4core = loadWeb4core();
+  testMihomoRealityOptions(web4core);
   const rawLinks = splitLinksFromEnv('CONFIGS');
   if (!rawLinks.length) throw new Error('CONFIGS is empty (no test links)');
   testLatestMihomoFixtures(web4core, rawLinks);
@@ -151,25 +168,29 @@ function main() {
 
       // baseline
       {
-        const y = buildYaml(web4core, linkLine, { webUI: true, addTun: false }, wgBean ? [wgBean] : []);
+        const y = buildYaml(web4core, linkLine, { addTun: false }, wgBean ? [wgBean] : []);
+        assert(/\nexternal-controller: 0\.0\.0\.0:9090\n/.test(y), 'Mihomo: expected Web UI controller');
+        assert(/\nexternal-ui: ui\n/.test(y), 'Mihomo: expected Web UI assets');
         validateMihomoYaml(y, `mihomo_${i}_basic.yaml`);
       }
 
       // per-proxy port
       {
-        const y = buildYaml(web4core, linkLine, { webUI: false, perProxyPort: true, addTun: false }, wgBean ? [wgBean] : []);
+        const y = buildYaml(web4core, linkLine, { perProxyPort: true, addTun: false }, wgBean ? [wgBean] : []);
         validateMihomoYaml(y, `mihomo_${i}_perport.yaml`);
       }
 
       // tun: section mode
       {
-        const y = buildYaml(web4core, linkLine, { webUI: true, addTun: true, mihomoPerProxyTun: false }, wgBean ? [wgBean] : []);
+        const y = buildYaml(web4core, linkLine, { addTun: true, mihomoPerProxyTun: false, mihomoTunStack: 'mips' }, wgBean ? [wgBean] : []);
+        assert(/\n  stack: mips\n/.test(y), 'top-level TUN: expected MIPS stack');
         validateMihomoYaml(y, `mihomo_${i}_tun.yaml`);
       }
 
       // tun: listeners mode (per-proxy tun)
       {
-        const y = buildYaml(web4core, linkLine, { webUI: true, addTun: true, mihomoPerProxyTun: true }, wgBean ? [wgBean] : []);
+        const y = buildYaml(web4core, linkLine, { addTun: true, mihomoPerProxyTun: true, mihomoTunStack: 'mips' }, wgBean ? [wgBean] : []);
+        assert(/\n    stack: mips\n/.test(y), 'per-proxy TUN: expected MIPS stack');
         validateMihomoYaml(y, `mihomo_${i}_tun_listeners.yaml`);
       }
 
@@ -184,7 +205,7 @@ function main() {
   // 2) Multi-config (all beans) through buildFromRequest (normal mode)
   try {
     const inputAll = compatibleLinks.join('\n');
-    const y = buildYaml(web4core, inputAll, { webUI: true, addTun: false }, wgBean ? [wgBean] : []);
+    const y = buildYaml(web4core, inputAll, { addTun: false }, wgBean ? [wgBean] : []);
     validateMihomoYaml(y, 'mihomo_all.yaml');
     console.log('✅ Mihomo multi-all ok');
   } catch (e) {
@@ -197,7 +218,6 @@ function main() {
   try {
     const sample = compatibleLinks[0];
     const tunOnlyYaml = buildYaml(web4core, sample, {
-      webUI: false,
       addTun: true,
       addSocks: false,
       mihomoPerProxyTun: false,
@@ -209,7 +229,6 @@ function main() {
     let bothOffError = '';
     try {
       buildYaml(web4core, sample, {
-        webUI: false,
         addTun: false,
         addSocks: false,
       }, wgBean ? [wgBean] : []);
@@ -236,14 +255,16 @@ function main() {
     const y = buildYaml(web4core, inputSub, {
       mihomoSubscriptionMode: true,
       perProxyPort: true,
-      webUI: true,
       addTun: true,
       mihomoPerProxyTun: true,
+      excludeFilter: '(?i)ru|russia',
     }, wgBean ? [wgBean] : []);
 
     validateMihomoYaml(y, 'mihomo_subscription.yaml');
     assert(/\n    empty-fallback: REJECT\n/.test(y), 'Mihomo subscription-mode: expected fail-closed empty fallback');
     assert(/\n    proxy: DIRECT\n/.test(y), 'Mihomo subscription-mode: expected DIRECT provider bootstrap');
+    assert((y.match(/exclude-filter: "\(\?i\)ru\|russia"/g) || []).length === 2,
+      'Mihomo subscription-mode: exclude-filter must apply to every provider');
     console.log('✅ Mihomo subscription-mode ok');
   } catch (e) {
     fail++;

@@ -101,7 +101,10 @@ input[type="submit"]:disabled, .btn-primary:disabled { background: #2a2d34; bord
 .probe-picker { position: relative; }
 .probe-picker__button { display: flex; gap: 8px; }
 .probe-menu { position: fixed; z-index: 1000; width: min(236px, calc(100vw - 20px)); max-height: min(260px, calc(100dvh - 20px)); overflow-y: auto; overscroll-behavior: contain; padding: 5px; border: 1px solid #43464f; border-radius: 10px; background: #202226; box-shadow: 0 12px 32px #0006; }
+.probe-menu--compact { width: max-content; max-width: calc(100vw - 20px); }
+.probe-menu--compact .probe-menu__item { white-space: nowrap; }
 .probe-menu__item { width: 100%; display: grid; grid-template-columns: 20px 1fr 16px; align-items: center; gap: 10px; min-height: 40px; padding: 8px 10px; background: transparent; border: 1px solid transparent; border-radius: 6px; color: var(--text); text-align: left; }
+.probe-menu--text-only .probe-menu__item { grid-template-columns: 1fr 16px; }
 .probe-menu__item:hover { background: #30333a; }
 .probe-menu__item.is-selected { background: #29354b; }
 .probe-menu__item:focus-visible { outline-offset: -2px; }

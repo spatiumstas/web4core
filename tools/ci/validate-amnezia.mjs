@@ -54,7 +54,7 @@ test('domain validation normalizes IDN and rejects URLs, IPs and config injectio
     assert.equal(normalizeAmneziaDomain(' Example.COM. '), 'example.com');
     assert.equal(normalizeAmneziaDomain('пример.рф'), 'xn--e1afmkfd.xn--p1ai');
     for (const value of ['https://example.com', 'example.com:443', 'example.com/path',
-        'a@b.com', '127.0.0.1', '[::1]', 'localhost', '-a.com', 'a..com', 'a'.repeat(64)+'.com',
+        'a@b.com', '127.0.0.1', '[::1]', 'localhost', '-a.com', 'a..com', 'a'.repeat(64) + '.com',
         'a.com\nPrivateKey = bad']) assert.throws(() => normalizeAmneziaDomain(value));
 });
 
@@ -130,7 +130,7 @@ test('real signature packets replace the external generator CPS chain without ch
 
 test('Worker: CORS, body limits, external config generation and no-store responses', async () => {
     const request = (body, origin = 'https://web2core.workers.dev') => new Request('https://api.web2core.workers.dev/amnezia', {
-        method:'POST', headers: {'Content-Type':'application/json', Origin:origin}, body:JSON.stringify(body),
+        method: 'POST', headers: { 'Content-Type': 'application/json', Origin: origin }, body: JSON.stringify(body),
     });
     assert.equal((await worker.fetch(request({}, 'https://untrusted.example'))).status, 403);
     const preflight = await worker.fetch(new Request('https://api.web2core.workers.dev/amnezia', {
@@ -143,8 +143,8 @@ test('Worker: CORS, body limits, external config generation and no-store respons
     }));
     assert.equal(workersSubdomain.status, 204);
     assert.equal(workersSubdomain.headers.get('Access-Control-Allow-Origin'), 'https://preview.web2core.workers.dev');
-    assert.equal((await worker.fetch(request({ version:'3', domain:'example.com' }))).status, 400);
-    assert.equal((await worker.fetch(request({ domain:'a'.repeat(2100) }))).status, 413);
+    assert.equal((await worker.fetch(request({ version: '3', domain: 'example.com' }))).status, 400);
+    assert.equal((await worker.fetch(request({ domain: 'a'.repeat(2100) }))).status, 413);
     const originalFetch = globalThis.fetch;
     try {
         globalThis.fetch = async (url) => {
@@ -152,11 +152,13 @@ test('Worker: CORS, body limits, external config generation and no-store respons
             if (target === 'https://valokda-amnezia.vercel.app/api/warp') return Response.json(upstreamPayload());
             throw new Error(`Unexpected fetch target: ${target}`);
         };
-        const response = await worker.fetch(request({ version:'2.0', domain:'example.com' }), {
-            JUNK: { fetch: async (signatureRequest) => {
-                assert.match(signatureRequest.url, /^https:\/\/junk\.web2core\.workers\.dev\/signature\?/);
-                return Response.json(signaturePayload());
-            } },
+        const response = await worker.fetch(request({ version: '2.0', domain: 'example.com' }), {
+            JUNK: {
+                fetch: async (signatureRequest) => {
+                    assert.match(signatureRequest.url, /^https:\/\/junk\.web2core\.workers\.dev\/signature\?/);
+                    return Response.json(signaturePayload());
+                }
+            },
         });
         assert.equal(response.status, 200);
         assert.equal(response.headers.get('Cache-Control'), 'no-store');

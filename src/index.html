@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8" />
     <meta name="amnezia-api" content="https://api.web2core.workers.dev/amnezia">
@@ -7,21 +8,24 @@
     <meta name="theme-color" content="#111214">
     <meta name="color-scheme" content="dark">
     <link rel="stylesheet" href="style.css">
-    <link rel="icon" type="image/x-icon" href="favicon.svg">
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <link rel="manifest" href="manifest.json">
-    <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png">
+    <link rel="apple-touch-icon" href="favicon.svg">
     <title>web4core configuration generator</title>
 </head>
 
 <body>
     <header class="hero">
-        <button id="asciiHeader" class="ascii-logo" type="button" aria-label="web4core — reload page" title="Reload web4core"><pre aria-hidden="true">
+        <button id="asciiHeader" class="ascii-logo" type="button" aria-label="web4core — reload page"
+            title="Reload web4core">
+            <pre aria-hidden="true">
                 __    __ __
  _      _____  / /_  / // / _________  ________
 | | /| / / _ \/ __ \/ // /_/ ___/ __ \/ ___/ _ \
 | |/ |/ /  __/ /_/ /__  __/ /__/ /_/ / /  /  __/
 |__/|__/\___/_.___/  /_/  \___/\____/_/   \___/
-    </pre></button>
+    </pre>
+        </button>
         <h1 class="sr-only">web4core configuration generator</h1>
     </header>
     <svg xmlns="http://www.w3.org/2000/svg" style="display:none">
@@ -40,7 +44,7 @@
         </symbol>
         <symbol id="chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
             stroke-linecap="round" stroke-linejoin="round">
-            <path d="M6 9l6 6 6-6"/>
+            <path d="M6 9l6 6 6-6" />
         </symbol>
     </svg>
     <main class="container container--stretch" aria-label="Configuration generator">
@@ -55,8 +59,8 @@
                 </div>
             </div>
             <div class="toolbar-actions">
-                <button id="btnChevron" class="chevron-toggle" type="button" aria-label="Settings" title="Settings" aria-expanded="false"
-                    aria-controls="settingsPanel">
+                <button id="btnChevron" class="chevron-toggle" type="button" aria-label="Settings" title="Settings"
+                    aria-expanded="false" aria-controls="settingsPanel">
                     <span>Settings</span>
                     <svg width="18" height="18" aria-hidden="true">
                         <use href="#chevron-down"></use>
@@ -65,164 +69,205 @@
             </div>
         </div>
         <div id="proxyPanel">
-        <div id="settingsPanel" class="settings-panel settings-panel--collapsed" inert>
-            <div class="settings-panel__inner">
-            <div class="settings-panel__chips">
-                <label class="custom-checkbox chip">
-                    <input type="checkbox" id="cbSocks" checked />
-                    <div class="checkmark"></div>
-                    <span>SOCKS5</span>
-                </label>
-                <label class="custom-checkbox chip">
-                    <input type="checkbox" id="cbTun" checked />
-                    <div class="checkmark"></div>
-                    <span>TUN</span>
-                </label>
-                <label class="custom-checkbox chip" id="lblPerTunMixed">
-                    <input type="checkbox" id="cbPerTunMixed" />
-                    <div class="checkmark"></div>
-                    <span title="Expose per-proxy TUN inbounds when multiple proxies are available">Per-Proxy TUN</span>
-                </label>
-                <label class="custom-checkbox chip is-hidden" id="lblXraySocks">
-                    <input type="checkbox" id="cbXraySocks" checked />
-                    <div class="checkmark"></div>
-                    <span>SOCKS5</span>
-                </label>
-                <label class="custom-checkbox chip is-hidden" id="lblXrayTun">
-                    <input type="checkbox" id="cbXrayTun" checked />
-                    <div class="checkmark"></div>
-                    <span>TUN</span>
-                </label>
-                <label class="custom-checkbox chip is-hidden" id="lblXrayBalancer">
-                    <input type="checkbox" id="cbXrayBalancer" />
-                    <div class="checkmark"></div>
-                    <span title="Xray routing balancer over all proxies">Balancer</span>
-                </label>
-                <label class="custom-checkbox chip is-hidden" id="lblMihomoSocks">
-                    <input type="checkbox" id="cbMihomoSocks" checked />
-                    <div class="checkmark"></div>
-                    <span>SOCKS5</span>
-                </label>
-                <label class="custom-checkbox chip is-hidden" id="lblMihomoTun">
-                    <input type="checkbox" id="cbMihomoTun" checked />
-                    <div class="checkmark"></div>
-                    <span>TUN</span>
-                </label>
-                <label class="custom-checkbox chip is-hidden" id="lblMihomoSub">
-                    <input type="checkbox" id="cbMihomoSub" checked />
-                    <div class="checkmark"></div>
-                    <span title="Use Mihomo proxy-provider with an HTTP(S) URL">Subscription</span>
-                </label>
-                <label class="custom-checkbox chip is-hidden" id="lblMihomoPerProxyTun">
-                    <input type="checkbox" id="cbMihomoPerProxyTun" />
-                    <div class="checkmark"></div>
-                    <span title="Multiple TUN interfaces per proxy">Per‑Proxy TUN</span>
-                </label>
-                <label class="custom-checkbox chip is-hidden" id="lblMihomoPerProxyPort">
-                    <input type="checkbox" id="cbMihomoPerProxyPort" />
-                    <div class="checkmark"></div>
-                    <span>Per-Proxy SOCKS</span>
-                </label>
-                <label class="custom-checkbox chip is-hidden" id="lblMihomoWebUI">
-                    <input type="checkbox" id="cbMihomoWebUI" checked />
-                    <div class="checkmark"></div>
-                    <span>Web UI</span>
-                </label>
-                <label class="custom-checkbox chip">
-                    <input type="checkbox" id="cbClashSecret" />
-                    <div class="checkmark"></div>
-                    <span title="Clash API Secret">Clash Secret</span>
-                </label>
-                <label class="custom-checkbox chip" id="lblDetour">
-                    <input type="checkbox" id="cbDetour" />
-                    <div class="checkmark"></div>
-                    <span title="Use first proxy as detour target for others">Detour</span>
-                </label>
-                <label class="custom-checkbox chip" id="lblAndroidMode">
-                    <input type="checkbox" id="cbAndroidMode" />
-                    <div class="checkmark"></div>
-                    <span title="Android mode: route system traffic into sing-box TUN">Android</span>
-                </label>
-                <label class="custom-checkbox chip">
-                    <input type="checkbox" id="cbExtended" />
-                    <div class="checkmark"></div>
-                    <span
-                        title="XHTTP, XUDP, SDNS, Unified delay from github.com/shtorm-7/sing-box-extended">Extended</span>
-                </label>
-                <button id="btnWgUpload" class="custom-checkbox chip is-hidden" type="button"
-                    title="WireGuard/AmneziaWG (.conf/.awg)">
-                    <span>WireGuard</span>
-                </button>
-                <input type="file" id="wgFile" class="file-input-hidden" accept=".conf,.wg,.awg,text/plain" multiple />
-                <div class="probe-picker" title="Ping/latency check target for auto selection">
-                    <button id="urlTestButton" class="custom-checkbox chip probe-picker__button" type="button"
-                        aria-label="Ping service" aria-haspopup="menu" aria-expanded="false" aria-controls="urlTestMenu">
-                        <span>Ping</span>
-                        <svg class="probe-picker__chevron" width="16" height="16" aria-hidden="true">
-                            <use href="#chevron-down"></use>
-                        </svg>
+            <div id="settingsPanel" class="settings-panel settings-panel--collapsed" inert>
+                <div class="settings-panel__inner">
+                    <div class="settings-panel__chips">
+                        <label class="custom-checkbox chip">
+                            <input type="checkbox" id="cbSocks" checked />
+                            <div class="checkmark"></div>
+                            <span>SOCKS5</span>
+                        </label>
+                        <label class="custom-checkbox chip">
+                            <input type="checkbox" id="cbTun" checked />
+                            <div class="checkmark"></div>
+                            <span>TUN</span>
+                        </label>
+                        <label class="custom-checkbox chip" id="lblPerTunMixed">
+                            <input type="checkbox" id="cbPerTunMixed" />
+                            <div class="checkmark"></div>
+                            <span title="Expose per-proxy TUN inbounds when multiple proxies are available">Per-Proxy
+                                TUN</span>
+                        </label>
+                        <label class="custom-checkbox chip is-hidden" id="lblXraySocks">
+                            <input type="checkbox" id="cbXraySocks" checked />
+                            <div class="checkmark"></div>
+                            <span>SOCKS5</span>
+                        </label>
+                        <label class="custom-checkbox chip is-hidden" id="lblXrayTun">
+                            <input type="checkbox" id="cbXrayTun" checked />
+                            <div class="checkmark"></div>
+                            <span>TUN</span>
+                        </label>
+                        <label class="custom-checkbox chip is-hidden" id="lblXrayBalancer">
+                            <input type="checkbox" id="cbXrayBalancer" />
+                            <div class="checkmark"></div>
+                            <span title="Xray routing balancer over all proxies">Balancer</span>
+                        </label>
+                        <label class="custom-checkbox chip is-hidden" id="lblMihomoSocks">
+                            <input type="checkbox" id="cbMihomoSocks" checked />
+                            <div class="checkmark"></div>
+                            <span>SOCKS5</span>
+                        </label>
+                        <label class="custom-checkbox chip is-hidden" id="lblMihomoTun">
+                            <input type="checkbox" id="cbMihomoTun" checked />
+                            <div class="checkmark"></div>
+                            <span>TUN</span>
+                        </label>
+                        <div id="mihomoTunStackField" class="probe-picker is-hidden" title="Mihomo TUN stack">
+                            <button id="mihomoTunStackButton"
+                                class="custom-checkbox chip probe-picker__button is-active" type="button"
+                                aria-label="Mihomo TUN stack" aria-haspopup="menu" aria-expanded="false"
+                                aria-controls="mihomoTunStackMenu">
+                                <span id="mihomoTunStackText"></span>
+                                <svg class="probe-picker__chevron" width="16" height="16" aria-hidden="true">
+                                    <use href="#chevron-down"></use>
+                                </svg>
+                            </button>
+                            <div id="mihomoTunStackMenu" class="probe-menu hidden" role="menu"
+                                aria-label="Mihomo TUN stack options"></div>
+                        </div>
+                        <label class="custom-checkbox chip is-hidden" id="lblMihomoSub">
+                            <input type="checkbox" id="cbMihomoSub" checked />
+                            <div class="checkmark"></div>
+                            <span title="Use Mihomo proxy-provider with an HTTP(S) URL">Subscription</span>
+                        </label>
+                        <label class="custom-checkbox chip is-hidden" id="lblMihomoPerProxyTun">
+                            <input type="checkbox" id="cbMihomoPerProxyTun" />
+                            <div class="checkmark"></div>
+                            <span title="Multiple TUN interfaces per proxy">Per‑Proxy TUN</span>
+                        </label>
+                        <label class="custom-checkbox chip is-hidden" id="lblMihomoPerProxyPort">
+                            <input type="checkbox" id="cbMihomoPerProxyPort" />
+                            <div class="checkmark"></div>
+                            <span>Per-Proxy SOCKS</span>
+                        </label>
+                        <label class="custom-checkbox chip">
+                            <input type="checkbox" id="cbClashSecret" />
+                            <div class="checkmark"></div>
+                            <span title="Clash API Secret">Clash Secret</span>
+                        </label>
+                        <label class="custom-checkbox chip" id="lblDetour">
+                            <input type="checkbox" id="cbDetour" />
+                            <div class="checkmark"></div>
+                            <span title="Use first proxy as detour target for others">Detour</span>
+                        </label>
+                        <label class="custom-checkbox chip" id="lblAndroidMode">
+                            <input type="checkbox" id="cbAndroidMode" />
+                            <div class="checkmark"></div>
+                            <span title="Android mode: route system traffic into sing-box TUN">Android</span>
+                        </label>
+                        <label class="custom-checkbox chip">
+                            <input type="checkbox" id="cbExtended" />
+                            <div class="checkmark"></div>
+                            <span
+                                title="XHTTP, XUDP, SDNS, Unified delay from github.com/shtorm-7/sing-box-extended">Extended</span>
+                        </label>
+                        <input type="file" id="wgFile" class="file-input-hidden" accept=".conf,.wg,.awg,text/plain"
+                            multiple />
+                        <div class="probe-picker" title="Ping/latency check target for auto selection">
+                            <button id="urlTestButton" class="custom-checkbox chip probe-picker__button" type="button"
+                                aria-label="Ping service" aria-haspopup="menu" aria-expanded="false"
+                                aria-controls="urlTestMenu">
+                                <span>Ping</span>
+                                <svg class="probe-picker__chevron" width="16" height="16" aria-hidden="true">
+                                    <use href="#chevron-down"></use>
+                                </svg>
+                            </button>
+                            <div id="urlTestMenu" class="probe-menu hidden" role="menu"
+                                aria-label="Ping service options"></div>
+                        </div>
+                        <button id="btnWgUpload" class="custom-checkbox chip is-hidden" type="button"
+                            title="WireGuard/AmneziaWG (.conf/.awg)">
+                            <span>WireGuard</span>
+                        </button>
+                        <div id="mihomoDeviceModelField" class="settings-filter is-hidden">
+                            <label for="mihomoDeviceModel" class="sr-only">Device model</label>
+                            <input id="mihomoDeviceModel" class="input" type="text" placeholder="Device model"
+                                title="Device model for subscription request header (optional)" spellcheck="false"
+                                autocapitalize="off" autocomplete="off" />
+                        </div>
+                        <div id="mihomoExcludeFilterField" class="settings-filter is-hidden">
+                            <label for="mihomoExcludeFilter" class="sr-only">Exclude filter</label>
+                            <input id="mihomoExcludeFilter" class="input" type="text" placeholder="Exclude: 🇷🇺"
+                                title="Exclude subscription servers by name or regex (optional)" spellcheck="false"
+                                autocapitalize="off" autocomplete="off" />
+                        </div>
+                    </div>
+                    <div class="settings-panel__field">
+                        <label for="tunName">TUN interfaces <span class="optional">Optional</span></label>
+                        <input class="input" type="text" id="tunName"
+                            placeholder="Interface(s): (tun0,tun1 or tun0:select,tun1:auto)" />
+                    </div>
+                </div>
+            </div>
+            <div class="full source-field">
+                <div class="field-heading"><label for="links">Source links</label></div>
+                <textarea id="links" class="input full" aria-describedby="sourceHint errorText" spellcheck="false"
+                    autocapitalize="off" autocomplete="off"></textarea>
+                <p id="sourceHint" class="field-hint">One URL or proxy link per line.</p>
+            </div>
+            <div id="errorBlock" class="row row--left" role="status" aria-live="polite">
+                <div id="errorText"></div>
+            </div>
+            <div class="button-row generate-row">
+                <span class="shortcut-hint" title="Generate config"
+                    aria-label="Keyboard shortcut: Control or Command S"><kbd id="shortcutModifier">Ctrl</kbd>
+                    <kbd>S</kbd></span>
+                <input type="submit" id="gen" value="Generate config" disabled />
+            </div>
+            <div id="outBlock" class="hidden full">
+                <div class="field-heading"><label for="out">Configuration</label><span id="outputFormat"
+                        class="field-meta">OUTPUT</span></div>
+                <textarea id="out" class="input full" readonly spellcheck="false"></textarea>
+                <div class="button-row mt-8 full">
+                    <button id="btnCopy" class="circle-btn" title="Copy" aria-label="Copy">
+                        <svg width="22" height="22" aria-hidden="true">
+                            <use href="#copy"></use>
+                        </svg><span id="copyLabel" aria-live="polite">Copy</span>
                     </button>
-                    <div id="urlTestMenu" class="probe-menu hidden" role="menu" aria-label="Ping service options"></div>
+                    <button id="btnDownload" class="circle-btn" title="Download" aria-label="Download">
+                        <svg width="22" height="22" aria-hidden="true">
+                            <use href="#download-file"></use>
+                        </svg><span>Download</span>
+                    </button>
                 </div>
-                <div id="mihomoExcludeFilterField" class="settings-filter is-hidden">
-                    <label for="mihomoExcludeFilter" class="sr-only">Exclude filter</label>
-                    <input id="mihomoExcludeFilter" class="input" type="text" placeholder="Exclude: 🇷🇺" title="Exclude subscription servers by name or regex (optional)" spellcheck="false" autocapitalize="off" autocomplete="off" />
-                </div>
             </div>
-            <div class="settings-panel__field">
-                <label for="tunName">TUN interfaces <span class="optional">Optional</span></label>
-                <input class="input" type="text" id="tunName"
-                    placeholder="Interface(s): (tun0,tun1 or tun0:select,tun1:auto)" />
-            </div>
-        </div>
-        </div>
-        <div class="full source-field">
-            <div class="field-heading"><label for="links">Source links</label></div>
-            <textarea id="links" class="input full" aria-describedby="sourceHint errorText" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea>
-            <p id="sourceHint" class="field-hint">One URL or proxy link per line.</p>
-        </div>
-        <div id="errorBlock" class="row row--left" role="status" aria-live="polite">
-            <div id="errorText"></div>
-        </div>
-        <div class="button-row generate-row">
-            <span class="shortcut-hint" title="Generate config" aria-label="Keyboard shortcut: Control or Command S"><kbd id="shortcutModifier">Ctrl</kbd> <kbd>S</kbd></span>
-            <input type="submit" id="gen" value="Generate config" disabled />
-        </div>
-        <div id="outBlock" class="hidden full">
-            <div class="field-heading"><label for="out">Configuration</label><span id="outputFormat" class="field-meta">OUTPUT</span></div>
-            <textarea id="out" class="input full" readonly spellcheck="false"></textarea>
-            <div class="button-row mt-8 full">
-                <button id="btnCopy" class="circle-btn" title="Copy" aria-label="Copy">
-                    <svg width="22" height="22" aria-hidden="true">
-                        <use href="#copy"></use>
-                    </svg><span id="copyLabel" aria-live="polite">Copy</span>
-                </button>
-                <button id="btnDownload" class="circle-btn" title="Download" aria-label="Download">
-                    <svg width="22" height="22" aria-hidden="true">
-                        <use href="#download-file"></use>
-                    </svg><span>Download</span>
-                </button>
-            </div>
-        </div>
         </div>
         <section id="amneziaPanel" class="hidden" aria-label="Amnezia WARP">
             <div class="amnezia-fields">
                 <div class="amnezia-domain">
                     <div class="field-heading"><label for="amneziaDomain">I1–I5 domain</label></div>
-                    <input id="amneziaDomain" class="input" type="text" placeholder="github.com (optional)" spellcheck="false" autocapitalize="off" autocomplete="off" aria-describedby="amneziaStatus">
+                    <input id="amneziaDomain" class="input" type="text" placeholder="github.com (optional)"
+                        spellcheck="false" autocapitalize="off" autocomplete="off" aria-describedby="amneziaStatus">
                 </div>
                 <div class="amnezia-version">
-                    <div class="field-heading"><label id="amneziaVersionLabel" for="amneziaVersion">AWG version</label></div>
+                    <div class="field-heading"><label id="amneziaVersionLabel" for="amneziaVersion">AWG version</label>
+                    </div>
                     <div class="probe-picker" id="amneziaVersionPicker">
-                        <button id="amneziaVersion" type="button" value="2.0" class="custom-checkbox probe-picker__button" aria-haspopup="menu" aria-expanded="false" aria-controls="amneziaVersionMenu" aria-labelledby="amneziaVersionLabel amneziaVersionText" aria-describedby="amneziaExperimental">
+                        <button id="amneziaVersion" type="button" value="2.0"
+                            class="custom-checkbox probe-picker__button" aria-haspopup="menu" aria-expanded="false"
+                            aria-controls="amneziaVersionMenu" aria-labelledby="amneziaVersionLabel amneziaVersionText"
+                            aria-describedby="amneziaExperimental">
                             <span id="amneziaVersionText">AWG 2.0</span>
-                            <svg class="probe-picker__chevron" width="16" height="16" aria-hidden="true"><use href="#chevron-down"></use></svg>
+                            <svg class="probe-picker__chevron" width="16" height="16" aria-hidden="true">
+                                <use href="#chevron-down"></use>
+                            </svg>
                         </button>
-                        <div id="amneziaVersionMenu" class="probe-menu hidden" role="menu" aria-labelledby="amneziaVersionLabel">
-                            <button type="button" class="probe-menu__item" role="menuitemradio" data-awg-version="1.5" aria-checked="false" tabindex="-1"><span class="probe-menu__title">AWG 1.5</span><span class="probe-menu__check" aria-hidden="true">✓</span></button>
-                            <button type="button" class="probe-menu__item is-selected" role="menuitemradio" data-awg-version="2.0" aria-checked="true" tabindex="-1"><span class="probe-menu__title">AWG 2.0</span><span class="probe-menu__check" aria-hidden="true">✓</span></button>
-                            <button type="button" class="probe-menu__item" role="menuitemradio" data-awg-version="3.0" aria-checked="false" tabindex="-1"><span class="probe-menu__title">AWG 3.0</span><span class="probe-menu__check" aria-hidden="true">✓</span></button>
-                            <button type="button" class="probe-menu__item" role="menuitemradio" data-awg-version="3.1" aria-checked="false" tabindex="-1"><span class="probe-menu__title">AWG 3.1</span><span class="probe-menu__check" aria-hidden="true">✓</span></button>
+                        <div id="amneziaVersionMenu" class="probe-menu hidden" role="menu"
+                            aria-labelledby="amneziaVersionLabel">
+                            <button type="button" class="probe-menu__item" role="menuitemradio" data-awg-version="1.5"
+                                aria-checked="false" tabindex="-1"><span class="probe-menu__title">AWG 1.5</span><span
+                                    class="probe-menu__check" aria-hidden="true">✓</span></button>
+                            <button type="button" class="probe-menu__item is-selected" role="menuitemradio"
+                                data-awg-version="2.0" aria-checked="true" tabindex="-1"><span
+                                    class="probe-menu__title">AWG 2.0</span><span class="probe-menu__check"
+                                    aria-hidden="true">✓</span></button>
+                            <button type="button" class="probe-menu__item" role="menuitemradio" data-awg-version="3.0"
+                                aria-checked="false" tabindex="-1"><span class="probe-menu__title">AWG 3.0</span><span
+                                    class="probe-menu__check" aria-hidden="true">✓</span></button>
+                            <button type="button" class="probe-menu__item" role="menuitemradio" data-awg-version="3.1"
+                                aria-checked="false" tabindex="-1"><span class="probe-menu__title">AWG 3.1</span><span
+                                    class="probe-menu__check" aria-hidden="true">✓</span></button>
                         </div>
                     </div>
                 </div>
@@ -233,16 +278,25 @@
             <p id="amneziaExperimental" class="field-hint hidden">AWG 3.x requires a compatible client.</p>
             <p id="amneziaStatus" class="field-hint" role="status" aria-live="polite"></p>
             <div id="amneziaOutput" class="hidden">
-                <div class="field-heading"><label for="amneziaConfig">Configuration</label><span id="amneziaFormat" class="field-meta"></span></div>
+                <div class="field-heading"><label for="amneziaConfig">Configuration</label><span id="amneziaFormat"
+                        class="field-meta"></span></div>
                 <textarea id="amneziaConfig" class="input" readonly spellcheck="false"></textarea>
                 <div class="button-row mt-8">
-                    <button id="amneziaCopy" type="button" class="circle-btn"><svg width="15" height="15" aria-hidden="true"><use href="#copy"></use></svg><span>Copy</span></button>
-                    <button id="amneziaDownload" type="button" class="circle-btn"><svg width="15" height="15" aria-hidden="true"><use href="#download-file"></use></svg><span>Download .conf</span></button>
-                    <button id="amneziaQrToggle" type="button" class="circle-btn" aria-haspopup="dialog" aria-controls="amneziaQr">Show QR</button>
+                    <button id="amneziaCopy" type="button" class="circle-btn"><svg width="15" height="15"
+                            aria-hidden="true">
+                            <use href="#copy"></use>
+                        </svg><span>Copy</span></button>
+                    <button id="amneziaDownload" type="button" class="circle-btn"><svg width="15" height="15"
+                            aria-hidden="true">
+                            <use href="#download-file"></use>
+                        </svg><span>Download .conf</span></button>
+                    <button id="amneziaQrToggle" type="button" class="circle-btn" aria-haspopup="dialog"
+                        aria-controls="amneziaQr">Show QR</button>
                 </div>
 
             </div>
-            <p class="amnezia-credit"><a href="https://github.com/HereIamGosu/amnezia-config-gen" target="_blank" rel="noopener noreferrer">Base profile generator</a></p>
+            <p class="amnezia-credit"><a href="https://github.com/HereIamGosu/amnezia-config-gen" target="_blank"
+                    rel="noopener noreferrer">Base profile generator</a></p>
         </section>
     </main>
     <dialog id="amneziaQr" class="qr-dialog" aria-labelledby="amneziaQrTitle" aria-describedby="amneziaQrHint">
@@ -252,7 +306,10 @@
                 <h2 id="amneziaQrTitle">Scan to import</h2>
             </div>
             <button id="amneziaQrClose" type="button" class="qr-dialog__close" aria-label="Close QR code" autofocus>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
+                    aria-hidden="true">
+                    <path d="m6 6 12 12M18 6 6 18" />
+                </svg>
             </button>
         </div>
         <div class="qr-dialog__stage">
@@ -261,9 +318,11 @@
             </div>
         </div>
         <p id="amneziaQrState" class="qr-dialog__state" role="status" aria-live="polite"></p>
-        <p id="amneziaQrHint" class="field-hint">Open the QR scanner in your compatible Amnezia client and point it at this code.</p>
+        <p id="amneziaQrHint" class="field-hint">Open the QR scanner in your compatible Amnezia client and point it at
+            this code.</p>
     </dialog>
     <script src="web4core.runtime.js"></script>
     <script src="ui.js"></script>
 </body>
+
 </html>
