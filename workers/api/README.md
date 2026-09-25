@@ -126,12 +126,15 @@ and port 500, 1701, 2408 or 4500. Selection is local, not a connectivity scan.
 The pool is a conservative subset of the approach in
 [warp-generation](https://github.com/warp-generation/warp-generation.github.io/blob/main/script.js).
 
-AWG 3.0/3.1 use locally generated ranges for ContentPaddingAddition and
-protocol timers. The minimum RejectAfterTime is
-greater than the maximum RekeyAfterTime. HeaderProtectionKey is not added.
-3.1 also enables RandomTrailers and DisableCookies. It is experimental with
-WARP: importing successfully does not prove connectivity; try 3.0/2.0 if the
-handshake fails. These modes require a compatible client.
+Cloudflare remains a standard WireGuard peer. All versions therefore keep
+standard message headers (`H1`–`H4` = 1–4) and zero message padding (`S1`–`S4`),
+so the peer sees ordinary WireGuard packets. AWG 3.0/3.1 add locally generated
+ranges for encrypted content padding and client protocol timers. The minimum
+RejectAfterTime is greater than the maximum RekeyAfterTime. HeaderProtectionKey
+is omitted because it requires a matching server key. AWG 3.1 explicitly sets
+RandomTrailers and DisableCookies to `off`; enabling either would change
+peer-dependent behavior or weaken cookie-based DoS protection. AWG 3.x profiles
+require a compatible client. Importing successfully does not prove connectivity.
 Signature failure omits domain-specific I fields; version parameters and the
 random endpoint are still applied. For 1.5/2.0 the generated profile otherwise
 keeps the registered WARP values.
