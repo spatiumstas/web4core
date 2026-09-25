@@ -175,9 +175,6 @@ input[type="submit"]:disabled, .btn-primary:disabled { background: #2a2d34; bord
 @keyframes qr-dialog-enter { from { opacity: 0; transform: translateY(12px) scale(.98); } to { opacity: 1; transform: none; } }
 @keyframes qr-status-pulse { to { opacity: .3; } }
 @media (max-width: 600px) { .qr-dialog { padding: 20px; } .qr-dialog__stage { padding: 12px; } }
-.amnezia-credit { margin: 20px 0 0; color: var(--muted); font-size: 11px; }
-.amnezia-credit a { text-decoration-color: var(--border); text-underline-offset: 3px; }
-.amnezia-credit a:hover { color: var(--text); }
 @media (max-width: 600px) {
     .toolbar { flex-wrap: nowrap; }
     .toolbar .core-toggle { min-width: 0; }

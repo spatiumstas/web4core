@@ -174,7 +174,7 @@ export function initAmneziaPanel() {
             document.getElementById('amneziaFormat').textContent = `AWG ${selectedVersion}`;
             output.classList.remove('hidden');
             setStatus(host && result.signatureApplied === false
-                ? 'Domain signature unavailable. Configuration generated with the original I parameters.' : '');
+                ? 'Domain signature unavailable. Configuration generated without domain-specific I packets.' : '');
             if (!panel.classList.contains('hidden')) config.focus({ preventScroll: true });
         } catch (error) {
             setStatus(error.name === 'AbortError' ? 'Request timed out. Please try again.'
