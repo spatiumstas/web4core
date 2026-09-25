@@ -44,8 +44,11 @@ export function applyAwgOptions(config, { version }) {
             MaxHandshakeAttempts: range(18, 24, 25, 33),
         };
         if (version === '3.1') {
-            fields.RandomTrailers = 'on';
-            fields.DisableCookies = 'on';
+            // Cloudflare terminates standard WireGuard, so keep AWG's
+            // peer-dependent packet framing and cookie behavior disabled.
+            // Explicit 3.1 fields retain a recognizable 3.1 client profile.
+            fields.RandomTrailers = 'off';
+            fields.DisableCookies = 'off';
         }
         config = setConfigFields(config, 'Interface', fields);
     }
