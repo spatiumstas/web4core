@@ -1,5 +1,6 @@
 import { normalizeAmneziaDomain } from '../../core/amnezia.js';
 import { renderQr } from './qr-renderer.js';
+import { initWarpGeneratorOptions } from './warp-generator-options.js';
 
 export function initAmneziaPanel() {
     const panel = document.getElementById('amneziaPanel');
@@ -54,6 +55,7 @@ export function initAmneziaPanel() {
         config.value = '';
         resetQr();
     };
+    const generatorOptions = initWarpGeneratorOptions(panel, resetOutput);
     domain.addEventListener('input', () => {
         domain.classList.remove('input-error');
         domain.setAttribute('aria-invalid', 'false');
@@ -141,6 +143,9 @@ export function initAmneziaPanel() {
             domain.focus();
             return;
         }
+        let settings;
+        try { settings = generatorOptions.read(); }
+        catch (error) { setStatus(error.message, true); return; }
         domain.value = host;
         const selectedVersion = version.value;
         pending = true;
@@ -148,6 +153,7 @@ export function initAmneziaPanel() {
         setVersionMenuOpen(false);
         domain.disabled = true;
         version.disabled = generate.disabled = true;
+        generatorOptions.setBusy(true);
         panel.setAttribute('aria-busy', 'true');
         output.classList.add('hidden');
         config.value = '';
@@ -160,7 +166,7 @@ export function initAmneziaPanel() {
             const endpoint = document.querySelector('meta[name="amnezia-api"]').content;
             const response = await fetch(endpoint, {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ version: selectedVersion, domain: host }),
+                body: JSON.stringify({ version: selectedVersion, domain: host, ...settings }),
                 signal: controller.signal, cache: 'no-store', credentials: 'omit',
             });
             const result = await response.json();
@@ -169,12 +175,14 @@ export function initAmneziaPanel() {
                 !/^\[Peer\]$/m.test(result.content)) {
                 throw new Error('The server returned an invalid configuration.');
             }
+            generatorOptions.remember(result, settings);
             config.value = result.content;
-            filename = `amnezia-awg-${selectedVersion}.conf`;
-            document.getElementById('amneziaFormat').textContent = `AWG ${selectedVersion}`;
+            const plain = settings.options.transport === 'none';
+            filename = plain ? 'warp-wireguard.conf' : `amnezia-awg-${selectedVersion}.conf`;
+            document.getElementById('amneziaFormat').textContent = plain ? 'WireGuard' : `AWG ${selectedVersion}`;
             output.classList.remove('hidden');
-            setStatus(host && result.signatureApplied === false
-                ? 'Domain signature unavailable. Configuration generated without domain-specific I packets.' : '');
+            setStatus(Array.isArray(result.warnings) ? result.warnings.join(' ') : host && result.signatureApplied === false
+                ? 'Domain signature unavailable. Local CPS settings were retained.' : '');
             if (!panel.classList.contains('hidden')) config.focus({ preventScroll: true });
         } catch (error) {
             setStatus(error.name === 'AbortError' ? 'Request timed out. Please try again.'
@@ -185,6 +193,7 @@ export function initAmneziaPanel() {
             pending = false;
             domain.disabled = false;
             version.disabled = generate.disabled = false;
+            generatorOptions.setBusy(false);
             generate.textContent = 'Generate config';
             panel.setAttribute('aria-busy', 'false');
         }

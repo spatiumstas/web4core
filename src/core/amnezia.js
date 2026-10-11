@@ -1,3 +1,5 @@
+import { normalizeWarpOptions } from './warp-options.js';
+
 export function normalizeAmneziaDomain(value) {
     if (value == null) return '';
     if (typeof value !== 'string') throw new Error('Domain must be a string.');
@@ -17,5 +19,13 @@ export function normalizeAmneziaDomain(value) {
 
 export function validateAmneziaRequest(body) {
     if (!['1.5', '2.0', '3.0', '3.1'].includes(body?.version)) throw new Error('Supported versions are AWG 1.5, 2.0, 3.0 and 3.1.');
-    return { version: body.version, domain: normalizeAmneziaDomain(body.domain) };
+    if (body.freshRegistration !== undefined && typeof body.freshRegistration !== 'boolean') throw new Error('freshRegistration must be boolean.');
+    if (body.registrationCache !== undefined && (typeof body.registrationCache !== 'string' || body.registrationCache.length > 16384)) throw new Error('Invalid registration cache.');
+    return {
+        version: body.version,
+        domain: normalizeAmneziaDomain(body.domain),
+        options: normalizeWarpOptions(body.options),
+        freshRegistration: body.freshRegistration ?? false,
+        registrationCache: body.registrationCache ?? '',
+    };
 }
