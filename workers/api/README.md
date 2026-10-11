@@ -144,6 +144,23 @@ Cloudflare registration. CLI/YAML configuration becomes the `options` JSON
 object; no user-controlled filesystem paths or shell commands are accepted.
 The frontend exposes common controls plus an advanced JSON editor.
 
+#### Worker controls
+
+Set the optional Worker secret `WARP_CACHE_KEY` to enable encrypted registration
+reuse. Its value must be a standard Base64-encoded 32-byte key. Generate a value
+with:
+
+```bash
+openssl rand -base64 32
+```
+
+Configure it as a secret in the Cloudflare dashboard or run
+`npx wrangler secret put WARP_CACHE_KEY` from `workers/api`. Clients reuse a
+registration by sending the returned `registrationCache` token; setting
+`freshRegistration` to `true` registers a new device instead. Omitting the
+secret creates a new Cloudflare device per generation. An invalid secret value
+makes `POST /amnezia` return HTTP **500**.
+
 #### Validation
 
 ```bash

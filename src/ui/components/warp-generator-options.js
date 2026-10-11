@@ -59,7 +59,7 @@ export function initWarpGeneratorOptions(panel, onChange) {
                 ...(transport.value === 'none' ? { transport: 'none' } : transport.value === 'no-cps' ? { mask: 'none' } : {}),
                 ...extra,
             });
-            const freshRegistration = fresh.checked || (Boolean(token) && Boolean(options.license_key) && options.license_key !== previousLicense);
+            const freshRegistration = fresh.checked || (Boolean(token) && options.license_key !== previousLicense);
             return { options, freshRegistration, registrationCache: freshRegistration ? '' : token };
         },
         remember(result, request) {
