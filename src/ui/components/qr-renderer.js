@@ -2,7 +2,8 @@ import QRCode from 'qrcode';
 
 // Finish on the exact module grid, including a four-module quiet zone.
 export function renderQr(canvas, content, { animate = true, onReady = () => {} } = {}) {
-    const { modules } = QRCode.create(content, { errorCorrectionLevel: 'L' });
+    const { modules } = typeof content === 'string'
+        ? QRCode.create(content, { errorCorrectionLevel: 'L' }) : content;
     const scale = 6;
     const margin = 4;
     const size = modules.size;

@@ -1,5 +1,6 @@
 import { normalizeAmneziaDomain } from '../../core/amnezia.js';
 import { renderQr } from './qr-renderer.js';
+import { createConfigQrSeries, QrCapacityError } from './config-qr.js';
 
 export function initAmneziaPanel() {
     const panel = document.getElementById('amneziaPanel');
@@ -22,6 +23,13 @@ export function initAmneziaPanel() {
     const qr = document.getElementById('amneziaQr');
     const qrCanvas = document.getElementById('amneziaQrCanvas');
     const qrState = document.getElementById('amneziaQrState');
+    const qrNavigation = document.getElementById('amneziaQrNavigation');
+    const qrPrevious = document.getElementById('amneziaQrPrevious');
+    const qrNext = document.getElementById('amneziaQrNext');
+    const qrPage = document.getElementById('amneziaQrPage');
+    const qrHint = document.getElementById('amneziaQrHint');
+    let qrSeries = [];
+    let qrIndex = 0;
     let stopQrAnimation;
     const clearQr = () => {
         stopQrAnimation?.();
@@ -29,6 +37,9 @@ export function initAmneziaPanel() {
         qr.classList.remove('is-generating');
         document.body.classList.remove('qr-dialog-open');
         qrCanvas.width = qrCanvas.height = 0;
+        qrSeries = [];
+        qrIndex = 0;
+        qrNavigation.classList.add('hidden');
     };
     const resetQr = () => {
         if (qr.open) qr.close();
@@ -173,8 +184,7 @@ export function initAmneziaPanel() {
             filename = `amnezia-awg-${selectedVersion}.conf`;
             document.getElementById('amneziaFormat').textContent = `AWG ${selectedVersion}`;
             output.classList.remove('hidden');
-            setStatus(host && result.signatureApplied === false
-                ? 'Domain signature unavailable. Configuration generated with the original I parameters.' : '');
+            setStatus('');
             if (!panel.classList.contains('hidden')) config.focus({ preventScroll: true });
         } catch (error) {
             setStatus(error.name === 'AbortError' ? 'Request timed out. Please try again.'
@@ -189,27 +199,53 @@ export function initAmneziaPanel() {
             panel.setAttribute('aria-busy', 'false');
         }
     });
+    const showQrFrame = (animate = false) => {
+        stopQrAnimation?.();
+        qr.classList.toggle('is-generating', animate);
+        qrPrevious.disabled = qrIndex === 0;
+        qrNext.disabled = qrIndex === qrSeries.length - 1;
+        qrPage.textContent = `${qrIndex + 1} / ${qrSeries.length}`;
+        qrCanvas.setAttribute('aria-label', qrSeries.length > 1
+            ? `Amnezia configuration QR code ${qrIndex + 1} of ${qrSeries.length}` : 'Amnezia configuration QR code');
+        const readyText = qrSeries.length > 1 ? `Scan code ${qrIndex + 1} of ${qrSeries.length}` : 'Ready to scan';
+        qrState.textContent = animate ? 'Assembling QR code…' : readyText;
+        stopQrAnimation = renderQr(qrCanvas, qrSeries[qrIndex], {
+            animate,
+            onReady: () => {
+                qr.classList.remove('is-generating');
+                qrState.textContent = readyText;
+            },
+        });
+    };
+    const onQrError = error => {
+        resetQr();
+        setStatus(error instanceof QrCapacityError
+            ? 'The configuration is too large for QR import. Download the .conf file instead.'
+            : 'Could not display the QR code. Try again or download the .conf file.', true);
+    };
+    const changeQrFrame = offset => {
+        if (!qr.open || qrIndex + offset < 0 || qrIndex + offset >= qrSeries.length) return;
+        qrIndex += offset;
+        try { showQrFrame(); } catch (error) { onQrError(error); }
+    };
+    qrPrevious.addEventListener('click', () => changeQrFrame(-1));
+    qrNext.addEventListener('click', () => changeQrFrame(1));
     qrToggle.addEventListener('click', () => {
-        if (!config.value) return;
-        if (qr.open) return;
+        if (!config.value || qr.open) return;
         try {
             document.getElementById('amneziaQrFormat').textContent = document.getElementById('amneziaFormat').textContent;
+            qrSeries = createConfigQrSeries(config.value);
+            qrIndex = 0;
+            const multiple = qrSeries.length > 1;
+            qrNavigation.classList.toggle('hidden', !multiple);
+            qrHint.classList.toggle('hidden', multiple);
+            if (multiple) qr.removeAttribute('aria-describedby');
+            else qr.setAttribute('aria-describedby', qrHint.id);
             const animate = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-            qr.classList.toggle('is-generating', animate);
-            qrState.textContent = animate ? 'Assembling QR code…' : 'Ready to scan';
-            stopQrAnimation = renderQr(qrCanvas, config.value, {
-                animate,
-                onReady: () => {
-                    qr.classList.remove('is-generating');
-                    qrState.textContent = 'Ready to scan';
-                },
-            });
+            showQrFrame(animate);
             document.body.classList.add('qr-dialog-open');
             qr.showModal();
-        } catch {
-            resetQr();
-            setStatus('Could not create a QR code. The configuration may be too large. Download the .conf file instead.', true);
-        }
+        } catch (error) { onQrError(error); }
     });
     copy.addEventListener('click', async () => {
         if (!config.value) return;

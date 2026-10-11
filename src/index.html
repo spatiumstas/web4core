@@ -237,7 +237,7 @@
             <div class="amnezia-fields">
                 <div class="amnezia-domain">
                     <div class="field-heading"><label for="amneziaDomain">I1–I5 domain</label></div>
-                    <input id="amneziaDomain" class="input" type="text" placeholder="github.com (optional)"
+                    <input id="amneziaDomain" class="input" type="text" placeholder="github.com (default)"
                         spellcheck="false" autocapitalize="off" autocomplete="off" aria-describedby="amneziaStatus">
                 </div>
                 <div class="amnezia-version">
@@ -295,8 +295,6 @@
                 </div>
 
             </div>
-            <p class="amnezia-credit"><a href="https://github.com/HereIamGosu/amnezia-config-gen" target="_blank"
-                    rel="noopener noreferrer">Base profile generator</a></p>
         </section>
     </main>
     <dialog id="amneziaQr" class="qr-dialog" aria-labelledby="amneziaQrTitle" aria-describedby="amneziaQrHint">
@@ -316,6 +314,11 @@
             <div class="qr-dialog__code">
                 <canvas id="amneziaQrCanvas" role="img" aria-label="Amnezia configuration QR code"></canvas>
             </div>
+        </div>
+        <div id="amneziaQrNavigation" class="qr-dialog__navigation hidden" role="group" aria-label="QR codes">
+            <button id="amneziaQrPrevious" type="button" class="btn-primary" aria-label="Previous QR code">Previous</button>
+            <span id="amneziaQrPage" class="field-meta" aria-live="polite"></span>
+            <button id="amneziaQrNext" type="button" class="btn-primary" aria-label="Next QR code">Next</button>
         </div>
         <p id="amneziaQrState" class="qr-dialog__state" role="status" aria-live="polite"></p>
         <p id="amneziaQrHint" class="field-hint">Open the QR scanner in your compatible Amnezia client and point it at

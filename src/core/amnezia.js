@@ -17,5 +17,5 @@ export function normalizeAmneziaDomain(value) {
 
 export function validateAmneziaRequest(body) {
     if (!['1.5', '2.0', '3.0', '3.1'].includes(body?.version)) throw new Error('Supported versions are AWG 1.5, 2.0, 3.0 and 3.1.');
-    return { version: body.version, domain: normalizeAmneziaDomain(body.domain) };
+    return { version: body.version, domain: normalizeAmneziaDomain(body.domain) || 'github.com' };
 }

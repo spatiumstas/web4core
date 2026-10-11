@@ -1,47 +1,37 @@
 import { validateAmneziaRequest } from '../../../src/core/amnezia.js';
 import { fetchDomainSignature } from './signature.js';
-import { applyCpsPackets, fetchAmneziaConfig } from './warp.js';
-import { applyAwgOptions } from './awg-options.js';
+import { generateWarpProfile } from './warp.js';
 
 // Best-effort per-isolate bound; use an edge rate-limit rule for global enforcement.
 const requests = new Map();
-
-async function fetchOptionalCpsPackets(domain, junk) {
-    if (!domain || typeof junk?.fetch !== 'function') return null;
-    try {
-        const signatureFetch = (url, init) => junk.fetch(new Request(url, init));
-        return await fetchDomainSignature(domain, signatureFetch);
-    } catch (error) {
-        // A missing capture must not make an otherwise valid WARP profile
-        // unavailable. The warning is retained for Worker observability.
-        console.warn('Amnezia signature unavailable; returning base profile.', error?.message || error);
-        return null;
-    }
-}
-
+const MAX_BODY_BYTES = 2048;
 export async function handleAmnezia(request, cors, env = {}) {
     const reply = (body, status = 200) => new Response(JSON.stringify(body), {
         status, headers: { ...cors, 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' },
     });
-    if (!request.headers.get('Content-Type')?.includes('application/json')) return reply({ error: 'Content-Type must be application/json.' }, 415);
+    if (request.headers.get('Content-Type')?.split(';')[0].trim().toLowerCase() !== 'application/json') return reply({ error: 'Content-Type must be application/json.' }, 415);
     let body;
     try {
         const reader = request.body?.getReader();
         if (!reader) return reply({ error: 'Request body is empty.' }, 400);
         let size = 0;
         const chunks = [];
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            size += value.length;
-            if (size > 2048) { await reader.cancel(); return reply({ error: 'Request body is too large.' }, 413); }
-            chunks.push(value);
-        }
+        try {
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                size += value.length;
+                if (size > MAX_BODY_BYTES) { await reader.cancel(); return reply({ error: 'Request body is too large.' }, 413); }
+                chunks.push(value);
+            }
+        } finally { reader.releaseLock(); }
         const raw = new Uint8Array(size);
         let offset = 0;
         for (const chunk of chunks) { raw.set(chunk, offset); offset += chunk.length; }
-        body = validateAmneziaRequest(JSON.parse(new TextDecoder().decode(raw)));
-    } catch { return reply({ error: 'Provide a valid AWG version. If specifying a domain, omit the scheme, port, and path.' }, 400); }
+        body = validateAmneziaRequest(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(raw)));
+    } catch (error) {
+        return reply({ error: error instanceof SyntaxError || error instanceof TypeError ? 'Provide a valid AWG version and optional domain.' : error.message }, 400);
+    }
     const now = Date.now();
     for (const [key, entry] of requests) if (now >= entry.until) requests.delete(key);
     const ip = request.headers.get('CF-Connecting-IP') || 'local';
@@ -50,18 +40,11 @@ export async function handleAmnezia(request, cors, env = {}) {
     entry.count++;
     requests.set(ip, entry);
     try {
-        const [baseConfig, cpsPackets] = await Promise.all([
-            fetchAmneziaConfig(body.version),
-            fetchOptionalCpsPackets(body.domain, env?.JUNK),
-        ]);
-        const content = applyAwgOptions(applyCpsPackets(baseConfig, cpsPackets), body);
-        return reply({
-            content,
-            filename: `amnezia-awg-${body.version}.conf`,
-            version: body.version,
-            domain: body.domain,
-            signatureApplied: Boolean(cpsPackets),
-        });
-    }
-    catch (error) { return reply({ error: error.message || 'Could not generate the configuration.' }, error.status || 502); }
+        const signatureFetch = typeof env?.JUNK?.fetch === 'function'
+            ? (url, init) => env.JUNK.fetch(new Request(url, init)) : fetch;
+        const packets = body.version === '1.5' ? null : await fetchDomainSignature(body.domain, signatureFetch);
+        const result = await generateWarpProfile(body, fetch, packets);
+        result.signatureApplied = Boolean(packets);
+        return reply(result);
+    } catch (error) { return reply({ error: error.status ? error.message : 'Could not generate the configuration.' }, error.status || 502); }
 }
