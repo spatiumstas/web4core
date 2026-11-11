@@ -2,7 +2,7 @@ import { el } from '../dom.js';
 import { MSG_SUB_EMPTY, MSG_SUB_FETCH } from '../constants.js';
 import { canFetchSubscription, fetchSubscription } from '../services/web4core-api.js';
 import { detectSubscriptionUrl } from '../services/subscription-input.js';
-import { isMihomoSubscriptionMode } from '../components/core-toggle.js';
+import { getCore, isMihomoSubscriptionMode } from '../components/core-toggle.js';
 import {
     hideOutput,
     markInputError,
@@ -14,7 +14,8 @@ import {
 import { validateField } from './validation.js';
 
 async function expandSubscriptions(raw, detected) {
-    const texts = await Promise.all(detected.subUrls.map((u) => fetchSubscription(u)));
+    const deviceModel = getCore() === 'mihomo' ? el.mihomoDeviceModel?.value : '';
+    const texts = await Promise.all(detected.subUrls.map((u) => fetchSubscription(u, { deviceModel })));
     const merged = [];
     for (const text of texts) {
         if (!text) throw new Error(MSG_SUB_EMPTY);

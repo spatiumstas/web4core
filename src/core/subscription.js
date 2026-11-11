@@ -1,5 +1,6 @@
 import {
     decodeBase64Url,
+    generateSecretHex32,
     isHttpUrl,
     SUPPORTED_SCHEMES,
     MAX_SUB_REDIRECTS,
@@ -188,9 +189,21 @@ function httpReason(status) {
     return map[status] || '';
 }
 
-async function fetchSubscription(url) {
+function getSubscriptionHeaders(url, opts) {
+    const hwids = opts?.subscriptionHwids;
+    const hwid = hwids?.get(url) || generateSecretHex32();
+    hwids?.set(url, hwid);
+    const deviceModel = typeof opts?.deviceModel === 'string' ? opts.deviceModel.trim() : '';
+    return {
+        'x-hwid': hwid,
+        ...(deviceModel ? { 'x-device-model': deviceModel } : {})
+    };
+}
+
+async function fetchSubscription(url, opts) {
     if (typeof fetch !== 'function') throw new Error('Fetch API not available');
 
+    const subscriptionHeaders = getSubscriptionHeaders(url, opts);
     const allowedSchemes = new Set(SUPPORTED_SCHEMES.filter(s => s !== 'http' && s !== 'https'));
     const splitLines = (text) => (text || '').split(/\n/).map(s => s.trim()).filter(Boolean);
     const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
@@ -210,6 +223,7 @@ async function fetchSubscription(url) {
         const timeoutId = setTimeout(() => controller.abort(), SUB_FETCH_TIMEOUT);
         try {
             const headers = new Headers((FETCH_INIT && FETCH_INIT.headers) ? FETCH_INIT.headers : {});
+            for (const [name, value] of Object.entries(subscriptionHeaders)) headers.set(name, value);
             if (!headers.has('Accept')) headers.set('Accept', 'text/plain, */*');
             if (!isBrowser) {
                 if (/github\.com|raw\.githubusercontent\.com/i.test(u)) {
@@ -348,6 +362,7 @@ async function fetchSubscription(url) {
 }
 
 export {
+    getSubscriptionHeaders,
     fetchSubscription
 };
 

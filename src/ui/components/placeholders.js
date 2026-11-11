@@ -23,5 +23,5 @@ export function updateLinksPlaceholder(core, useExtended) {
     el.links.title = 'Supported inputs:\n' + lines.join('\n');
     el.links.placeholder = core === 'mihomo' && el.cbMihomoSub?.checked
         ? 'https://example.com/sub'
-        : 'vless://…\ntrojan://…';
+        : lines.join('\n');
 }

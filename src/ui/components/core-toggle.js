@@ -1,7 +1,7 @@
 import { setUrlTestMenuOpen } from './url-test-picker.js';
 import { el } from '../dom.js';
 import { state } from '../state.js';
-import { setSettingsVisibilityForCore } from './settings-panel.js';
+import { setSettingsVisibilityForCore, syncMihomoSubscriptionFromInput } from './settings-panel.js';
 import { resetWireGuardUploads, updateWgButtonState } from './wireguard-upload.js';
 
 export function getCore() {
@@ -40,6 +40,7 @@ export function setCore(core) {
     el.coreToggle?.closest('.toolbar')?.classList.toggle('toolbar--without-settings', amnezia);
     setUrlTestMenuOpen(false);
     if (!amnezia) setSettingsVisibilityForCore(core);
+    syncMihomoSubscriptionFromInput();
 
     if (core === 'xray') {
         resetWireGuardUploads();

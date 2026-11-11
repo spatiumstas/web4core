@@ -36,6 +36,7 @@ export const PLACEHOLDER_XRAY = [
 export const PLACEHOLDER_MIHOMO = [
     'subscription links',
     'vless://...',
+    'wireguard://...',
     'tt://...',
     'vmess://...',
     'trojan://...',

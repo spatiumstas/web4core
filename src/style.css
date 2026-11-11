@@ -78,7 +78,7 @@ input:checked + .checkmark::after { content: ''; width: 6px; height: 3px; border
 .input:focus, select:focus { border-color: #8ba9e2; box-shadow: 0 0 0 3px #9bbcff10; outline: none; }
 textarea { display: block; font: 12px/1.8 var(--mono); resize: vertical; scrollbar-width: thin; scrollbar-color: #474b55 transparent; }
 textarea::placeholder, input::placeholder { color: #7f838e; opacity: 1; }
-#links { height: 208px; min-height: 140px; }
+#links { height: 300px; min-height: 140px; }
 #tunName { font: 12px/1.5 var(--mono); }
 #out { height: 340px; min-height: 160px; }
 .field-hint { margin: 10px 0 0; color: var(--muted); font-size: 12px; }
@@ -125,7 +125,7 @@ input[type="submit"]:disabled, .btn-primary:disabled { background: #2a2d34; bord
     .source-field { margin-top: 22px; }
     .input, #tunName, textarea { font-size: 16px; }
     textarea { line-height: 1.6; }
-    #links { height: 224px; }
+    #links { height: 350px; }
     #out { height: 300px; }
     .field-hint { font-size: 11px; }
     .shortcut-hint { display: none; }

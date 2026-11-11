@@ -1,4 +1,5 @@
-import { computeTag, validateBean, PROXY_FETCH_INTERVAL, SUB_REFRESH_INTERVAL, resolveUrlTest, resolveUrlTestExpectedStatus, generateSecretHex32 } from '../main.js';
+import { computeTag, validateBean, PROXY_FETCH_INTERVAL, SUB_REFRESH_INTERVAL, resolveUrlTest, resolveUrlTestExpectedStatus } from '../main.js';
+import { getSubscriptionHeaders } from './subscription.js';
 
 const FASTEST_GROUP_NAME = '⚡ Fastest';
 const GLOBAL_GROUP_NAME = 'GLOBAL';
@@ -746,15 +747,11 @@ function buildMihomoSubscriptionConfig(subscriptionUrls, extraBeans, opts) {
     const usedProviderNames = new Set();
     subscriptionUrls.forEach((url, index) => {
         const providerName = computeProviderName(url, index, subscriptionUrls.length, usedProviderNames);
-        const deviceModel = typeof opts?.deviceModel === 'string' ? opts.deviceModel.trim() : '';
         const excludeFilter = typeof opts?.excludeFilter === 'string' ? opts.excludeFilter.trim() : '';
         providers[providerName] = {
             type: 'http',
             proxy: 'DIRECT',
-            header: {
-                'x-hwid': [generateSecretHex32()],
-                ...(deviceModel ? { 'x-device-model': [deviceModel] } : {})
-            },
+            header: Object.fromEntries(Object.entries(getSubscriptionHeaders(url, opts)).map(([name, value]) => [name, [value]])),
             url: url,
             ...(excludeFilter ? { 'exclude-filter': excludeFilter } : {}),
             interval: SUB_REFRESH_INTERVAL,

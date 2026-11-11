@@ -1,3 +1,5 @@
+import { parseWireGuardConf } from './core/wireguard.js';
+
 function decodeBase64Url(input) {
     try {
         const s = input.replace(/-/g, '+').replace(/_/g, '/');
@@ -96,7 +98,8 @@ const SUPPORTED_SCHEMES = [
     'mieru',
     'mierus',
     'sdns',
-    'masque'
+    'masque',
+    'wireguard'
 ];
 const MAX_SUB_REDIRECTS = 2;
 const SUB_FETCH_TIMEOUT = 15000;
@@ -531,7 +534,39 @@ function parseLink(input) {
     if (scheme === 'tuic') return parseTUIC(trimmed);
     if (scheme === 'sdns') return parseSDNS(trimmed);
     if (scheme === 'masque') return parseMasque(trimmed);
+    if (scheme === 'wireguard') return parseWireGuardLink(trimmed);
     throw new Error('Unknown link: ' + scheme);
+}
+
+function parseWireGuardLink(input) {
+    const u = parseUrl(input);
+    const query = input.split('#', 1)[0].split('?').slice(1).join('?');
+    const params = new URLSearchParams(query.replace(/\+/g, '%2B'));
+    const iface = [];
+    const peer = [];
+    const fields = {
+        privatekey: [iface, 'PrivateKey'], address: [iface, 'Address'], dns: [iface, 'DNS'], mtu: [iface, 'MTU'],
+        publickey: [peer, 'PublicKey'], presharedkey: [peer, 'PresharedKey'], allowedips: [peer, 'AllowedIPs'],
+        keepalive: [peer, 'PersistentKeepalive'], persistentkeepalive: [peer, 'PersistentKeepalive'],
+        reserved: [peer, 'Reserved'], clientid: [peer, 'Reserved']
+    };
+    for (const [key, value] of params) {
+        const normalized = key.toLowerCase().replace(/[-_]/g, '');
+        const awg = /^(jc|jmin|jmax|s[1-4]|h[1-4]|i[1-5]|j[1-3]|itime|version|headerprotectionkey|contentpaddingaddition|rekeyaftertime|rekeytimeout|rejectaftertime|keepalivetimeout|maxhandshakeattempts|randomtrailers|disablecookies)$/;
+        const field = fields[normalized] || (awg.test(normalized) ? [iface, normalized] : null);
+        if (!field) throw new Error('wireguard: unsupported parameter ' + key);
+        if (/[\r\n]/.test(value)) throw new Error('wireguard: invalid parameter ' + key);
+        if (['mtu', 'keepalive', 'persistentkeepalive'].includes(normalized) && !/^\d+$/.test(value)) throw new Error('wireguard: invalid parameter ' + key);
+        field[0].push(`${field[1]} = ${value}`);
+    }
+    if (u.username) {
+        const privateKey = safeDecodeURIComponent(u.username);
+        if (/[\r\n]/.test(privateKey)) throw new Error('wireguard: invalid private key');
+        iface.push(`PrivateKey = ${privateKey}`);
+    }
+    if (!peer.some(line => line.startsWith('AllowedIPs ='))) peer.push('AllowedIPs = 0.0.0.0/0, ::/0');
+    peer.push(`Endpoint = ${u.hostname}:${u.port || 51820}`);
+    return parseWireGuardConf(`[Interface]\n${iface.join('\n')}\n[Peer]\n${peer.join('\n')}`, safeDecodeURIComponent(u.hash.slice(1)) || 'WireGuard');
 }
 
 function parseMasque(urlStr) {

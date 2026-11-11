@@ -2,6 +2,7 @@ import { el } from '../dom.js';
 import { state } from '../state.js';
 import { toggleHidden } from '../utils/dom-utils.js';
 import { createChoicePicker } from './choice-picker.js';
+import { splitMihomoSubscriptionInput } from '../services/subscription-input.js';
 
 const DEFAULT_MIHOMO_TUN_STACK = 'gvisor';
 const MIHOMO_TUN_STACKS = [
@@ -11,6 +12,17 @@ const MIHOMO_TUN_STACKS = [
     { value: 'mips', label: 'MIPS' },
 ];
 let mihomoTunStackPicker;
+
+export function syncMihomoSubscriptionFromInput() {
+    if (state.core !== 'mihomo' || !el.cbMihomoSub) return;
+    const first = (el.links?.value || '').split(/\r?\n/).find(line => line.trim());
+    if (!first) return;
+    const checked = splitMihomoSubscriptionInput(first).subUrls.length > 0;
+    if (el.cbMihomoSub.checked !== checked) {
+        el.cbMihomoSub.checked = checked;
+        el.cbMihomoSub.dispatchEvent(new Event('change'));
+    }
+}
 
 export function getMihomoTunStack() {
     return mihomoTunStackPicker?.getValue() || DEFAULT_MIHOMO_TUN_STACK;
